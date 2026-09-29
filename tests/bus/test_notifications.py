@@ -15,7 +15,6 @@ from nanobot.bus.outbound_events import (
 from nanobot.bus.queue import MessageBus
 from nanobot.events import AgentEvent, ContextCompactionEvent, EventSink, RetryWaitEvent
 from nanobot.utils.progress_events import output_events
-from nanobot.webui.outbound_wire import project_notification
 
 
 async def test_sink_isolates_observer_failure_but_propagates_cancellation():
@@ -114,13 +113,10 @@ async def test_new_internal_event_needs_explicit_audience(monkeypatch):
     event = RetryStatus()
     await delivery.events.emit(event)
     assert bus.outbound.empty()
-    assert project_notification("chat", event) is None
 
     monkeypatch.setitem(NOTIFICATION_AUDIENCES, RetryStatus, "interactive")
     await delivery.events.emit(event)
     assert bus.outbound.get_nowait().event is event
-    # Routing registration alone does not authorize serialization of private fields.
-    assert project_notification("chat", event) is None
 
 
 async def test_background_scope_keeps_retry_quiet_but_delivers_compaction():
@@ -157,19 +153,10 @@ async def test_bus_routes_arbitrary_events_and_text_through_one_queue(channel):
     assert bus.outbound.empty()
 
 
-async def test_bus_event_preserves_existing_text_fallback():
+async def test_bus_event_preserves_existing_text_fallback() -> None:
     bus = MessageBus()
     event = RetryWaitEvent("waiting")
     await bus.publish_event(event, channel="slack", chat_id="chat")
     delivered = await bus.consume_outbound()
     assert delivered.event is event
     assert delivered.content == "waiting"
-
-
-@pytest.mark.parametrize("phase", ["started", "succeeded", "failed", "cancelled"])
-def test_compaction_durability_is_independent_of_subscribers(phase):
-    projection = project_notification("chat", ContextCompactionEvent("c1", phase))
-    assert projection is not None
-    assert projection.deliver_offline
-    assert projection.attach_turn_metadata
-    assert projection.persistence == ("transient" if phase == "started" else "turn_activity")

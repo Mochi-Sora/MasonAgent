@@ -24,8 +24,7 @@ nanobot agent -m "Hello!"
 ## Install nanobot
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 ```
 
 ## Enable the Discord channel

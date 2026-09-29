@@ -30,6 +30,10 @@ from nanobot.agent.memory import Consolidator
 from nanobot.agent.model_runtime import ModelRuntimeResolver
 from nanobot.agent.runner import AgentRunner, AgentRunResult, AgentRunSpec
 from nanobot.agent.subagent import SubagentManager
+from nanobot.agent.tools.capability_gate import (
+    DEFAULT_ALWAYS_VISIBLE,
+    CapabilityGate,
+)
 from nanobot.agent.tools.context import RequestContext, bind_request_context, reset_request_context
 from nanobot.agent.tools.exec_session import ExecSessionManager
 from nanobot.agent.tools.file_state import FileStateStore, bind_file_states, reset_file_states
@@ -54,6 +58,7 @@ from nanobot.command.router import normalize_command_text
 from nanobot.config.schema import AgentDefaults, ModelPresetConfig
 from nanobot.events import NO_EVENTS, AgentEvent, EventSink
 from nanobot.llm_usage.context import source_from_request
+from nanobot.memory.state import DEFAULT_STATE_MAX_CHARS
 from nanobot.providers.base import LLMProvider, LLMUsage, ProviderConversationState
 from nanobot.providers.factory import ProviderSnapshot
 from nanobot.runtime_context import (
@@ -244,12 +249,6 @@ class AgentLoop:
             self._publish_runtime_selection(runtime)
         return runtime
 
-    def dream_runtime(self) -> LLMRuntime | None:
-        """Resolve the optional preset used for Dream without changing defaults."""
-        if not self.dream_model_preset:
-            return None
-        return self.runtime_resolver.resolve_preset(self.dream_model_preset)
-
     _RUNTIME_CHECKPOINT_KEY = "runtime_checkpoint"
     _PENDING_USER_TURN_KEY = "pending_user_turn"
     _PROVIDER_STATE_CHECKPOINT_VERSION_KEY = "provider_state_checkpoint_version"
@@ -278,6 +277,10 @@ class AgentLoop:
         hook_factories: list[AgentTurnHookFactory] | None = None,
         unified_session: bool = False,
         disabled_skills: list[str] | None = None,
+        memory_enabled: bool = True,
+        memory_state_max_chars: int = DEFAULT_STATE_MAX_CHARS,
+        memory_consolidation_enabled: bool = True,
+        consolidation_model_preset: str | None = None,
         tools_config: ToolsConfig | None = None,
         image_generation_provider_config: ProviderConfig | None = None,
         image_generation_provider_configs: dict[str, ProviderConfig] | None = None,
@@ -286,7 +289,6 @@ class AgentLoop:
         model_presets: dict[str, ModelPresetConfig] | None = None,
         preset_catalog_loader: preset_helpers.PresetCatalogLoader | None = None,
         model_preset: str | None = None,
-        dream_model_preset: str | None = None,
         preset_snapshot_loader: preset_helpers.PresetSnapshotLoader | None = None,
         turn_delivery_factory: TurnDeliveryFactory | None = None,
         runtime_model_publisher: Callable[[str, str | None], None] | None = None,
@@ -335,7 +337,7 @@ class AgentLoop:
             provider_snapshot_loader=provider_snapshot_loader,
             preset_snapshot_loader=preset_snapshot_loader,
         )
-        self.dream_model_preset = dream_model_preset
+        self.consolidation_model_preset = consolidation_model_preset
         self.max_tool_result_chars = (
             max_tool_result_chars
             if max_tool_result_chars is not None
@@ -366,13 +368,21 @@ class AgentLoop:
         self._extra_hooks: list[AgentHook] = hooks or []
         self._hook_factories: list[AgentTurnHookFactory] = hook_factories or []
 
-        self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills)
+        self.context = ContextBuilder(
+            workspace,
+            timezone=timezone,
+            disabled_skills=disabled_skills,
+            memory_enabled=memory_enabled,
+            memory_state_max_chars=memory_state_max_chars,
+            memory_consolidation_enabled=memory_consolidation_enabled,
+            lazy_capabilities=_tc.lazy_capabilities.enabled,
+        )
         self.sessions = session_manager or SessionManager(workspace)
         # One file-read/write tracker per logical session. The tool registry is
         # shared by this loop, so tools resolve the active state via contextvars.
         self._file_state_store = FileStateStore(max_sessions=SESSION_CACHE_MAX_SIZE)
         # SessionManager owns every durable deletion entrypoint, including the
-        # WebUI and fork rollback paths.  Observe that boundary once instead of
+        # fork rollback paths.  Observe that boundary once instead of
         # duplicating cleanup in each consumer.
         self.sessions.set_delete_observer(self._file_state_store.discard)
         self.tools = tool_registry if tool_registry is not None else ToolRegistry()
@@ -500,12 +510,15 @@ class AgentLoop:
             timezone=defaults.timezone,
             unified_session=defaults.unified_session,
             disabled_skills=defaults.disabled_skills,
+            memory_enabled=defaults.memory.enabled,
+            memory_state_max_chars=defaults.memory.state_max_chars,
+            memory_consolidation_enabled=defaults.memory.consolidation.enabled,
+            consolidation_model_preset=defaults.memory.consolidation.model_override,
             session_ttl_minutes=defaults.session_ttl_minutes,
             idle_compact_check_interval_seconds=defaults.idle_compact_check_interval_seconds,
             tools_config=config.tools,
             model_presets=preset_helpers.configured_model_presets(config),
             model_preset=defaults.model_preset,
-            dream_model_preset=defaults.dream.model_override,
             restart_mode=config.gateway.restart_mode,
             provider_snapshot_loader=provider_snapshot_loader,
             preset_snapshot_loader=preset_snapshot_loader,
@@ -600,6 +613,26 @@ class AgentLoop:
         """Select a model on the current provider for future turns."""
         return self.runtime_resolver.select_model(model)
 
+    def consolidation_runtime(self) -> LLMRuntime | None:
+        """Resolve the optional preset used for memory consolidation runs."""
+        if not self.consolidation_model_preset:
+            return None
+        return self.runtime_resolver.resolve_preset(self.consolidation_model_preset)
+
+    def _build_capability_gate(self, tools: ToolRegistry) -> CapabilityGate | None:
+        """Gate tools for one run so only discovered capabilities reach the model."""
+        config = self.tools_config.lazy_capabilities
+        if not config.enabled:
+            return None
+        always_visible = DEFAULT_ALWAYS_VISIBLE | {
+            name for name in config.always_visible if name
+        }
+        return CapabilityGate(
+            registry=tools,
+            skills=self.context.skills,
+            always_visible=frozenset(always_visible),
+        )
+
     def set_runtime_context_window(self, context_window_tokens: int) -> LLMRuntime:
         """Select a context limit for future turns."""
         return self.runtime_resolver.select_context_window(context_window_tokens)
@@ -626,6 +659,9 @@ class AgentLoop:
             timezone=self.context.timezone or "UTC",
             workspace_sandbox=self.workspace_scopes.sandbox_status,
             runtime_control=AgentRuntimeControl(self),
+            memory_db=self.context.memory_db,
+            memory_state=self.context.memory_state,
+            skills_loader=self.context.skills,
         )
         loader = ToolLoader()
         registered = loader.load(ctx, self.tools)
@@ -1256,6 +1292,7 @@ class AgentLoop:
                     message_metadata=request_metadata,
                 ),
                 provider_state=provider_state,
+                capability_gate=self._build_capability_gate(effective_tools),
                 llm_usage_source=source_from_request(
                     active_session_key,
                     channel=request_ctx.channel,
@@ -1355,7 +1392,7 @@ class AgentLoop:
                         msg,
                         session_key_override=effective_key,
                     )
-                # A newer WebUI message must supersede an explicit recovery
+                # A newer user message must supersede an explicit recovery
                 # before it is injected into that recovery's pending queue.
                 # Without this admission point, a recovered turn could finish
                 # first and only then observe the user's newer request.
@@ -1397,7 +1434,7 @@ class AgentLoop:
         session_key: str,
         msg: InboundMessage,
     ) -> InboundMessage:
-        """Persist a recoverable WebUI follow-up before adding it to the inbox."""
+        """Persist a recoverable follow-up before adding it to the inbox."""
         if not self._can_inject_message(msg):
             return msg
         session = self.sessions.get_or_create(session_key)
@@ -2001,7 +2038,7 @@ class AgentLoop:
         if result is not None:
             ctx.outbound = result
             # Shortcut commands skip BUILD and SAVE, so we must persist the
-            # turn here so WebUI history hydration after _turn_end sees the
+            # turn here so history hydration after _turn_end sees the
             # message.  Mark messages with _command so get_history can filter
             # them out of LLM context.  /new is excluded because it
             # intentionally clears the session.
@@ -2030,12 +2067,6 @@ class AgentLoop:
         if runtime is None:
             runtime = self.runtime_for_session(session)
             ctx.runtime = runtime
-        if ctx.session_key.startswith("dream:"):
-            logger.info(
-                "Dream run using model={} (preset={})",
-                runtime.model,
-                runtime.model_preset or "default",
-            )
         if ctx.on_runtime_admitted is not None:
             await ctx.on_runtime_admitted(runtime)
         if not ctx.ephemeral:
@@ -2341,6 +2372,8 @@ class AgentLoop:
                 insert_at=insert_at,
             )
 
+        capture_from = len(session.messages)
+
         for message_index, message in enumerate(messages[skip:], start=skip):
             # Insert against the raw transcript index before filtering the
             # message so persistence cleanup cannot shift the H/Δ boundary.
@@ -2431,6 +2464,23 @@ class AgentLoop:
         if saved_followup_ids:
             acknowledge_pending_followups(session, saved_followup_ids)
         session.updated_at = datetime.now()
+        self._capture_episodes(session, capture_from)
+
+    def _capture_episodes(self, session: Session, start: int) -> None:
+        """Best-effort capture of this turn's messages into the memory backup tier."""
+        context = getattr(self, "context", None)
+        memory_db = getattr(context, "memory_db", None)
+        if memory_db is None:
+            # Loop instances built without a context (unit tests) skip capture.
+            return
+        new_messages = session.messages[start:]
+        if not new_messages:
+            return
+        try:
+            memory_db.capture_messages(session.key, new_messages)
+        except Exception:
+            # The backup tier must never break a live turn; failures are logged only.
+            logger.exception("Memory backup capture failed for session {}", session.key)
 
     def _persist_subagent_followup(self, session: Session, msg: InboundMessage) -> bool:
         """Persist subagent follow-ups before prompt assembly so history stays durable.

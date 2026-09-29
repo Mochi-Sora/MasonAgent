@@ -143,7 +143,44 @@ class SkillsLoader:
         available = {skill["name"] for skill in skills}
         resolved = name if name in available else self._skill_aliases().get(name, name)
         entry = next((skill for skill in skills if skill["name"] == resolved), None)
-        return Path(entry["path"]).read_text(encoding="utf-8") if entry else None
+        if entry is None:
+            return None
+        content = self._read_skill_file(entry["path"])
+        return content or None
+
+    @staticmethod
+    def _read_skill_file(path: str) -> str:
+        try:
+            return Path(path).read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
+    def list_skill_details(self, *, filter_unavailable: bool = True) -> list[dict[str, Any]]:
+        """Describe every skill (name, description, availability) in one filesystem pass.
+
+        Repeated ``get_skill_description``/``get_skill_availability`` calls rescan the
+        skill directories and re-read each SKILL.md; this reads each file once, which
+        matters when the whole catalog is rendered for the model.
+        """
+        details: list[dict[str, Any]] = []
+        for entry in self.list_skills(filter_unavailable=False):
+            metadata = parse_skill_metadata(self._read_skill_file(entry["path"]))
+            nanobot_meta = self._parse_nanobot_metadata(metadata.get("metadata") if metadata else None)
+            available = self._check_requirements(nanobot_meta)
+            description = metadata.get("description") if metadata else None
+            details.append({
+                "name": entry["name"],
+                "path": entry["path"],
+                "source": entry["source"],
+                "description": (
+                    description if isinstance(description, str) and description else entry["name"]
+                ),
+                "available": available,
+                "missing": "" if available else self._get_missing_requirements(nanobot_meta),
+            })
+        if filter_unavailable:
+            return [detail for detail in details if detail["available"]]
+        return details
 
     def load_skills_for_context(self, skill_names: list[str]) -> str:
         """
@@ -220,7 +257,7 @@ class SkillsLoader:
         Returns:
             Markdown-formatted skills summary.
         """
-        all_skills = self.list_skills(filter_unavailable=False)
+        all_skills = self.list_skill_details(filter_unavailable=False)
         if not all_skills:
             return ""
 
@@ -250,12 +287,10 @@ class SkillsLoader:
             lines = [f"### {label} (`{display_root}`)"]
             for entry in entries:
                 skill_name = entry["name"]
-                meta = self._get_skill_meta(skill_name)
-                available = self._check_requirements(meta)
-                desc = self.get_skill_description(skill_name)
+                desc = entry["description"]
                 suffix = ""
-                if not available:
-                    missing = self._get_missing_requirements(meta)
+                if not entry["available"]:
+                    missing = entry["missing"]
                     suffix = f" (unavailable: {missing})" if missing else " (unavailable)"
                 relative_path = Path(entry["path"]).relative_to(root).as_posix()
                 lines.append(f"- **{skill_name}** — {desc}{suffix}  `{relative_path}`")

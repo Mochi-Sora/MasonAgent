@@ -1,4 +1,4 @@
-"""Short-lived WebUI channel connection sessions."""
+"""Short-lived channel connection sessions for interactive setup."""
 
 # pyright: reportPrivateUsage=false
 

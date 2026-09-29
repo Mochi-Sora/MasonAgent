@@ -9,7 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from nanobot.webui.metadata import WEBUI_TURN_METADATA_KEY
+from nanobot.session.turn_metadata import WEBUI_TURN_METADATA_KEY
 
 RESTART_NOTIFY_CHANNEL_ENV = "NANOBOT_RESTART_NOTIFY_CHANNEL"
 RESTART_NOTIFY_CHAT_ID_ENV = "NANOBOT_RESTART_NOTIFY_CHAT_ID"

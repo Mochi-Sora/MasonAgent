@@ -36,5 +36,4 @@ PLUGIN = ChannelPlugin(
     connector=f"{__package__}.connect:LinearConnectStore",
     setup=SETUP_SPEC,
     management=ChannelManagementSpec(local_state_present=local_state_present),
-    webui="webui/index.tsx",
 )

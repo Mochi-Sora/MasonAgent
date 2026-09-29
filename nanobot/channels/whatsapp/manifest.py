@@ -34,5 +34,4 @@ PLUGIN = ChannelPlugin(
         "neonize>=0.4.3.post0,<0.5.0",
         "segno>=1.6.1,<2.0.0",
     ),
-    webui="webui/index.tsx",
 )

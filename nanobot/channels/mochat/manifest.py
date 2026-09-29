@@ -41,5 +41,4 @@ PLUGIN = ChannelPlugin(
         "python-socketio>=5.16.0,<6.0.0",
         "msgpack>=1.1.0,<2.0.0",
     ),
-    webui="webui/index.ts",
 )

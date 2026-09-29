@@ -57,10 +57,10 @@ def _assert_single_corrupt_backup(store_path: Path) -> None:
     assert backups[0].read_text(encoding="utf-8") == "{not valid json"
 
 
-def _system_job(job_id: str = "dream") -> CronJob:
+def _system_job(job_id: str = "heartbeat") -> CronJob:
     return CronJob(
         id=job_id,
-        name="Dream",
+        name="Heartbeat",
         schedule=CronSchedule(kind="cron", expr="0 */2 * * *", tz="UTC"),
         payload=CronPayload(kind="system_event"),
     )

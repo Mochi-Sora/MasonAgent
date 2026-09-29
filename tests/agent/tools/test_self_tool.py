@@ -441,14 +441,6 @@ class TestModifyOpen:
         assert "protected" in result
 
     @pytest.mark.asyncio
-    async def test_modify_dream_blocked(self):
-        """dream is BLOCKED — cannot be replaced."""
-        tool = _make_tool()
-        new_dream = MagicMock()
-        result = await tool.execute(action="set", key="dream", value=new_dream)
-        assert "protected" in result
-
-    @pytest.mark.asyncio
     async def test_modify_auto_compact_blocked(self):
         """auto_compact is BLOCKED — cannot be replaced."""
         tool = _make_tool()

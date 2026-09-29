@@ -29,11 +29,7 @@ class _LazyModuleAlias(ModuleType):
         return sorted(set(super().__dir__()) | set(dir(self._load())))
 
 
-_LEGACY_MODULE_ALIASES = {
-    "webui_thread_disk": "nanobot.webui.thread_disk",
-    "webui_transcript": "nanobot.webui.transcript",
-    "webui_turn_helpers": "nanobot.session.webui_turns",
-}
+_LEGACY_MODULE_ALIASES: dict[str, str] = {}
 
 for _legacy_name, _target_name in _LEGACY_MODULE_ALIASES.items():
     sys.modules.setdefault(

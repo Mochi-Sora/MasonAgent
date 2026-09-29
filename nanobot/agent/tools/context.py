@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from nanobot.agent.skills import SkillsLoader
     from nanobot.agent.subagent import SubagentManager
     from nanobot.agent.tools.exec_session import ExecSessionManager
     from nanobot.agent.tools.file_state import FileStates
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
     from nanobot.bus.queue import MessageBus
     from nanobot.config.schema import ProviderConfig, ToolsConfig
     from nanobot.cron.service import CronService
+    from nanobot.memory.state import MemoryState
+    from nanobot.memory.store import MemoryDB
     from nanobot.providers.factory import ProviderSnapshot
     from nanobot.security.workspace_access import WorkspaceSandboxStatus
     from nanobot.session.manager import SessionManager
@@ -97,3 +100,6 @@ class ToolContext:
     timezone: str = "UTC"
     workspace_sandbox: WorkspaceSandboxStatus | None = None
     runtime_control: RuntimeControl | None = None
+    memory_db: MemoryDB | None = None
+    memory_state: MemoryState | None = None
+    skills_loader: SkillsLoader | None = None

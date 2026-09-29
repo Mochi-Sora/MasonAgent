@@ -20,9 +20,8 @@ want in-process access to sessions, memory, runtime helpers, and hooks.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot plugins enable api
-nanobot onboard --wizard
 nanobot agent -m "Hello!"
 ```
 

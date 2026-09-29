@@ -90,7 +90,7 @@ _QUICK_START_OAUTH_PROVIDERS = {"openai_codex"}
 
 _CLEAR_CHOICE = "Clear value"
 _QUICK_START_MENU_CHOICE = "[Q] Quick Start"
-_QUICK_START_STEPS = ("Provider setup", "WebSocket channel", "Review")
+_QUICK_START_STEPS = ("Provider setup", "Review")
 _QUICK_START_ENDPOINT_CHOICES: dict[str, tuple[_QuickStartEndpointChoice, ...]] = {
     "zhipu": (
         _QuickStartEndpointChoice("Standard API", "https://open.bigmodel.cn/api/paas/v4"),
@@ -605,17 +605,6 @@ def _input_text(
             return None
 
     return value
-
-
-def _input_secret(display_name: str) -> str | None | object:
-    """Get a secret value without echoing it when questionary supports password input."""
-    prompt_factory = getattr(_get_questionary(), "password", None)
-    if prompt_factory is None:
-        prompt_factory = _get_questionary().text
-    value = _ask_prompt(prompt_factory(f"{display_name}:", key_bindings=_input_back_key_bindings()))
-    if value is _BACK_PRESSED or value is None:
-        return None if value is None else _BACK_PRESSED
-    return str(value).strip()
 
 
 def _input_with_existing(
@@ -1881,54 +1870,9 @@ def _configure_quick_start_provider(config: Config) -> bool | object:
         return True
 
 
-def _enable_quick_start_websocket_defaults(config: Config) -> bool:
-    """Enable local WebUI with the default WebSocket settings."""
-    _show_quick_start_progress(2)
-    console.print(
-        f"[{_UI_ACCENT}]Quick Start will enable the WebSocket channel for the local WebUI.[/]"
-    )
-    console.print(
-        f"[{_UI_MUTED}]This lets the browser UI at http://127.0.0.1:8765 connect to nanobot.[/]"
-    )
-    console.print()
-    while True:
-        answer = _get_questionary().confirm(
-            "Enable WebSocket channel now?",
-            default=True,
-        ).ask()
-        if not answer:
-            console.print(
-                "[yellow]! Quick Start needs the WebSocket channel for the local WebUI[/yellow]"
-            )
-            return False
-        webui_secret = _input_secret("Set a WebUI password")
-        if webui_secret is _BACK_PRESSED:
-            continue
-        if not webui_secret:
-            console.print("[yellow]! WebUI password is required when enabling WebSocket[/yellow]")
-            return False
-        break
-
-    config_cls = _get_channel_config_class("websocket")
-    if config_cls is None:
-        console.print("[red]No configuration class found for websocket[/red]")
-        return False
-
-    current: Any = getattr(config.channels, "websocket", None) or {}
-    model = config_cls.model_validate(current)
-    if hasattr(model, "enabled"):
-        setattr(model, "enabled", True)
-    if hasattr(model, "token_issue_secret"):
-        setattr(model, "token_issue_secret", webui_secret)
-    if hasattr(model, "websocket_requires_token"):
-        setattr(model, "websocket_requires_token", True)
-    setattr(config.channels, "websocket", model.model_dump(by_alias=True, exclude_none=True))
-    return True
-
-
 def _show_quick_start_summary(config: Config) -> None:
     """Show the small summary users need before returning to the menu."""
-    _show_quick_start_progress(3)
+    _show_quick_start_progress(2)
     preset = config.model_presets.get("primary")
     provider_label = "AI provider"
     credentials_ready = True
@@ -1953,28 +1897,22 @@ def _show_quick_start_summary(config: Config) -> None:
     if not credentials_ready:
         status = f"{provider_label} {credential_name} missing"
 
-    rows = [
-        ("Status", status),
-        ("WebSocket channel", "enabled"),
-    ]
+    rows = [("Status", status)]
     _print_summary_panel(rows, "Quick Start")
 
 
 def _configure_quick_start(config: Config) -> bool:
-    """First-run path: provider + API key + local WebUI, with advanced settings hidden."""
+    """First-run path: provider, credentials, and model, with advanced settings hidden."""
     console.clear()
     _show_section_header(
         "Quick Start",
-        "Choose provider endpoint, add credentials and model, then enable the local WebUI channel.",
+        "Choose provider endpoint and add credentials and model.",
     )
     draft = config.model_copy(deep=True)
     provider_result = _configure_quick_start_provider(draft)
     if provider_result is _BACK_PRESSED:
         return False
     if not provider_result:
-        _pause()
-        return False
-    if not _enable_quick_start_websocket_defaults(draft):
         _pause()
         return False
     _show_quick_start_summary(draft)

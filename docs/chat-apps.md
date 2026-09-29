@@ -27,21 +27,18 @@ nanobot agent -m "Hello!"
 
 If that fails, fix installation, config, provider, or model setup first with [`quick-start.md`](./quick-start.md), [`providers.md`](./providers.md), and [`troubleshooting.md`](./troubleshooting.md). Chat apps require `nanobot gateway` to stay running after the channel is configured.
 
-## Recommended Setup in the WebUI
+## Recommended Setup with the Onboard Wizard
 
-For normal local setup, let the WebUI write and validate the channel config:
+For normal local setup, let the wizard write the channel config:
 
-1. Run `nanobot webui`.
-2. Open **Settings → Channels**.
-3. Search for the platform and open its setup panel.
-4. Follow the credential fields or QR flow. The screen tells you which platform-side token, permission, account, or URL it needs.
-5. Let nanobot install the optional channel support when prompted.
-6. Restart from the WebUI if it reports that a restart is required.
-7. Send a private test message. If the channel returns a pairing code, approve the pending request in the WebUI and send the message again.
+1. Run `nanobot onboard --wizard`.
+2. Choose the channel step and pick your platform.
+3. Enter the credential fields or start the QR flow. The prompts tell you which platform-side token, permission, account, or URL is needed.
+4. Let nanobot install the optional channel support when prompted.
+5. Start the gateway: `nanobot gateway`.
+6. Send a private test message. If the channel returns a pairing code, approve the pending request with `/pairing approve <code>` from an authorized chat and send the message again.
 
-If your installed stable release does not show **Settings → Channels**, continue with the [manual setup pattern](#manual-setup-pattern) below or install current source.
-
-Optional package installation is available to a same-machine WebUI by default. Remote browser clients cannot change the Python environment unless an administrator explicitly enables that capability. Run `nanobot plugins enable <channel>` locally when the guided install is unavailable.
+Optional package installation runs locally. Run `nanobot plugins enable <channel>` when you prefer to install the dependency by hand.
 
 The sections below explain what each chat platform requires and provide manual config for deployments that manage `config.json` directly.
 
@@ -122,13 +119,11 @@ IP; a publicly reachable server can use a reverse proxy. Use a fixed hostname fo
 ongoing use. Temporary tunnels also work for testing, but a hostname change
 requires updating nanobot's public URL and the app's callback and webhook URLs.
 
-The recommended setup is **Settings → Channels → Linear**. Enter the public URL
-and wait for automatic saving, select **Create prefilled Linear app**, create the
-app, then copy its Client ID, Client Secret, and Webhook Signing Secret back into
-nanobot. Leave each secret field to save it. Once the settings are saved, choose
-**Connect Linear**. OAuth requests only `read`, `write`, and
-`app:mentionable`; it deliberately does not request `app:assignable` so a new task
-must begin with an @mention.
+The recommended setup is to create a private Linear OAuth app, save its
+credentials under `channels.linear` in `config.json`, then authorize a
+workspace with `nanobot channels connect linear`. OAuth requests `read`,
+`write`, `app:mentionable`, and `app:assignable`; a task still begins with an
+explicit @mention or delegation.
 
 See the [native Linear agent guide](./guides/linear-agent.md) for the complete
 setup, tunnel examples, security model, and troubleshooting.
@@ -138,13 +133,11 @@ setup, tunnel examples, security model, and troubleshooting.
 <details>
 <summary><b>Telegram</b></summary>
 
-**Recommended WebUI setup**
+**Recommended setup**
 
-1. Create a bot with `@BotFather` and copy its token.
-2. Run `nanobot webui`, then open **Settings → Channels → Telegram**.
-3. Paste the token. If the gateway cannot reach Telegram directly, expand
-   **Advanced** and add an HTTP or SOCKS proxy.
-4. Save and enable Telegram, then send the bot a direct message.
+Run `nanobot onboard --wizard`, choose Telegram, and paste the bot token. If the
+gateway cannot reach Telegram directly, set `channels.telegram.proxy` to an HTTP or
+SOCKS proxy. Then start `nanobot gateway` and send the bot a direct message.
 
 The configuration badge means nanobot found a saved token. The live connection
 check is separate, so a temporary Telegram or proxy outage does not make an
@@ -638,9 +631,9 @@ Connects to a [Napcat](https://github.com/NapNeko/NapCatQQ) instance over its **
 **1. Set up Napcat**
 
 - Install and log into Napcat, then enable a **Forward WebSocket** server. See the [official Napcat Docker tutorial](https://github.com/NapNeko/NapCat-Docker).
-- In the webui, follow "网络配置" -> "新建" -> "Websocket 服务器" to create a forward websocket server. By default, the URL is `ws://127.0.0.1:3001`
+- In NapCat's own WebUI, follow "网络配置" -> "新建" -> "Websocket 服务器" to create a forward websocket server. By default, the URL is `ws://127.0.0.1:3001`
 - Copy the forward websocket server's token
-- (Optional) In the webui, follow "系统配置" -> "登陆配置" -> "快速登录QQ" to automatically login after restarts
+- (Optional) In NapCat's WebUI, follow "系统配置" -> "登陆配置" -> "快速登录QQ" to automatically login after restarts
 
 **Install the optional channel dependency**
 

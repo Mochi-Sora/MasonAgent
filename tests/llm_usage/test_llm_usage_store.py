@@ -97,7 +97,7 @@ def test_usage_payload_aggregates_cache_coverage_sources_and_failures(tmp_path: 
                 "2026-06-03T02:00:00+00:00",
                 provider="anthropic",
                 model="claude-sonnet-4",
-                source="dream",
+                source="consolidation",
                 usage=LLMUsage.estimated(input_tokens=30, output_tokens=10),
             ),
             _call(

@@ -74,7 +74,7 @@ def test_selected_project_path_follows_shared_cache_prefix(tmp_path) -> None:
 
 
 @pytest.mark.parametrize("selected_project", [False, True])
-def test_system_prompt_reflects_current_dream_memory_contract(tmp_path, selected_project) -> None:
+def test_system_prompt_reflects_current_memory_contract(tmp_path, selected_project) -> None:
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
     project = tmp_path / "project" if selected_project else workspace
@@ -82,11 +82,10 @@ def test_system_prompt_reflects_current_dream_memory_contract(tmp_path, selected
 
     prompt = builder.build_system_prompt(workspace=project)
 
-    assert "memory/history.jsonl" in prompt
-    assert (
-        "Only Dream memory-consolidation tasks may edit the profile and long-term memory files "
-        "listed above."
-    ) in prompt
+    assert "memory/memory.db" in prompt
+    assert "update_state" in prompt
+    assert "recall_memory" in prompt
+    assert "Use the memory tools to read and update memory; do not edit" in prompt
 
 
 def test_provider_context_appended_after_user_content(tmp_path) -> None:
@@ -207,24 +206,35 @@ def test_system_prompt_keeps_message_tool_out_of_current_chat_replies(tmp_path) 
     builder = ContextBuilder(workspace)
 
     prompt = builder.build_system_prompt(channel="slack")
+    flat = " ".join(prompt.split())
 
-    assert "Do not use the 'message' tool for normal replies in the current chat" in prompt
-    assert "When 'generate_image' creates images" in prompt
-    assert "call 'message' with the artifact paths in the 'media' parameter" in prompt
-    assert "Wait for the tool results, then answer once" in prompt
+    assert "Reply directly with text for the current conversation" in flat
+    assert "Use the `message` tool only for proactive sends" in flat
+    assert "generated images through its `media` parameter" in flat
+    assert "Wait for the tool results, then answer once" in flat
 
 
 def test_memory_skill_is_lazy_loaded_from_skills_index(tmp_path) -> None:
-    """Memory search guidance should be discoverable without loading its full body."""
+    """Skill bodies stay out of the prompt and are discovered on demand."""
     workspace = _make_workspace(tmp_path)
     builder = ContextBuilder(workspace)
 
     prompt = builder.build_system_prompt()
 
     assert "### Skill: memory" not in prompt
-    assert "**memory**" in prompt
+    assert "find_capabilities" in prompt
     assert "Search Past Events" not in prompt
     assert "Examples (replace `keyword`)" not in prompt
+
+
+def test_skills_index_returns_when_lazy_capabilities_are_disabled(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace, lazy_capabilities=False)
+
+    prompt = builder.build_system_prompt()
+
+    assert "find_capabilities" not in prompt
+    assert "**memory**" in prompt
 
 
 def test_fresh_workspace_omits_default_prompt_scaffolding(tmp_path) -> None:
@@ -239,11 +249,11 @@ def test_fresh_workspace_omits_default_prompt_scaffolding(tmp_path) -> None:
     assert "## USER.md" not in prompt
     assert "8281248569" not in prompt
     assert "(your name)" not in prompt
-    assert prompt.count("Do not use the 'message' tool for normal replies") == 1
+    assert prompt.count("Reply directly with text for the current conversation") == 1
 
 
-def test_template_memory_md_is_skipped(tmp_path) -> None:
-    """MEMORY.md matching the bundled template should not inject the Memory section."""
+def test_template_memory_md_is_not_injected_or_imported(tmp_path) -> None:
+    """An untouched MEMORY.md template must not inject a Memory section or import junk."""
     workspace = _make_workspace(tmp_path)
     from nanobot.utils.helpers import sync_workspace_templates
     sync_workspace_templates(workspace, silent=True)
@@ -251,13 +261,26 @@ def test_template_memory_md_is_skipped(tmp_path) -> None:
     builder = ContextBuilder(workspace)
     prompt = builder.build_system_prompt()
 
-    # This block is produced only when populated long-term memory is injected.
     assert "# Memory\n\n## Long-term Memory" not in prompt
     assert "This file is automatically updated by nanobot" not in prompt
+    assert "# State" not in prompt
+    assert builder.memory_db.counts()["memories"] == 0
+    assert not (workspace / "memory" / "MEMORY.md").exists()
 
 
-def test_customized_memory_md_is_injected(tmp_path, monkeypatch) -> None:
-    """A Dream-populated MEMORY.md should be injected normally."""
+def test_state_is_injected_when_present(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+    builder = ContextBuilder(workspace)
+    builder.memory_state.write("active goal: ship the memory rewrite")
+
+    prompt = builder.build_system_prompt()
+
+    assert "# State" in prompt
+    assert "active goal: ship the memory rewrite" in prompt
+
+
+def test_customized_memory_md_is_migrated_not_injected(tmp_path) -> None:
+    """A populated MEMORY.md moves into long-term memory instead of the prompt."""
     workspace = _make_workspace(tmp_path)
     from nanobot.utils.helpers import sync_workspace_templates
     sync_workspace_templates(workspace, silent=True)
@@ -267,17 +290,8 @@ def test_customized_memory_md_is_injected(tmp_path, monkeypatch) -> None:
     )
 
     builder = ContextBuilder(workspace)
-    read_memory = builder.memory.read_memory
-    calls = 0
-
-    def tracked_read_memory() -> str:
-        nonlocal calls
-        calls += 1
-        return read_memory()
-
-    monkeypatch.setattr(builder.memory, "read_memory", tracked_read_memory)
     prompt = builder.build_system_prompt()
 
-    assert "# Memory\n\n## Long-term Memory" in prompt
-    assert "User prefers dark mode" in prompt
-    assert calls == 1
+    assert "User prefers dark mode" not in prompt
+    assert builder.memory_db.search_memories("dark mode")
+    assert (workspace / "memory" / "legacy" / "MEMORY.md").exists()

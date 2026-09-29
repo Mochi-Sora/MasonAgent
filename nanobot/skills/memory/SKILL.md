@@ -1,20 +1,16 @@
 ---
 name: memory
-description: Search past conversations in the agent's history log.
+description: Recall durable facts and exact past conversations from memory.
 ---
 
 # Memory
 
-## Search Past Events
+Your memory lives in two searchable tiers plus the working state. Reach for the
+built-in tools; do not grep memory files.
 
-Search the exact `History log` path from the system prompt with `grep`; a project-relative
-`memory/history.jsonl` may belong to a different workspace. The log is append-only JSONL,
-with `cursor`, `timestamp`, and `content` per entry, and is not loaded into context.
+- `update_state(content)` — replace the working state shown in your system prompt. Keep it compact; it is cleared when the day rolls over.
+- `recall_memory(query, limit=5)` — durable facts, preferences, and decisions curated across sessions. Check it before answering questions about the user or earlier work.
+- `recall_backup(query, session=None, limit=10)` — every turn captured today, verbatim. An empty query lists the latest turns. Use it for exact recent wording or detail that has not been consolidated yet.
 
-Start broad searches with `output_mode="count"`, then narrow by topic or date and request
-matching content. Use `fixed_strings=true` for literal timestamps or JSON fragments.
-Page long results with `head_limit` / `offset` and use `context_before` / `context_after`
-when nearby entries matter.
-
-Example (replace `<history-log-path>` with the path from the system prompt):
-`grep(pattern="project-name", path="<history-log-path>", output_mode="content", case_insensitive=true, head_limit=20)`
+The backup is discarded when the day rolls over and long-term memory is curated
+automatically from it, so you never need to copy one into the other.

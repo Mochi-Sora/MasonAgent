@@ -12,7 +12,6 @@ from nanobot.bus.events import InboundMessage, OutboundMessage
 from nanobot.cron.session_delivery import origin_delivery_context
 from nanobot.cron.session_turns import CRON_DEFER_UNTIL_IDLE_META, CRON_TRIGGER_META
 from nanobot.cron.types import CronJob, CronRunResult
-from nanobot.cron.webui_metadata import cron_proactive_delivery_metadata
 from nanobot.utils.prompt_templates import render_template
 
 
@@ -41,17 +40,6 @@ def _bound_session_delivery_context(
     source_label: str | None,
 ) -> tuple[str, str, dict[str, Any]]:
     channel, chat_id, metadata = origin_delivery_context(job)
-
-    if channel == "websocket":
-        metadata["webui"] = True
-        metadata.update(
-            cron_proactive_delivery_metadata(
-                "websocket",
-                metadata,
-                turn_seed=turn_seed,
-                source_label=source_label,
-            )
-        )
 
     return channel, chat_id, metadata
 

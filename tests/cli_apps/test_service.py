@@ -732,6 +732,7 @@ def test_uninstall_removes_installed_state_and_generated_skill(
         "_run_argv",
         lambda argv, *, timeout: subprocess.CompletedProcess(argv, 0, stdout="ok", stderr=""),
     )
+    monkeypatch.setattr(manager, "_pip_available", staticmethod(lambda: True))
 
     payload = manager.uninstall("gimp")
 
@@ -841,6 +842,7 @@ def test_uninstall_keeps_state_when_recorded_entry_point_still_exists(
         "_run_argv",
         lambda argv, *, timeout: subprocess.CompletedProcess(argv, 0, stdout="ok", stderr=""),
     )
+    monkeypatch.setattr(manager, "_pip_available", staticmethod(lambda: True))
 
     payload = manager.uninstall("gimp")
 

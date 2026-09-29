@@ -162,7 +162,7 @@ class BaseChannel(ABC):
 
         Default is no-op. Channels with a native low-emphasis primitive
         (Slack context block, Telegram expandable blockquote, Discord
-        subtext, WebUI italic bubble, ...) override to render reasoning
+        subtext, ...) override to render reasoning
         as a subordinate trace that updates in place as the model thinks.
 
         Streaming contract mirrors :meth:`send_delta`: stateful implementations

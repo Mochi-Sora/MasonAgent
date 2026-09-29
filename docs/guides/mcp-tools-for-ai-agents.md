@@ -18,8 +18,7 @@ external tool logic.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot agent -m "Hello!"
 ```
 

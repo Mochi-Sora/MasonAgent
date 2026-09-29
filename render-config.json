@@ -11,21 +11,11 @@
     }
   },
   "gateway": {
-    "host": "127.0.0.1",
-    "port": 18790
-  },
-  "channels": {
-    "websocket": {
-      "enabled": true,
-      "host": "0.0.0.0",
-      "port": 8765,
-      "tokenIssueSecret": "${NANOBOT_WEB_TOKEN}",
-      "websocketRequiresToken": true
-    }
+    "host": "0.0.0.0",
+    "port": 8765
   },
   "tools": {
     "restrictToWorkspace": true,
-    "webuiAllowRemotePackageInstall": false,
     "my": {
       "allowSet": false
     }

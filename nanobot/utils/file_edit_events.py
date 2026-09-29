@@ -1,4 +1,4 @@
-"""File-edit activity helpers for WebUI progress events."""
+"""File-edit activity helpers for progress events."""
 
 from __future__ import annotations
 
@@ -198,7 +198,7 @@ def build_unified_diff_payload(
     max_line_chars: int = _MAX_DIFF_LINE_CHARS,
     diff: FileDiff | None = None,
 ) -> dict[str, Any] | None:
-    """Return a compact standard unified diff for WebUI rendering."""
+    """Return a compact standard unified diff payload for progress rendering."""
     if before is None or after is None:
         return None
     if diff is None:

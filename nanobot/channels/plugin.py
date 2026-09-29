@@ -38,7 +38,6 @@ class ChannelPlugin:
     default_enabled: bool = False
     settings_visible: bool = True
     capabilities: frozenset[str] = frozenset()
-    webui: str | None = None
 
     def __post_init__(self) -> None:
         if _CHANNEL_PACKAGE_NAME.fullmatch(self.name) is None:
@@ -65,11 +64,6 @@ class ChannelPlugin:
                 raise ValueError(
                     f"channel plugin dependency is not a valid requirement: {dependency}"
                 ) from exc
-        if self.webui is not None:
-            webui = self.webui.replace("\\", "/")
-            if webui.startswith("/") or ".." in webui.split("/"):
-                raise ValueError("channel plugin webui entry must stay inside its package")
-            object.__setattr__(self, "webui", webui)
 
     def load_channel_class(self) -> type[BaseChannel]:
         """Resolve and validate the runtime class only when the channel is needed."""
@@ -169,12 +163,6 @@ def load_channel_package(name: str) -> ChannelPlugin | None:
             raise TypeError(
                 f"{module_name}.PLUGIN {label} module does not exist inside its package: "
                 f"{target_module}"
-            )
-    if plugin.webui is not None:
-        webui_entry = files("nanobot.channels").joinpath(name, *plugin.webui.split("/"))
-        if not webui_entry.is_file():
-            raise TypeError(
-                f"{module_name}.PLUGIN webui entry does not exist: {plugin.webui}"
             )
     return plugin
 

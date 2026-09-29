@@ -1481,7 +1481,7 @@ Use the `run_cli_app` tool with `name="{name}"` for command execution. Do not in
             )
             if any(path.suffix.lower() in _INLINE_ARTIFACT_EXTENSIONS for path in artifacts):
                 output.append(
-                    "\nTo show a preview in WebUI, reference a raster artifact with Markdown "
+                    "\nTo show a preview, reference a raster artifact with Markdown "
                     "using its workspace-relative path, for example `![diagram](diagram.png)`."
                 )
         return _truncate("\n".join(output))

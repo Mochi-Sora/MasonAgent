@@ -24,34 +24,28 @@ nanobot agent -m "Hello!"
 ## Install nanobot
 
 ```bash
-python -m pip install nanobot-ai
+./scripts/install.sh  # from a checkout; runs the setup wizard
+```
+
+## Connect Telegram with the wizard
+
+Run the setup wizard:
+
+```bash
 nanobot onboard --wizard
 ```
 
-## Connect Telegram in the WebUI
+Choose the channel step, select Telegram, and:
 
-Start the WebUI:
-
-```bash
-nanobot webui
-```
-
-Open **Settings → Channels → Telegram**:
-
-1. If Telegram support is not installed, turn on its switch and confirm the
-   installation.
+1. If Telegram support is not installed, let the wizard install it.
 2. Paste the token from BotFather.
-3. If the gateway cannot reach Telegram directly, expand **Advanced** and enter
-   an HTTP or SOCKS proxy such as `http://127.0.0.1:7890`.
-4. Save and enable Telegram.
+3. If the gateway cannot reach Telegram directly, set `channels.telegram.proxy` to an
+   HTTP or SOCKS proxy such as `http://127.0.0.1:7890`.
+4. Finish and save.
 
-The configuration badge appears as soon as a bot token is saved. A connection
-check is separate: if Telegram is temporarily unreachable, the saved
-configuration remains valid and the bot can continue working in environments
-where the gateway has network access.
-
-Saved tokens and proxy URLs are masked. A proxy entered here is used both for
-the connection check and for normal Telegram traffic.
+nanobot checks the saved token when it can, but a temporary network failure does
+not invalidate it. A proxy set here is used both for connection checks and for
+normal Telegram traffic.
 
 ## Manual setup
 
@@ -122,9 +116,7 @@ workspace as your local CLI check.
 
 - If the channel is not listed, run `nanobot plugins enable telegram` again in
   the same Python environment.
-- If the WebUI shows a saved configuration but the live check cannot reach Telegram,
-  the token is still saved. Confirm the gateway can reach `api.telegram.org`,
-  or open **Advanced → Network proxy** and enter a proxy.
+- If the saved token does not pass a live check, the token is still saved. Confirm the gateway can reach `api.telegram.org`, or set `channels.telegram.proxy` to a proxy.
 - If Telegram rejects the token, copy the current token from BotFather or
   regenerate it.
 - If messages do not arrive, run `nanobot gateway --verbose` and confirm the

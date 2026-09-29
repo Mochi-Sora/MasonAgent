@@ -45,7 +45,7 @@ class ProviderSpec:
     keywords: tuple[str, ...]  # model-name keywords for matching (lowercase)
     env_key: str  # env var for API key, e.g. "DASHSCOPE_API_KEY"
     display_name: str = ""  # shown in `nanobot status`
-    model_catalog: str = "auto"  # WebUI model-list source, including builtin/hybrid
+    model_catalog: str = "auto"  # CLI model-list source, including builtin/hybrid
     builtin_models: tuple[ProviderModelSpec, ...] = ()
     settings_alias_for: str = ""  # compatibility alias grouped under this provider in Settings
 
@@ -764,7 +764,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_api_base="https://api.groq.com/openai/v1",
     ),
     # AssemblyAI: voice transcription only. It appears in provider settings so
-    # users can manage credentials, but WebUI excludes it from chat model pickers.
+    # users can manage credentials, but it is excluded from chat model pickers.
     ProviderSpec(
         name="assemblyai",
         keywords=("assemblyai",),

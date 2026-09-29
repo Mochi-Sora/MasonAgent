@@ -466,13 +466,10 @@ class TelegramConfig(Base):
 
 
 _TELEGRAM_COMMAND_ALIASES = {
-    "/dream_log": "/dream-log",
-    "/dream_restore": "/dream-restore",
-    "/dream_prompt": "/dream-prompt",
     "/evaluator_prompt": "/evaluator-prompt",
 }
 _TELEGRAM_DISPLAY_COMMAND_RE = re.compile(
-    r"(?<![\w/.-])/(?:dream-log|dream-restore|dream-prompt|evaluator-prompt)(?![\w/.-])"
+    r"(?<![\w/.-])/(?:evaluator-prompt)(?![\w/.-])"
 )
 
 
@@ -492,7 +489,7 @@ def _telegram_command_text(text: str) -> str:
             line = _TELEGRAM_DISPLAY_COMMAND_RE.sub(lambda match: display_names[match[0]], line)
             # Inline code is not tappable as a Telegram command.
             line = re.sub(
-                r"`(/(?:dream_log|dream_restore|dream_prompt|evaluator_prompt)(?: [^`\n]*)?)`",
+                r"`(/(?:evaluator_prompt)(?: [^`\n]*)?)`",
                 r"\1",
                 line,
             )
@@ -525,10 +522,6 @@ class TelegramChannel(BaseChannel):
         BotCommand("pairing", "Manage DM pairing (approve/deny/list)"),
         BotCommand("model", "Switch runtime model preset"),
         BotCommand("skill", "List enabled skills"),
-        BotCommand("dream", "Run Dream memory consolidation now"),
-        BotCommand("dream_log", "Show the latest Dream memory change"),
-        BotCommand("dream_restore", "Restore Dream memory to an earlier version"),
-        BotCommand("dream_prompt", "Tell Dream how to organize memory"),
         BotCommand("evaluator_prompt", "Customize the heartbeat evaluator prompt"),
         BotCommand("help", "Show available commands"),
     ]
@@ -537,8 +530,8 @@ class TelegramChannel(BaseChannel):
     # Telegram-safe aliases are normalized before reaching the core router.
     # Canonical hyphenated commands stay on a separate handler (below).
     TELEGRAM_BUS_SLASH_COMMAND_RE = re.compile(
-        r"^/(?:new|compact|stop|restart|status|dream|history|goal|trigger|pairing|model|skill"
-        r"|dream_log|dream_restore|dream_prompt|evaluator_prompt|evaluator-prompt)(?:@\w+)?(?:\s+.*)?$"
+        r"^/(?:new|compact|stop|restart|status|history|goal|trigger|pairing|model|skill"
+        r"|evaluator_prompt|evaluator-prompt)(?:@\w+)?(?:\s+.*)?$"
     )
 
     @classmethod
@@ -691,14 +684,6 @@ class TelegramChannel(BaseChannel):
         self._app.add_handler(
             MessageHandler(
                 filters.Regex(TelegramChannel.TELEGRAM_BUS_SLASH_COMMAND_RE),
-                self._forward_command,
-            )
-        )
-        self._app.add_handler(
-            MessageHandler(
-                filters.Regex(
-                    r"^/(?:dream-log|dream-restore|dream-prompt)(?:@\w+)?(?:\s+.*)?$"
-                ),
                 self._forward_command,
             )
         )

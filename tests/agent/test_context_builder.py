@@ -201,31 +201,60 @@ class TestIsTemplateContent:
         assert ContextBuilder._is_template_content("totally different", "memory/MEMORY.md") is False
 
 
+def test_untouched_legacy_agents_template_is_not_injected(tmp_path):
+    """Upgraded workspaces keep the old bundled AGENTS.md out of the prompt."""
+    from nanobot.utils.helpers import load_bundled_template
+
+    legacy = load_bundled_template("legacy/AGENTS.md")
+    assert legacy
+    (tmp_path / "AGENTS.md").write_text(legacy, encoding="utf-8")
+
+    result = ContextBuilder(tmp_path)._load_bootstrap_files()
+
+    assert "## AGENTS.md" not in result
+
+
+def test_customized_agents_file_still_loads(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("My project rules.", encoding="utf-8")
+
+    result = ContextBuilder(tmp_path)._load_bootstrap_files()
+
+    assert "My project rules." in result
+
+
 # ---------------------------------------------------------------------------
 # Bundled bootstrap templates
 # ---------------------------------------------------------------------------
 
 
 class TestBundledToolContract:
-    def test_tool_contract_balances_general_and_coding_workflows(self):
+    def test_tool_contract_keeps_execution_policy_without_tool_mechanics(self):
+        """Policy no tool schema can express stays; duplicated mechanics stay out."""
         from importlib.resources import files as pkg_files
 
         tpl = pkg_files("nanobot") / "templates" / "agent" / "tool_contract.md"
         content = tpl.read_text(encoding="utf-8")
+        flat = " ".join(content.split())
 
         assert "## General Tool Contract" in content
-        assert "Use the narrowest structured tool" in content
-        assert "Do not use `exec` as a universal workaround" in content
-        assert "## File and Coding Workflows" in content
-        assert "`grep` returns matches with five context lines by default" in content
-        assert "apply_patch" in content
-        assert "acceptance criteria into concrete checks" in content
-        assert "visual evidence reaches the model" in content
-        assert "clear user request as authorization" in content
-        assert "Never invent missing records or measurements" in content
+        assert "Use the narrowest structured tool" in flat
+        assert "Do not use `exec` as a universal workaround" in flat
+        assert "clear user request as authorization" in flat
+        assert "Wait for the tool results, then answer once" in flat
+        assert "acceptance criteria into concrete checks" in flat
+        assert "visual evidence reaches the model" in flat
+        assert "Never invent missing records or measurements" in flat
+        assert "## Delivery" in content
+        assert "## CLI App Attachments" in content
         assert "## Web and External Information" in content
-        assert "## Messaging and Media" in content
         assert "## Scheduling and Background Work" in content
+
+        # Mechanics live in the tool schemas (tests/tools/test_tool_descriptions.py)
+        # and in the find_capabilities catalog, so the contract must not repeat them.
+        assert "five context lines" not in content
+        assert "dry_run" not in content
+        assert "yield_time_ms" not in content
+        assert "files_with_matches" not in content
 
     def test_tool_contract_is_injected_without_workspace_file(self, tmp_path):
         builder = _builder(tmp_path)
@@ -307,7 +336,8 @@ class TestBuildSystemPrompt:
 
         assert str(tmp_path.resolve()) not in result
         assert "Agent profile: SOUL.md and USER.md" in result
-        assert "History log: memory/history.jsonl" in result
+        assert "Working state: memory/state.md" in result
+        assert "Long-term memory + today's backup: memory/memory.db" in result
         assert "Custom skills: skills/{skill-name}/SKILL.md" in result
 
     def test_selected_project_identity_keeps_agent_data_in_agent_workspace(self, tmp_path):

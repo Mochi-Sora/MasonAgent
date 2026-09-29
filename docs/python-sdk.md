@@ -27,10 +27,12 @@ your Python code
 
 Install and configure nanobot first. If you have not done that yet, follow the
 [Quick Start](quick-start.md) and complete the setup wizard. For SDK-only Python
-environments, install the package with:
+environments, install the checkout in editable mode, for example:
 
 ```bash
-python -m pip install nanobot-ai
+uv tool install --editable <checkout>
+# or, with pip in a virtual environment:
+python -m pip install --editable <checkout>
 ```
 
 `Nanobot.from_config()` reuses your normal `~/.nanobot/config.json` and
@@ -210,7 +212,7 @@ stable `session_key`, stream events, keep the final `RunResult`, and let
 | `session_key` | The conversation history key. Reuse it to continue a thread; change it to isolate a thread. |
 | Workspace | The local directory where file tools and shell tools operate. |
 | Tools | Capabilities the agent may call, such as file access, shell, web, or custom tools from your config. |
-| Memory | Long-term memory files managed by nanobot. |
+| Memory | Working state and SQLite-backed long-term memory managed by nanobot. |
 | Stream event | A typed event such as `text.delta`, `tool.started`, or `run.completed`. |
 | Model override | A temporary model or model preset used for one SDK instance or one run. |
 
@@ -619,12 +621,16 @@ Do not expose exported snapshots directly to chat users.
 
 ### `bot.memory`
 
+File-level helpers for the workspace `memory/` directory. Long-term memory
+itself is curated in `memory/memory.db` by consolidation and read by the agent
+through the `recall_memory` and `recall_backup` tools.
+
 | Method | Description |
 |--------|-------------|
-| `read()` | Read `memory/MEMORY.md`. |
-| `write(text)` | Overwrite `memory/MEMORY.md`. |
-| `append_history(text, session_key=None)` | Append one `memory/history.jsonl` entry and return its cursor. |
-| `read_history(session_key=None)` | Read memory history entries, optionally filtered by session key. |
+| `read()` | Read the agent's working state (`memory/state.md`). |
+| `write(text)` | Replace the working state (`memory/state.md`). |
+| `append_history(text, session_key=None)` | Append one archived-history entry to `memory/history.jsonl` and return its cursor. |
+| `read_history(session_key=None)` | Read archived-history entries, optionally filtered by session key. |
 
 ### `bot.runtime`
 

@@ -7,9 +7,8 @@ when nanobot should do work without someone actively typing: reminders,
 recurring checks, nightly summaries, CI follow-ups, local script reports, or
 webhook-driven events.
 
-Create automations from the chat channel or WebUI topic where the
-result should appear. That lets nanobot keep the right session history,
-workspace, and reply target.
+Create automations from the chat where the result should appear. That lets
+nanobot keep the right session history, workspace, and reply target.
 
 ## Choose an Automation Type
 
@@ -26,21 +25,20 @@ protected from normal automation edits.
 ## Before You Create One
 
 Keep `nanobot gateway` running. The gateway owns background delivery for chat
-apps, WebUI topics, scheduled automations, local triggers, heartbeat, and
-Dream jobs.
+apps, scheduled automations, local triggers, heartbeat, and
+memory consolidation jobs.
 
 Use the same workspace and config for the gateway and any process that sends
 local trigger messages. If you run multiple nanobot instances, pass the matching
 `--config` or `--workspace` option to `nanobot trigger`.
 
-Create each automation from the target topic. An automation without a linked
-topic cannot be enabled or run from the WebUI because nanobot would not know
-where to deliver the turn.
+Create each automation from the target chat. An automation without a linked
+chat has nowhere to deliver the turn.
 
 ## Scheduled Automations
 
 Scheduled automations are created by the agent's `cron` tool. In practice, ask
-nanobot from the target chat or WebUI topic:
+nanobot from the target chat:
 
 ```text
 Every weekday at 9am, check open pull requests and summarize blockers here.
@@ -68,7 +66,7 @@ report, use heartbeat instead of a user-created scheduled automation.
 Local triggers let a local script or external service send a message into a
 specific nanobot session later.
 
-Create the trigger from the chat or WebUI topic where future messages should
+Create the trigger from the chat where future messages should
 arrive:
 
 ```text
@@ -117,20 +115,20 @@ Heartbeat is enabled by default when `nanobot gateway` starts. Configure it in
 
 ## Manage Automations
 
-Use the WebUI Automations view to:
+Manage scheduled automations by asking nanobot in a chat:
 
-- filter by all, active, paused, needs-attention, or system jobs;
-- search by task name, message, trigger command, linked topic, schedule, or
-  status;
-- sort by next run, last run, updated time, or name;
-- run scheduled automations now;
-- pause or resume, rename, or delete user-created automations;
-- copy the CLI command for local triggers;
-- inspect protected system automations without changing them.
+- list them ("list my scheduled jobs");
+- remove a job by ID ("remove job <id>").
 
-Local triggers do not have a WebUI "Run now" action because each run needs a
-message. Copy the `nanobot trigger ...` command from the WebUI and replace
-`"message"` with the content that should be delivered.
+Cron jobs are stored per workspace at `<workspace>/cron/jobs.json`. You can also
+edit or delete user-created entries in that file while the gateway is stopped;
+leave the system entries (`heartbeat`, `consolidation`, and `memory_rollover`)
+alone.
+
+Local triggers are managed with `/trigger` inside the linked chat. Each trigger
+command needs a message, so there is no "run now" action: call
+the printed `nanobot trigger ...` command yourself and replace `"message"` with
+the content that should be delivered.
 
 ## Delivery and Reliability
 
@@ -189,12 +187,11 @@ config as the gateway.
 If a trigger message appears twice after a restart, treat it as expected
 at-least-once delivery and make the external message idempotent.
 
-If you need to edit, pause, resume, rename, delete, or inspect automations, use
-the WebUI Automations view.
+If you need to edit, remove, or inspect automations, ask nanobot in a chat or
+edit `<workspace>/cron/jobs.json` while the gateway is stopped.
 
 ## Related Docs
 
-- [`webui.md#automations`](./webui.md#automations) for the browser management view
 - [`chat-commands.md#local-triggers`](./chat-commands.md#local-triggers) for `/trigger`
 - [`cli-reference.md#local-triggers`](./cli-reference.md#local-triggers) for `nanobot trigger`
 - [`configuration.md#gateway-heartbeat`](./configuration.md#gateway-heartbeat) for heartbeat settings

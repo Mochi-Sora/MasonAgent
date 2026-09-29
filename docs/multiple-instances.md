@@ -45,14 +45,11 @@ To open a CLI session against one of these instances locally:
 nanobot agent -c ~/.nanobot-telegram/config.json -m "Hello from Telegram instance"
 nanobot agent -c ~/.nanobot-discord/config.json -m "Hello from Discord instance"
 
-# Open the browser workbench for a specific instance
-nanobot webui -c ~/.nanobot-telegram/config.json
-
 # Optional one-off workspace override
 nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test
 ```
 
-> Interactive `nanobot agent` and `nanobot webui` commands with the same `--config` and explicit `--workspace` selectors share one gateway instance. Different selectors produce isolated runtime state and processes. The one-shot and `--classic` agent paths remain direct local executions.
+> Interactive `nanobot agent` commands with the same `--config` and explicit `--workspace` selectors share one gateway instance. Different selectors produce isolated runtime state and processes. The one-shot agent path remains a direct local execution.
 
 | Component | Resolved From | Example |
 |-----------|---------------|---------|
@@ -108,19 +105,12 @@ nanobot gateway --config ~/.nanobot-discord/config.json
 
 Each gateway instance also exposes a lightweight HTTP health endpoint on `gateway.host:gateway.port`. By default, the gateway binds to `127.0.0.1`, so the endpoint stays local unless you explicitly set `gateway.host` to a public or LAN-facing address.
 
-`GET /health` reports process liveness and WebSocket channel readiness:
+`GET /health` reports process liveness:
 
-- Returns `200 OK` when the WebSocket channel is disabled or running.
-- Returns `503 Service Unavailable` when the WebSocket channel is enabled but not running.
+- Returns `200 OK` with `{"status":"ok","process":"alive","ready":true}`.
+- Returns `503 Service Unavailable` when the gateway is not ready.
 
-The JSON response includes `status`, `process`, `ready`, and `websocket`.
-For example, with the WebSocket channel disabled:
-
-```json
-{"status":"ok","process":"alive","ready":true,"websocket":"disabled"}
-```
-
-Readiness currently reflects only the WebSocket channel. A successful response does not verify other chat channels, MCP servers, or model provider connectivity.
+A successful response does not verify chat channels, MCP servers, or model provider connectivity.
 
 Other paths return `404`.
 

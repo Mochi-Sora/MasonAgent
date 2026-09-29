@@ -357,21 +357,22 @@ class TestSyncWorkspaceTemplates:
         assert tools_path.read_text(encoding="utf-8") == "custom tool notes"
 
     def test_creates_memory_directory(self, tmp_path):
-        """Should create memory directory structure."""
+        """Memory stays empty until the agent runs; the layout is created up front."""
         workspace = tmp_path / "workspace"
 
         sync_workspace_templates(workspace, silent=True)
 
-        assert (workspace / "memory").exists() or (workspace / "skills").exists()
+        assert (workspace / "memory").is_dir()
+        assert (workspace / "skills").is_dir()
+        assert not list((workspace / "memory").iterdir())
 
-    def test_creates_prompt_readme_without_dream_override(self, tmp_path):
+    def test_creates_prompt_readme(self, tmp_path):
         workspace = tmp_path / "workspace"
 
         added = sync_workspace_templates(workspace, silent=True)
 
         assert "prompts/README.md" in {path.replace("\\", "/") for path in added}
         assert (workspace / "prompts" / "README.md").exists()
-        assert not (workspace / "prompts" / "dream.md").exists()
 
     def test_returns_list_of_added_files(self, tmp_path):
         """Should return list of relative paths for added files."""
@@ -1197,14 +1198,10 @@ class TestMainMenuUpdate:
 
         rows = dict(captured["rows"])
         assert rows["Status"] == "OpenAI Codex OAuth login missing"
-        assert rows["WebSocket channel"] == "enabled"
 
     def test_quick_start_provider_choice_skips_advanced_prompts(self, monkeypatch):
         """The beginner path should ask for provider credentials and model."""
         config = Config()
-
-        def fail_websocket_config(*_args, **_kwargs):
-            raise AssertionError("Quick Start should not open WebSocket settings")
 
         pause_messages: list[str] = []
 
@@ -1232,7 +1229,6 @@ class TestMainMenuUpdate:
                 password=lambda *a, **kw: FakePrompt("webui-secret"),
             ),
         )
-        monkeypatch.setattr(onboard_wizard, "_configure_pydantic_model", fail_websocket_config)
         monkeypatch.setattr(onboard_wizard, "_print_summary_panel", lambda *a, **kw: None)
         monkeypatch.setattr(onboard_wizard, "_pause", lambda message="": pause_messages.append(message))
 
@@ -1244,10 +1240,6 @@ class TestMainMenuUpdate:
         assert config.agents.defaults.model_preset == "primary"
         assert config.model_presets["primary"].provider == "deepseek"
         assert config.model_presets["primary"].model == "deepseek-v4-flash"
-        websocket = getattr(config.channels, "websocket")
-        assert websocket["enabled"] is True
-        assert websocket["websocketRequiresToken"] is True
-        assert websocket["tokenIssueSecret"] == "webui-secret"
 
     def test_quick_start_provider_menu_escape_returns_back(self, monkeypatch):
         """Esc from the first Quick Start menu should return to the main menu."""
@@ -1268,9 +1260,6 @@ class TestMainMenuUpdate:
         config = Config()
         pause_messages: list[str] = []
 
-        def fail_websocket_defaults(*_args, **_kwargs):
-            raise AssertionError("Back navigation should not continue Quick Start")
-
         monkeypatch.setattr(onboard_wizard.console, "clear", lambda: None)
         monkeypatch.setattr(onboard_wizard, "_show_section_header", lambda *a, **kw: None)
         monkeypatch.setattr(
@@ -1278,50 +1267,10 @@ class TestMainMenuUpdate:
             "_configure_quick_start_provider",
             lambda *_args: onboard_wizard._BACK_PRESSED,
         )
-        monkeypatch.setattr(
-            onboard_wizard,
-            "_enable_quick_start_websocket_defaults",
-            fail_websocket_defaults,
-        )
         monkeypatch.setattr(onboard_wizard, "_pause", lambda message="": pause_messages.append(message))
 
         assert onboard_wizard._configure_quick_start(config) is False
         assert pause_messages == []
-
-    def test_quick_start_websocket_decline_rolls_back_provider_defaults(self, monkeypatch):
-        """A failed WebSocket step should not leave saveable Quick Start defaults behind."""
-        config = Config()
-        original = config.model_dump(by_alias=True)
-
-        class FakePrompt:
-            def __init__(self, response):
-                self.response = response
-
-            def ask(self):
-                return self.response
-
-        monkeypatch.setattr(onboard_wizard.console, "clear", lambda: None)
-        monkeypatch.setattr(onboard_wizard.console, "print", lambda *a, **kw: None)
-        monkeypatch.setattr(onboard_wizard, "_show_section_header", lambda *a, **kw: None)
-        monkeypatch.setattr(onboard_wizard, "_show_quick_start_progress", lambda *a, **kw: None)
-        monkeypatch.setattr(onboard_wizard, "_select_with_back", lambda *a, **kw: "DeepSeek")
-        monkeypatch.setattr(onboard_wizard, "_input_text", lambda *a, **kw: "sk-ds-test")
-        monkeypatch.setattr(
-            onboard_wizard,
-            "_input_model_with_autocomplete",
-            lambda *a, **kw: "deepseek-v4-flash",
-        )
-        monkeypatch.setattr(
-            onboard_wizard,
-            "questionary",
-            SimpleNamespace(confirm=lambda *a, **kw: FakePrompt(False)),
-        )
-        monkeypatch.setattr(onboard_wizard, "_pause", lambda message="": None)
-
-        assert onboard_wizard._configure_quick_start(config) is False
-
-        assert config.model_dump(by_alias=True) == original
-        assert getattr(config.channels, "websocket", None) is None
 
     def test_quick_start_provider_choice_asks_for_model_id(self, monkeypatch):
         """Known providers should ask users for the model instead of fetching one."""
@@ -1548,85 +1497,6 @@ class TestMainMenuUpdate:
         assert config.model_presets["primary"].provider == "azure_openai"
         assert config.model_presets["primary"].model == "deployment-name"
 
-    def test_quick_start_websocket_step_explains_channel_enablement(self, monkeypatch):
-        """Quick Start should confirm and protect WebSocket for WebUI."""
-        config = Config()
-        messages: list[str] = []
-
-        class FakePrompt:
-            def __init__(self, response):
-                self.response = response
-
-            def ask(self):
-                return self.response
-
-        monkeypatch.setattr(onboard_wizard, "_show_quick_start_progress", lambda *_args: None)
-        monkeypatch.setattr(onboard_wizard.console, "print", lambda message="", *a, **kw: messages.append(str(message)))
-        monkeypatch.setattr(
-            onboard_wizard,
-            "questionary",
-            SimpleNamespace(
-                confirm=lambda *a, **kw: FakePrompt(True),
-                password=lambda *a, **kw: FakePrompt("webui-secret"),
-            ),
-        )
-
-        assert onboard_wizard._enable_quick_start_websocket_defaults(config) is True
-
-        assert any("WebSocket channel" in message for message in messages)
-        assert any("http://127.0.0.1:8765" in message for message in messages)
-        websocket = getattr(config.channels, "websocket")
-        assert websocket["enabled"] is True
-        assert websocket["websocketRequiresToken"] is True
-        assert websocket["tokenIssueSecret"] == "webui-secret"
-
-    def test_quick_start_websocket_step_can_be_declined(self, monkeypatch):
-        """Declining WebSocket should stop Quick Start before changing channel config."""
-        config = Config()
-
-        class FakePrompt:
-            def __init__(self, response):
-                self.response = response
-
-            def ask(self):
-                return self.response
-
-        monkeypatch.setattr(onboard_wizard, "_show_quick_start_progress", lambda *_args: None)
-        monkeypatch.setattr(onboard_wizard.console, "print", lambda *a, **kw: None)
-        monkeypatch.setattr(
-            onboard_wizard,
-            "questionary",
-            SimpleNamespace(confirm=lambda *a, **kw: FakePrompt(False)),
-        )
-
-        assert onboard_wizard._enable_quick_start_websocket_defaults(config) is False
-        assert getattr(config.channels, "websocket", None) is None
-
-    def test_quick_start_websocket_requires_password(self, monkeypatch):
-        """Accepting WebSocket with an empty password should not enable the channel."""
-        config = Config()
-
-        class FakePrompt:
-            def __init__(self, response):
-                self.response = response
-
-            def ask(self):
-                return self.response
-
-        monkeypatch.setattr(onboard_wizard, "_show_quick_start_progress", lambda *_args: None)
-        monkeypatch.setattr(onboard_wizard.console, "print", lambda *a, **kw: None)
-        monkeypatch.setattr(
-            onboard_wizard,
-            "questionary",
-            SimpleNamespace(
-                confirm=lambda *a, **kw: FakePrompt(True),
-                password=lambda *a, **kw: FakePrompt(""),
-            ),
-        )
-
-        assert onboard_wizard._enable_quick_start_websocket_defaults(config) is False
-        assert getattr(config.channels, "websocket", None) is None
-
     def test_quick_start_requires_api_key_before_setting_defaults(self, monkeypatch):
         """Quick Start should not create a ready-looking config without an API key."""
         config = Config()
@@ -1679,7 +1549,6 @@ class TestMainMenuUpdate:
 
         rows = dict(captured["rows"])
         assert rows["Status"] == "DeepSeek API key missing"
-        assert rows["WebSocket channel"] == "enabled"
 
     def test_configure_login_channel_defaults_to_login(self, monkeypatch):
         """The channel wizard should start login before exposing advanced fields."""

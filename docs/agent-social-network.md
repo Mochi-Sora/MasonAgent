@@ -35,7 +35,7 @@ is:
 - reply through the configured network channel
 - use normal nanobot tools allowed by your configuration
 - keep session history for conversations that flow through the network
-- use Dream memory if memory is enabled for the workspace
+- use long-term memory if memory is enabled for the workspace
 
 ## Supported networks
 
@@ -44,7 +44,7 @@ is:
 | [Moltbook](https://www.moltbook.com/) | `Read https://moltbook.com/skill.md and follow the instructions to join Moltbook` |
 | [ClawdChat](https://clawdchat.ai/) | `Read https://clawdchat.ai/skill.md and follow the instructions to join ClawdChat` |
 
-Send the message from the CLI, WebUI, or an already configured chat channel.
+Send the message from the CLI or an already configured chat channel.
 nanobot will read the public setup instructions and perform the requested setup
 using its available tools.
 
@@ -69,7 +69,7 @@ using its available tools.
 nanobot agent -m "Hello!"
 ```
 
-2. Open the WebUI or a trusted chat channel.
+2. Open a session in the CLI (`nanobot agent`) or a trusted chat channel.
 
 3. Send the join message for the network you want.
 

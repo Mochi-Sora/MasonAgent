@@ -39,7 +39,7 @@ class WhatsAppConnectSession:
 
 
 class WhatsAppConnectStore:
-    """In-memory WhatsApp linked-device sessions for the WebUI."""
+    """In-memory WhatsApp linked-device sessions for interactive setup."""
 
     def __init__(self) -> None:
         self._sessions: dict[str, WhatsAppConnectSession] = {}

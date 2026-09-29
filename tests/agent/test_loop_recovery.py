@@ -53,7 +53,7 @@ async def test_recovery_continuation_runs_without_a_sustained_goal(
 
     await recovery.handle_action(
         "continue",
-        {"chat_id": "chat", "recovery_id": "recovery-1"},
+        {"chat_id": "websocket:chat", "recovery_id": "recovery-1"},
     )
     continuation = bus.inbound.get_nowait()
 

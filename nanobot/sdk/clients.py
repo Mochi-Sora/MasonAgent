@@ -153,18 +153,23 @@ class SessionClient:
 
 
 class MemoryClient:
-    """Long-term memory helpers exposed through ``bot.memory``."""
+    """Memory helpers exposed through ``bot.memory``.
+
+    ``read``/``write`` target the small working state (``memory/state.md``) that
+    the agent keeps in its prompt; curated long-term memory is written by
+    consolidation and read by the agent's ``recall_memory`` tool.
+    """
 
     def __init__(self, loop: AgentLoop) -> None:
         self._loop = loop
 
     def read(self) -> str:
-        """Read ``memory/MEMORY.md``."""
-        return self._loop.context.memory.read_memory()
+        """Read the working state (``memory/state.md``)."""
+        return self._loop.context.memory_state.read()
 
     def write(self, text: str) -> None:
-        """Overwrite ``memory/MEMORY.md``."""
-        self._loop.context.memory.write_memory(text)
+        """Replace the working state (``memory/state.md``)."""
+        self._loop.context.memory_state.write(text)
 
     def append_history(self, text: str, *, session_key: str | None = None) -> int:
         """Append one entry to ``memory/history.jsonl`` and return its cursor."""

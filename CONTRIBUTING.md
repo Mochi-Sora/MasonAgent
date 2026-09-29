@@ -37,17 +37,26 @@ shape of the work can be discussed before the implementation grows too large.
 
 ### Starting Work
 
-Before making changes, sync your local checkout and create a topic branch.
+Mason lives at `Mochi-Sora/MasonAgent` and tracks upstream `HKUDS/nanobot` as a second
+remote. Set up both once:
 
 ```bash
-git fetch upstream
+git clone https://github.com/Mochi-Sora/MasonAgent.git
+cd MasonAgent
+git remote add upstream https://github.com/HKUDS/nanobot.git
+```
+
+Before making changes, sync your checkout and create a topic branch:
+
+```bash
+git fetch origin
 git switch main
-git pull --ff-only upstream main
+git pull --ff-only origin main
 git switch -c your-topic-branch
 ```
 
-Use your primary HKUDS/nanobot remote in place of `upstream` if your checkout
-uses a different remote name.
+Use `upstream` (not `origin`) when you want to test against the original project's
+tip; Mason's own development happens on `origin`.
 
 Keep unrelated local changes out of the topic branch. If your checkout already has
 work in progress, use a separate worktree or finish that work before starting a
@@ -59,8 +68,8 @@ Keep setup boring and reliable. The goal is to get you into the code quickly:
 
 ```bash
 # Clone the repository
-git clone https://github.com/HKUDS/nanobot.git
-cd nanobot
+git clone https://github.com/Mochi-Sora/MasonAgent.git
+cd MasonAgent
 
 # Install with dev dependencies
 pip install -e ".[dev]"
@@ -139,46 +148,48 @@ explicitly in the PR description so it can be discussed before merge.
 ## Release Packaging Contract
 
 Use the [release checklist](./docs/releasing.md) for candidate preparation, package checks,
-documentation coordination, and the final publication handoff.
+and the final publication handoff.
 
-A stable install must never combine Python from one version with a TUI from another. Publish in
-this order:
+The project ships as a single platform-neutral Python package. Publish in this order:
 
-1. Before pushing a tag, set the package version, verify the exact candidate, build the source
-   distribution, all five platform wheels and TUI archives, and review licenses, source offer, and relinking
-   materials. Obtain the maintainer's source-offer commitment before publication.
+1. Before pushing a tag, set the package version, verify the exact candidate, and build the
+   source distribution and wheel.
 2. Merge the release preparation, verify that its packaged sources match the checked candidate,
    then publish the matching GitHub release tag (`vX.Y.Z`). Recheck any changed sources first.
-3. Attach the preverified TUI archives and checksums to the matching GitHub Release. Alternatively,
-   manually run **Publish Terminal UI** for the exact tag with the compliance review confirmed;
-   reverify its outputs, since a rebuild does not preserve the preflight artifact hashes.
-4. Verify every platform archive and checksum is publicly downloadable for fallback/source-built
-   installations, then publish the same `X.Y.Z` source distribution and five platform wheels to PyPI.
+3. Upload the same `X.Y.Z` source distribution and wheel to PyPI.
 
-Each platform wheel contains the built WebUI and the matching native TUI. Pip chooses the wheel
-for the user's machine; launching the installed TUI must work without a GitHub download or Bun.
-The universal wheel produced by `uv build` is only an intermediate: use
-`scripts/build_tui_wheels.py` as described in the checklist, and do not upload that intermediate.
-The source distribution remains platform-neutral and does not bundle native binaries.
-Keep the platform-specific release archives for fallback/source-built installations. Both the
-wheel's `nanobot/tui/bin/` bundle and its matching archive must contain the executable,
-target-specific third-party notices, project and runtime licenses, corresponding application
-source, a written source offer, relinking instructions, and a checksum manifest. Never upload a
-naked TUI executable. Review the minimum OS, libc, architecture and runtime CPU requirements
-when changing Bun/OpenTUI; never apply portable platform tags without checking their binaries.
-Source checkouts use an editable Python install, run `tui/` with Bun, and
-rebuild stale `webui/` assets locally.
+The source distribution remains platform-neutral. Do not upload artifacts that were not built
+from the tagged commit.
 
-The confirmation is an operational commitment, not a cosmetic checkbox. Before accepting it,
-verify that the exact Bun/WebKit revisions remain retrievable and that the project can honor the
-archive's corresponding-source offer for its full stated period. Preserve published archives and
-their source materials.
+## Fork Maintenance
+
+The public repository is <https://github.com/Mochi-Sora/MasonAgent>. Several files
+still identify the upstream `HKUDS/nanobot` project; update them when the package and
+documentation locations are decided, so the fork stops presenting upstream's identity:
+
+| Location | What it controls |
+|---|---|
+| `nanobot/agent/tools/mcp_oauth.py` (`_CLIENT_URI`, `_LOGO_URI`, `software_id`) | Identity sent to remote MCP OAuth servers during dynamic client registration |
+| `nanobot/providers/openai_compat_provider.py`, `nanobot/providers/image_generation.py` (`HTTP-Referer`) | Attribution header sent to OpenRouter-compatible gateways |
+| `scripts/update_readme_contributors.py` (`REPOSITORY`, `MAINTAINERS`) | Contributor-wall sync; the rewritten README has no contributor markers yet, so the script currently has no target |
+| `pyproject.toml` (`[project.urls]`, when added) | Package metadata on PyPI |
+| Community links in `.github/ISSUE_TEMPLATE/config.yml` and `COMMUNICATION.md` | Upstream Discussions and chat groups |
+
+The installers already point at `Mochi-Sora/MasonAgent` (`default_git_url` in
+`scripts/install.sh`, `$DefaultGitUrl` in `scripts/install.ps1`), and clone commands in
+these docs use the fork. Some upstream identity strings are asserted by tests
+(`tests/tools/test_mcp_oauth.py`, `tests/providers/test_litellm_kwargs.py`); update them
+in the same change.
+
+The installers themselves need no changes: they install the checkout they run from, or clone
+whatever URL is passed with `--git` / `NANOBOT_INSTALL_GIT`. `README.md` keeps its credit
+link to upstream nanobot; that is intentional.
 
 ## Questions?
 
 If you have questions, ideas, or half-formed insights, you are warmly welcome here.
 
-Please feel free to open an [issue](https://github.com/HKUDS/nanobot/issues), join the community, or simply reach out:
+Please feel free to open an [issue](https://github.com/Mochi-Sora/MasonAgent/issues) on this repository, or reach out to the upstream nanobot community:
 
 - [Discord](https://discord.gg/MnCvHqpUGB)
 - [Feishu/WeChat](./COMMUNICATION.md)

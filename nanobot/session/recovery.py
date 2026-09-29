@@ -1,4 +1,4 @@
-"""Durable, side-effect-safe recovery for interrupted WebUI turns.
+"""Durable, side-effect-safe recovery for interrupted turns.
 
 The coordinator owns restart policy.  Checkpoint materialization is a session
 operation shared with AgentLoop lifecycle boundaries, so transport code never
@@ -27,8 +27,7 @@ from nanobot.bus.queue import MessageBus
 from nanobot.session import turn_continuation
 from nanobot.session.keys import UNIFIED_SESSION_KEY, last_channel_from_metadata
 from nanobot.session.manager import Session, SessionManager
-from nanobot.webui.metadata import WEBUI_TURN_METADATA_KEY
-from nanobot.webui.session_identity import webui_chat_id, webui_session_key
+from nanobot.session.turn_metadata import WEBUI_TURN_METADATA_KEY
 
 RUNTIME_CHECKPOINT_KEY = "runtime_checkpoint"
 PENDING_USER_TURN_KEY = "pending_user_turn"
@@ -47,7 +46,7 @@ _KNOWN_CHECKPOINT_PHASES = frozenset(
 
 
 class RecoveryActionError(ValueError):
-    """A stale or malformed recovery action from an authenticated WebUI."""
+    """A stale or malformed recovery action from a client."""
 
     def __init__(self, message: str, *, status: int = 400) -> None:
         super().__init__(message)
@@ -65,13 +64,13 @@ class RecoveryAdmission(Protocol):
 
 
 def record_pending_followup(session: Session, message: InboundMessage) -> str | None:
-    """Durably journal a WebUI follow-up before injecting it into a live turn."""
+    """Durably journal a follow-up before injecting it into a live turn."""
     if message.channel != "websocket":
         return None
     try:
         metadata_value: object = json.loads(json.dumps(message.metadata))
     except (TypeError, ValueError):
-        logger.warning("Skipping non-serializable WebUI follow-up for recovery")
+        logger.warning("Skipping non-serializable follow-up for recovery")
         return None
     if not isinstance(metadata_value, dict):
         return None
@@ -450,7 +449,7 @@ def recovery_state_from_metadata(metadata: Mapping[str, Any] | None) -> dict[str
 
 @dataclasses.dataclass(slots=True)
 class RecoveryCoordinator:
-    """Classify, announce, and gate durable WebUI turn recovery."""
+    """Classify, announce, and gate durable turn recovery."""
 
     sessions: SessionManager
     bus: MessageBus
@@ -482,23 +481,22 @@ class RecoveryCoordinator:
         await asyncio.gather(task, return_exceptions=True)
 
     async def scan(self) -> None:
-        """Recover every interrupted WebUI session once at gateway startup."""
+        """Recover every interrupted session once at gateway startup."""
         for key in self._recovery_candidates():
             metadata_payload = self.sessions.read_session_metadata(key)
             raw_metadata = metadata_payload.get("metadata") if metadata_payload else None
             metadata = cast(dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
-            route = self._websocket_route_for(key, metadata)
+            route = self._recovery_route_for(key, metadata)
             if route is None:
                 continue
-            unfinished = self._has_unfinished_webui_transcript(key)
-            if not self._needs_recovery(metadata) and not unfinished:
+            if not self._needs_recovery(metadata):
                 continue
             session = self.sessions.get_or_create(key)
             try:
                 await self._recover_session(session, route[1])
                 await self._requeue_pending_followups(session)
             except Exception:
-                logger.exception("failed to recover interrupted WebUI session {}", session.key)
+                logger.exception("failed to recover interrupted session {}", session.key)
                 state = recovery_state_from_metadata(session.metadata)
                 failed = self._set_state(
                     session,
@@ -512,26 +510,12 @@ class RecoveryCoordinator:
                 await self._publish(route[1], failed)
 
     def _recovery_candidates(self) -> list[str]:
-        """Discover canonical and transcript-only WebUI sessions cheaply."""
+        """Discover sessions that may need recovery, cheaply."""
         candidates = dict.fromkeys(
             key
             for item in self.sessions.list_sessions()
             if isinstance((key := item.get("key")), str)
         )
-        try:
-            # Imported lazily because the sidebar index also projects recovery
-            # metadata.  The index is the owner of transcript-only discovery;
-            # duplicating its filename and migration rules here would drift.
-            from nanobot.webui.session_list_index import list_webui_sessions
-
-            for item in list_webui_sessions(self.sessions):
-                key = item.get("key")
-                if isinstance(key, str):
-                    candidates.setdefault(key, None)
-        except Exception:
-            # Canonical checkpoint recovery remains available even if the
-            # optional display-history index is corrupt or unavailable.
-            logger.exception("failed to discover transcript-only WebUI sessions")
         return list(candidates)
 
     @staticmethod
@@ -583,7 +567,7 @@ class RecoveryCoordinator:
         state = recovery_state_from_metadata(session.metadata)
         if not state or state["status"] != "resuming":
             return
-        route = self._websocket_route(session)
+        route = self._recovery_route(session)
         if route is None:
             return
         recovered = self._set_state(
@@ -671,7 +655,7 @@ class RecoveryCoordinator:
                     )
                 self.sessions.save(session)
                 await self._publish(chat_id, next_state)
-            elif self._has_unfinished_webui_transcript(session.key):
+            elif self._has_unfinished_transcript(session.key):
                 # A normal last-client shutdown can materialize the checkpoint
                 # before the process exits.  In that path there is no pending
                 # marker left to classify, but the append-only transcript still
@@ -878,25 +862,16 @@ class RecoveryCoordinator:
         return state
 
     def _session_key(self, chat_id: str) -> str:
-        return UNIFIED_SESSION_KEY if self.unified_session else webui_session_key(chat_id)
+        return UNIFIED_SESSION_KEY if self.unified_session else chat_id
 
     @staticmethod
-    def _has_unfinished_webui_transcript(session_key: str) -> bool:
-        """Detect a stale WebUI activity tail after an unclean gateway stop.
+    def _has_unfinished_transcript(session_key: str) -> bool:
+        """Whether a display transcript shows an unterminated turn.
 
-        The transcript is intentionally consulted only as a last-resort signal:
-        a durable pending turn or runtime checkpoint always takes precedence.
-        This keeps browser disconnects harmless while preventing a materialized
-        partial turn from being presented as active forever after a restart.
+        Always false: the transcript store was removed, so durable
+        recovery state (pending turn, runtime checkpoint) is the only signal.
         """
-        try:
-            from nanobot.webui.transcript import has_unfinished_transcript_tail
-
-            return has_unfinished_transcript_tail(session_key)
-        except (OSError, ValueError, TypeError):
-            # Recovery must fail closed if the optional display transcript is
-            # corrupt or unavailable; the normal checkpoint path still applies.
-            return False
+        return False
 
     @staticmethod
     def _has_saved_continuation_context(session: Session) -> bool:
@@ -922,19 +897,18 @@ class RecoveryCoordinator:
         )
 
     @staticmethod
-    def _websocket_route(session: Session) -> tuple[str, str] | None:
-        return RecoveryCoordinator._websocket_route_for(session.key, session.metadata)
+    def _recovery_route(session: Session) -> tuple[str, str] | None:
+        return RecoveryCoordinator._recovery_route_for(session.key, session.metadata)
 
     @staticmethod
-    def _websocket_route_for(
+    def _recovery_route_for(
         session_key: str,
         metadata: Mapping[str, Any],
     ) -> tuple[str, str] | None:
-        chat_id = webui_chat_id(session_key)
-        if chat_id is not None:
-            return ("websocket", chat_id)
-        if session_key == UNIFIED_SESSION_KEY:
-            route = last_channel_from_metadata(metadata)
-            if route and route[0] == "websocket":
-                return route
+        route = last_channel_from_metadata(metadata)
+        if route and route[0] and route[1]:
+            return route
+        channel, _, chat_id = session_key.partition(":")
+        if channel and chat_id and session_key != UNIFIED_SESSION_KEY:
+            return (channel, chat_id)
         return None

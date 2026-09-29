@@ -27,14 +27,12 @@ from nanobot.gateway.service import (
     ServiceManagerKind,
 )
 from nanobot.utils.log_config import add_console_log_sink
-from nanobot.webui.build import BuildMode
 
 RuntimeConfigLoader = Callable[[str | None, str | None], Config]
 GatewayRunner = Callable[..., None]
-GatewayConfigValidator = Callable[[Config], str | None]
+GatewayConfigValidator = Callable[[Config], None]
 GatewayRuntimeFactory = Callable[..., Any]
 GatewayServiceFactory = Callable[[], Any]
-WebUIBundlePreparer = Callable[[Config, BuildMode], None]
 
 
 def _resolved_config_selector(config: str | None) -> Path:
@@ -55,7 +53,6 @@ def create_gateway_app(
     validate_startup_config: GatewayConfigValidator | None = None,
     runtime_factory: GatewayRuntimeFactory | None = None,
     service_factory: GatewayServiceFactory | None = None,
-    prepare_webui_bundle: WebUIBundlePreparer | None = None,
 ) -> typer.Typer:
     gateway_app = typer.Typer(
         help="Start and manage the nanobot gateway.",
@@ -87,11 +84,6 @@ def create_gateway_app(
 
     def service_installer():
         return service_factory() if service_factory is not None else GatewayServiceInstaller()
-
-    def interactive_build_mode() -> BuildMode:
-        # `nanobot gateway` is often launched by tests, supervisors, or service managers.
-        # The higher-level `nanobot webui` command owns interactive first-run guidance.
-        return "warn"
 
     def start_options(
         *,
@@ -159,8 +151,6 @@ def create_gateway_app(
             cfg = load_runtime_config(config, workspace)
             if validate_startup_config is not None:
                 validate_startup_config(cfg)
-            if prepare_webui_bundle is not None:
-                prepare_webui_bundle(cfg, interactive_build_mode())
             runtime = runtime_for_instance(workspace=workspace, config=config)
             result = runtime.start_background(
                 start_options(
@@ -228,15 +218,12 @@ def create_gateway_app(
         configure_logging(verbose)
         cfg = load_runtime_config(config, workspace)
         instance = instance_for_selectors(workspace=workspace, config=config)
-        unconfigured_provider_error = None
         if validate_startup_config is not None:
-            unconfigured_provider_error = validate_startup_config(cfg)
+            validate_startup_config(cfg)
         try:
             run_gateway(
                 cfg,
                 port=port,
-                webui_bundle_mode=interactive_build_mode(),
-                unconfigured_provider_error=unconfigured_provider_error,
                 gateway_instance=instance,
             )
         except GatewayAlreadyRunningError as exc:
@@ -299,8 +286,6 @@ def create_gateway_app(
         cfg = load_runtime_config(config, workspace)
         if validate_startup_config is not None:
             validate_startup_config(cfg)
-        if prepare_webui_bundle is not None:
-            prepare_webui_bundle(cfg, interactive_build_mode())
         runtime = runtime_for_instance(workspace=workspace, config=config)
         result = runtime.restart(
             start_options(

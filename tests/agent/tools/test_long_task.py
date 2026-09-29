@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,12 +19,10 @@ from nanobot.agent.tools.long_task import (
     UpdateGoalTool,
 )
 from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.bus.outbound_events import GoalStateSyncEvent
 from nanobot.bus.queue import MessageBus
 from nanobot.session.goal_state import GOAL_STATE_KEY, MAX_GOAL_OBJECTIVE_CHARS
 from nanobot.session.manager import SessionManager
 from nanobot.session.turn_continuation import should_finalize_on_max_iterations
-from nanobot.session.webui_turns import WebuiTurnCoordinator
 
 
 def _goal_metadata() -> dict[str, object]:
@@ -373,56 +371,6 @@ async def test_registry_does_not_reuse_goal_context_after_request_scope(tmp_path
 
     assert "missing routing context" in str(leaked_out)
     assert sess.metadata[GOAL_STATE_KEY]["status"] == "completed"
-
-
-@pytest.mark.asyncio
-async def test_goal_state_events_publish_active_then_inactive(tmp_path):
-    bus = MessageBus()
-    bus.publish_outbound = AsyncMock()
-    sm = SessionManager(tmp_path)
-    WebuiTurnCoordinator(
-        bus=bus,
-        sessions=sm,
-        schedule_background=lambda _coro: None,
-    ).subscribe()
-    create = CreateGoalTool(sessions=sm, bus=bus)
-    update = UpdateGoalTool(sessions=sm, bus=bus)
-    rc = _request_context(chat_id="chat-99")
-    await _execute(
-        create,
-        rc,
-        objective="Objective alpha",
-        ui_summary="alpha",
-    )
-
-    bus.publish_outbound.assert_awaited_once()
-    call = bus.publish_outbound.await_args.args[0]
-    assert call.channel == "websocket"
-    assert call.chat_id == "chat-99"
-    assert isinstance(call.event, GoalStateSyncEvent)
-    assert call.event.goal_state == {
-        "active": True,
-        "status": "active",
-        "ui_summary": "alpha",
-        "objective": "Objective alpha",
-    }
-
-    bus.publish_outbound.reset_mock()
-    await _execute(
-        update,
-        RequestContext(
-            channel="websocket",
-            chat_id="chat-99",
-            session_key="websocket:chat-99",
-        ),
-        action="complete",
-        recap="Done.",
-    )
-
-    bus.publish_outbound.assert_awaited_once()
-    call = bus.publish_outbound.await_args.args[0]
-    assert isinstance(call.event, GoalStateSyncEvent)
-    assert call.event.goal_state == {"active": False}
 
 
 @pytest.mark.asyncio

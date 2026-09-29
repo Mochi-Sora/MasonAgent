@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Final
 
-_ROLES: Final = {"agent", "gateway", "webui"}
+_ROLES: Final = {"agent", "gateway"}
 
 
 def _set_process_title(title: str) -> None:

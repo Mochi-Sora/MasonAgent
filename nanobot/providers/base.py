@@ -476,7 +476,7 @@ class LLMUsage:
         }
 
     def to_turn_dict(self) -> dict[str, int]:
-        """Project canonical usage into the compact WebUI/TUI per-turn shape."""
+        """Project canonical usage into the compact per-turn summary shape."""
         result: dict[str, int] = {
             "prompt_tokens": self.input_tokens,
             "completion_tokens": self.output_tokens,

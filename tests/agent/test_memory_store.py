@@ -1,4 +1,4 @@
-"""Tests for the restructured MemoryStore — pure file I/O layer."""
+"""Tests for the file-level MemoryStore (profile files + history journal)."""
 
 import json
 from datetime import datetime
@@ -15,13 +15,6 @@ def store(tmp_path):
 
 
 class TestMemoryStoreBasicIO:
-    def test_read_memory_returns_empty_when_missing(self, store):
-        assert store.read_memory() == ""
-
-    def test_write_and_read_memory(self, store):
-        store.write_memory("hello")
-        assert store.read_memory() == "hello"
-
     def test_read_soul_returns_empty_when_missing(self, store):
         assert store.read_soul() == ""
 
@@ -35,15 +28,6 @@ class TestMemoryStoreBasicIO:
     def test_write_and_read_user(self, store):
         store.write_user("user content")
         assert store.read_user() == "user content"
-
-    def test_get_memory_context_returns_empty_when_missing(self, store):
-        assert store.get_memory_context() == ""
-
-    def test_get_memory_context_returns_formatted_content(self, store):
-        store.write_memory("important fact")
-        ctx = store.get_memory_context()
-        assert "Long-term Memory" in ctx
-        assert "important fact" in ctx
 
 
 class TestHistoryWithCursor:
@@ -178,22 +162,19 @@ class TestHistoryWithCursor:
         store.append_history("event 3")
         store.append_history("event 4")
         store.append_history("event 5")
-        store.set_last_dream_cursor(5)
         store.compact_history()
         entries = store.read_unprocessed_history(since_cursor=0)
-        assert len(entries) == 2
-        assert entries[0]["cursor"] in {4, 5}
+        assert [entry["cursor"] for entry in entries] == [4, 5]
 
-    def test_compact_history_preserves_entries_after_dream_cursor(self, tmp_path):
+    def test_compact_history_drops_oldest_beyond_the_cap(self, tmp_path):
         store = MemoryStore(tmp_path, max_history_entries=50)
         for index in range(1, 101):
             store.append_history(f"event {index}")
-        store.set_last_dream_cursor(20)
 
         store.compact_history()
 
         entries = store.read_unprocessed_history(since_cursor=0)
-        assert [entry["cursor"] for entry in entries] == list(range(21, 101))
+        assert [entry["cursor"] for entry in entries] == list(range(51, 101))
 
     def test_write_entries_uses_atomic_write(self, tmp_path):
         """_write_entries uses temp file + os.replace for atomicity."""
@@ -278,61 +259,6 @@ class TestAppendHistoryHardCap:
         assert entry["content"] == msg
 
 
-class TestDreamCursor:
-    def test_initial_cursor_is_zero(self, store):
-        assert store.get_last_dream_cursor() == 0
-
-    def test_returns_zero_when_empty(self, store):
-        assert store.get_latest_cursor() == 0
-
-    def test_returns_cursor_of_last_entry(self, store):
-        store.append_history("event 1")
-        store.append_history("event 2")
-        store.append_history("event 3")
-
-        assert store.get_latest_cursor() == 3
-
-    def test_returns_zero_when_no_entries(self, store):
-        store.history_file.write_text("", encoding="utf-8")
-
-        assert store.get_latest_cursor() == 0
-
-    def test_matches_next_cursor_minus_one(self, store):
-        store.append_history("event 1")
-        store.append_history("event 2")
-
-        assert store.get_latest_cursor() == max(store._next_cursor() - 1, 0)
-
-    def test_set_and_get_cursor(self, store):
-        store.set_last_dream_cursor(5)
-        assert store.get_last_dream_cursor() == 5
-
-    def test_cursor_persists(self, store):
-        store.set_last_dream_cursor(3)
-        store2 = MemoryStore(store.workspace)
-        assert store2.get_last_dream_cursor() == 3
-
-    def test_git_restore_rolls_back_dream_cursor(self, tmp_path):
-        store = MemoryStore(tmp_path)
-        store.write_memory("before")
-        store.set_last_dream_cursor(1)
-        assert store.git.init() is True
-
-        store.write_memory("after")
-        store.set_last_dream_cursor(2)
-        dream_sha = store.git.auto_commit("dream: update")
-        assert dream_sha is not None
-
-        store.write_memory("newer")
-        store.set_last_dream_cursor(3)
-
-        restore_sha = store.git.revert(dream_sha)
-
-        assert restore_sha is not None
-        assert store.read_memory() == "before"
-        assert store.get_last_dream_cursor() == 1
-
-
 class TestLegacyHistoryMigration:
     def test_read_unprocessed_history_handles_entries_without_cursor(self, store):
         """JSONL entries with cursor=1 are correctly parsed and returned."""
@@ -373,7 +299,6 @@ class TestLegacyHistoryMigration:
         assert entries[2]["timestamp"] == fallback_timestamp
         assert entries[2]["content"].startswith("Legacy chunk without timestamp.")
         assert store.read_file(store._cursor_file).strip() == "3"
-        assert store.read_file(store._dream_cursor_file).strip() == "3"
         assert not legacy_file.exists()
         assert (memory_dir / "HISTORY.md.bak").read_text(encoding="utf-8") == legacy_content
 

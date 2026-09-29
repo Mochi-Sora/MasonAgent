@@ -98,11 +98,11 @@ def _validate_generic(name: str, values: dict[str, Any]) -> dict[str, Any]:
         checks.extend(composite_checks)
         missing.extend(composite_missing)
     if spec is not None and spec.required:
-        checks.append(_check("manual_review", "Manual setup", "skipped", "This channel can be checked from saved fields, but not fully verified in-browser."))
+        checks.append(_check("manual_review", "Manual setup", "skipped", "This channel can be checked from saved fields, but not fully verified."))
         return _status_from_checks(name, checks, list(dict.fromkeys(missing)))
     if _enabled(values):
         return _payload(name, "configured", [_check("enabled", "Enabled", "pass", "This channel is enabled.")])
-    return _payload(name, "unsupported", [_check("support", "WebUI setup", "skipped", "This channel is not configurable from the WebUI yet.")])
+    return _payload(name, "unsupported", [_check("support", "Setup", "skipped", "This channel does not support interactive setup checks yet.")])
 
 
 def _channel_config(
@@ -332,7 +332,7 @@ def _status_message(status: str) -> str:
         "configured": "Configuration is present, but full verification was not possible.",
         "needs_setup": "Required setup is missing.",
         "invalid": "Configuration was checked and looks invalid.",
-        "unsupported": "This channel is not supported by the WebUI setup checker.",
+        "unsupported": "This channel is not supported by the setup checker.",
     }.get(status, "Channel checked.")
 
 
@@ -397,8 +397,8 @@ def _probe_tcp(host: str, port: int, *, allow_loopback: bool = False) -> None:
 
 
 # Public helpers for channel-owned validators. Keeping response shaping here lets
-# each package own its platform checks without depending on WebUI implementation
-# modules.
+# each package own its platform checks without depending on management-surface
+# implementation modules.
 check = _check
 enabled = _enabled
 http_get = _http_get

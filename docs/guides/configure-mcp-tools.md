@@ -6,7 +6,7 @@ through the Model Context Protocol.
 ## What you will build
 
 - a working nanobot agent
-- one MCP integration configured through Apps or `~/.nanobot/config.json`
+- one MCP integration configured through `~/.nanobot/config.json`
 - a restricted set of MCP tools exposed to the model
 
 ## When to use this
@@ -17,8 +17,7 @@ you want external tools to be managed outside nanobot core.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot agent -m "Hello!"
 ```
 
@@ -27,20 +26,7 @@ remote HTTP endpoint.
 
 ## Minimal working example
 
-For local interactive setup:
-
-1. Run `nanobot webui` and open **Apps**.
-2. Choose a known MCP server preset, or add a custom stdio, HTTP, or SSE server.
-   For a custom OAuth server, choose **OAuth** under **Authentication**, save it,
-   and click **Connect**. Presets such as Xmind, Notion, and Linear go straight to
-   **Connect**. Approve access in the browser window. HTTPS and localhost WebUIs
-   return automatically. From a remote plain-HTTP WebUI, copy the complete
-   localhost callback URL from the browser address bar and paste it into nanobot.
-3. Limit the enabled tools when the server exposes more than the task needs.
-4. Save and restart when prompted.
-5. Mention the connected MCP server with `@` in the next message and ask for a small test action.
-
-For manual or deployment-managed config, add this to `~/.nanobot/config.json`:
+Add the server to `~/.nanobot/config.json`:
 
 ```json
 {
@@ -56,15 +42,45 @@ For manual or deployment-managed config, add this to `~/.nanobot/config.json`:
 }
 ```
 
-Restart nanobot and ask a question that requires the MCP tool.
+Restart nanobot and ask a question that requires the MCP tool. Limit the enabled
+tools when the server exposes more than the task needs.
+
+### OAuth servers
+
+Mark a remote server with `"auth": "oauth"` instead of static headers:
+
+```json
+{
+  "tools": {
+    "mcpServers": {
+      "notion": {
+        "type": "streamableHttp",
+        "url": "https://mcp.notion.com/mcp",
+        "auth": "oauth"
+      }
+    }
+  }
+}
+```
+
+Then authorize it once; the command prints a URL, and after you approve access in
+the browser you paste the full callback URL back into the terminal:
+
+```bash
+nanobot mcp login notion
+```
+
+Tokens are stored in the nanobot data directory under `auth/mcp.json` and are
+refreshed automatically afterwards. Remove them with
+`nanobot mcp logout notion`.
 
 ## Production notes
 
 - Prefer `enabledTools` over exposing every tool by default.
 - Use `toolTimeout` for slow MCP operations.
 - Use HTTP MCP only for endpoints you trust.
-- For deployment-managed OAuth servers, set `auth` to `oauth` and complete the
-  browser connection from **Apps → MCP**.
+- For deployment-managed OAuth servers, set `auth` to `oauth` and run
+  `nanobot mcp login <server>` once.
 - Keep MCP server commands stable and versioned in deployment docs or scripts.
 
 ## Security notes

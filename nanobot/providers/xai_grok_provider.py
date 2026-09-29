@@ -502,7 +502,7 @@ def _xai_hosted_tool_event(event: dict[str, Any]) -> dict[str, Any] | None:
         "name": "x_search",
         "arguments": _xai_hosted_tool_arguments(item.get("input", item.get("arguments"))),
         # Keep the useful search subtype, but do not persist large hosted results
-        # in WebUI activity messages. The model answer already carries citations.
+        # in activity messages. The model answer already carries citations.
         "result": {"name": tool_name},
     }
 

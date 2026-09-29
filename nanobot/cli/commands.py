@@ -5,9 +5,11 @@
 import asyncio
 import os
 import sys
+import time
+from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 # Force UTF-8 encoding for Windows console
 if sys.platform == "win32":
@@ -23,7 +25,6 @@ if sys.platform == "win32":
 # Keep console encoding setup before importing CLI UI/logging libraries.
 import typer  # noqa: E402
 from loguru import logger  # noqa: E402
-from typer.core import TyperGroup  # noqa: E402
 
 from nanobot.utils.log_config import configure_console_logging  # noqa: E402
 
@@ -47,6 +48,7 @@ from nanobot.cli.agent import agent  # noqa: E402
 from nanobot.cli.gateway import create_gateway_app  # noqa: E402
 from nanobot.cli.gateway_runtime import _run_gateway  # noqa: E402
 from nanobot.cli.log_control import _set_nanobot_logs  # noqa: E402
+from nanobot.cli.mcp import mcp_app  # noqa: E402
 from nanobot.cli.process_identity import set_cli_process_identity  # noqa: E402
 from nanobot.cli.provider import provider_app  # noqa: E402
 from nanobot.cli.runtime_config import (  # noqa: E402
@@ -56,11 +58,6 @@ from nanobot.cli.runtime_config import (  # noqa: E402
     _print_config_error,
     _print_model_setup_steps,
     _provider_setup_error,
-)
-from nanobot.cli.webui import webui  # noqa: E402
-from nanobot.cli.webui_support import (  # noqa: E402
-    _prepare_webui_bundle_for_gateway,
-    _validate_gateway_startup,
 )
 from nanobot.config.paths import get_workspace_path  # noqa: E402
 from nanobot.config.schema import Config  # noqa: E402
@@ -74,16 +71,7 @@ from nanobot.utils.helpers import (  # noqa: E402
 SafeFileHistory = cli_terminal.SafeFileHistory
 
 
-class _DesktopAwareGroup(TyperGroup):
-    def parse_args(self, ctx: Any, args: list[str]) -> list[str]:
-        # Keep exact arguments: explicitly passing even a default-valued option
-        # must bypass the picker. Also covers older commands:app launchers.
-        ctx.meta["desktop_target_args"] = list(args)
-        return super().parse_args(ctx, args)
-
-
 app = typer.Typer(
-    cls=_DesktopAwareGroup,
     name="nanobot",
     context_settings={"help_option_names": ["-h", "--help"]},
     help=f"{__logo__} nanobot - Personal AI Assistant",
@@ -116,13 +104,6 @@ def main(
     # role identity correct until that launcher is regenerated.
     command = ctx.invoked_subcommand
     set_cli_process_identity([command] if command else ["agent"])
-    from nanobot.cli.desktop_target import dispatch_bare_desktop_target
-
-    raw_args = ctx.meta.get("desktop_target_args")
-    if isinstance(raw_args, list):
-        desktop_exit = dispatch_bare_desktop_target(cast(list[str], raw_args))
-        if desktop_exit is not None:
-            raise typer.Exit(desktop_exit)
     if command is None:
         from nanobot.cli.entry import _run_agent
 
@@ -222,11 +203,11 @@ def onboard(
 
     sync_workspace_templates(workspace_path)
 
-    webui_cmd = "nanobot webui"
+    agent_cmd = "nanobot agent"
     if explicit_config:
-        webui_cmd += f' -c "{config_path}"'
+        agent_cmd += f' -c "{config_path}"'
 
-    typer.echo(f"\n✓ nanobot is ready. Run: {webui_cmd}")
+    typer.echo(f"\n✓ nanobot is ready. Run: {agent_cmd}")
 
 
 def _onboard_plugins(config_path: Path) -> None:
@@ -427,15 +408,21 @@ def serve(
 
 
 # ============================================================================
-# WebUI Launcher
-# ============================================================================
-
-app.command(name="webui")(webui)
-
-
-# ============================================================================
 # Gateway / Server
 # ============================================================================
+
+
+def _validate_gateway_startup(config: Config) -> None:
+    """Stop gateway startup when provider/model setup is incomplete."""
+    from nanobot.config.loader import get_config_path
+
+    provider_error = _provider_setup_error(config)
+    if not provider_error:
+        return
+    console.print(Text(f"Gateway cannot start: {provider_error}", style="red"))
+    console.print("Complete provider/model setup:")
+    _print_model_setup_steps(get_config_path())
+    raise typer.Exit(1)
 
 
 app.add_typer(
@@ -445,10 +432,6 @@ app.add_typer(
         load_runtime_config=_load_runtime_config,
         run_gateway=_run_gateway,
         validate_startup_config=_validate_gateway_startup,
-        prepare_webui_bundle=lambda config, mode: _prepare_webui_bundle_for_gateway(
-            config,
-            mode=mode,
-        ),
     ),
     name="gateway",
 )
@@ -564,6 +547,105 @@ def channels_login(
     channel = channel_factory(channel_cfg, bus=MessageBus())
 
     success = asyncio.run(channel.login(force=force))
+
+    if not success:
+        raise typer.Exit(1)
+
+
+class _ChannelConnector(Protocol):
+    async def handle(self, action: str, query: Mapping[str, list[str]]) -> Mapping[str, object]: ...
+
+
+def _int_from(value: object, default: int) -> int:
+    return value if isinstance(value, int) else default
+
+
+async def _run_channel_connect(
+    connector: _ChannelConnector,
+    query: Mapping[str, list[str]],
+) -> bool:
+    start = await connector.handle("start", query)
+    status = str(start.get("status") or "")
+    message = start.get("message")
+    if status and status != "pending":
+        if message:
+            console.print(str(message))
+        return status not in {"failed", "expired", "cancelled"}
+
+    session_id = str(start.get("session_id") or "")
+    authorization_url = start.get("authorization_url") or start.get("qr_url")
+    if isinstance(authorization_url, str) and authorization_url:
+        console.print("Open this URL in a browser to continue:\n")
+        console.print(authorization_url, markup=False)
+        console.print()
+
+    interval_ms = _int_from(start.get("interval_ms"), 1500)
+    expires_at_ms = _int_from(start.get("expires_at_ms"), 0)
+    while True:
+        if expires_at_ms and time.time() * 1000 >= expires_at_ms:
+            console.print("[red]Authorization expired.[/red]")
+            return False
+        await asyncio.sleep(max(interval_ms, 250) / 1000)
+        result = await connector.handle("poll", {"session_id": [session_id]})
+        status = str(result.get("status") or "")
+        if status == "pending":
+            continue
+        message = result.get("message")
+        if message:
+            console.print(str(message))
+        return status not in {"failed", "expired", "cancelled"}
+
+
+@channels_app.command("connect")
+def channels_connect(
+    channel_name: str = typer.Argument(..., help="Channel name (e.g. linear)"),
+    operation: str = typer.Option(
+        "connect",
+        "--operation",
+        help="Channel-specific operation: 'connect' runs the browser flow; other values (e.g. inspect, disconnect) are passed to the channel",
+    ),
+    workspace: str = typer.Option(
+        "",
+        "--workspace-id",
+        help="Workspace/organization id for operations that act on one workspace",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Reconnect even when a workspace is already installed",
+    ),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
+):
+    """Complete an interactive channel authorization (e.g. Linear OAuth)."""
+    from nanobot.channels.connect import ChannelConnectError
+    from nanobot.channels.plugin import load_channel_package
+
+    _load_inspection_config(config=config)
+    plugin = load_channel_package(channel_name)
+    if plugin is None or plugin.connector is None:
+        console.print(f"[red]Channel '{channel_name}' has no interactive connect flow.[/red]")
+        raise typer.Exit(1)
+
+    query: dict[str, list[str]] = {}
+    if operation != "connect":
+        query["operation"] = [operation]
+    if workspace:
+        query["organization_id"] = [workspace]
+    if force:
+        query["force"] = ["true"]
+
+    console.print(f"{__logo__} {plugin.display_name} Connect\n")
+    try:
+        success = asyncio.run(
+            _run_channel_connect(cast(_ChannelConnector, plugin.load_connector()), query)
+        )
+    except ChannelConnectError as exc:
+        console.print(f"[red]{exc.message}[/red]")
+        raise typer.Exit(1) from None
+    except KeyboardInterrupt:
+        console.print("\n[dim]Connection cancelled.[/dim]")
+        raise typer.Exit(1) from None
 
     if not success:
         raise typer.Exit(1)
@@ -731,6 +813,7 @@ def status(
 # ============================================================================
 
 app.add_typer(provider_app, name="provider")
+app.add_typer(mcp_app, name="mcp")
 
 
 if __name__ == "__main__":

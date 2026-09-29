@@ -1,4 +1,4 @@
-"""WebUI adapter around oauth-cli-kit's interactive Codex login."""
+"""Non-blocking adapter around oauth-cli-kit's interactive Codex login."""
 
 # oauth-cli-kit does not publish type stubs.
 # pyright: reportMissingTypeStubs=false
@@ -33,7 +33,7 @@ class OpenAICodexOAuthInputError(OpenAICodexOAuthError):
 
 
 class OpenAICodexOAuthLoginFlow:
-    """Expose oauth-cli-kit's blocking prompt as a two-stage WebUI flow."""
+    """Expose oauth-cli-kit's blocking prompt as a two-stage interactive flow."""
 
     def __init__(
         self,

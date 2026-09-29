@@ -18,8 +18,7 @@ web access, or unattended automations.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot agent -m "Hello!"
 ```
 
@@ -50,7 +49,7 @@ Start with workspace restriction:
 - Prefer pairing for DM-capable chat apps, use narrow `allowFrom` lists only
   when static allowlists are intentional, and keep group policy mention-only at
   first.
-- Bind WebUI, WebSocket, and API services to localhost unless remote access is
+- Bind the gateway and API services to localhost unless remote access is
   intentional.
 
 ## Security notes

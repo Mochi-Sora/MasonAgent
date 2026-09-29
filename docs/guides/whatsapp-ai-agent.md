@@ -2,7 +2,7 @@
 
 This guide connects nanobot to WhatsApp through the `whatsapp` channel. The
 channel links as a WhatsApp device and uses the same nanobot agent runtime,
-tools, memory, and workspace as the CLI and WebUI.
+tools, memory, and workspace as the CLI.
 
 ## What this guide builds
 
@@ -25,8 +25,7 @@ nanobot agent -m "Hello!"
 ## Install nanobot
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 ```
 
 ## Enable the WhatsApp channel

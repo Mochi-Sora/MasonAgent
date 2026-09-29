@@ -359,7 +359,7 @@ class WhatsAppChannel(BaseChannel):
         self,
         qr_handler: Callable[[bytes], Awaitable[None]] | None = None,
     ) -> tuple[Any, asyncio.Future[None]]:
-        """Create a login-only client for CLI or package-owned WebUI setup."""
+        """Create a login-only client for CLI or package-owned interactive setup."""
         client = self._new_client()
         result = asyncio.get_running_loop().create_future()
         self._register_handlers(

@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Literal
 
-LLMUsageSource = Literal["user", "api", "cron", "dream", "system"]
+LLMUsageSource = Literal["user", "api", "cron", "dream", "consolidation", "system"]
 
 _CURRENT_SOURCE: ContextVar[LLMUsageSource] = ContextVar(
     "nanobot_llm_usage_source",
@@ -18,8 +18,6 @@ _CURRENT_SOURCE: ContextVar[LLMUsageSource] = ContextVar(
 def source_from_session_key(session_key: str | None) -> LLMUsageSource:
     """Classify a private session key without persisting that key."""
     key = session_key or ""
-    if key.startswith("dream:"):
-        return "dream"
     if key == "heartbeat" or key.startswith("cron:"):
         return "cron"
     if key.startswith("api:"):

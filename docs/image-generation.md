@@ -1,21 +1,12 @@
 # Image Generation
 
-nanobot can generate and edit images through the `generate_image` tool. Enable the tool in WebUI Settings, then ask for an image normally in chat; the agent decides when to call it and can keep iterating on generated images in the same conversation.
+nanobot can generate and edit images through the `generate_image` tool. Enable the tool in config, then ask for an image normally in chat; the agent decides when to call it and can keep iterating on generated images in the same conversation.
 
-The feature is disabled by default. Open **Settings → Image**, choose a configured provider and model, enable image generation, and save. The running gateway applies the change immediately. If that screen is not available in your installed version, use the manual config below.
+The feature is disabled by default. Set `tools.imageGeneration.enabled` to `true` with a configured provider and model, then restart the gateway (or the running process) to apply it.
 
 ## Quick Setup
 
-**WebUI**
-
-1. Add the image provider credential under **Settings → Models** if it is not already configured.
-2. Open **Settings → Image**.
-3. Select the provider and image model, then enable image generation.
-4. Save and ask for a simple test image. If the gateway cannot apply the change live, WebUI will prompt you to restart it.
-
-**Manual config**
-
-This snippet uses the current built-in image-generation default so the JSON has concrete names. It is not a provider recommendation; replace `provider` and `model` with any supported image provider and model you intend to use.
+Add the image provider credential to `providers.<name>` and enable the tool in the same `~/.nanobot/config.json`:
 
 ```json
 {
@@ -34,21 +25,23 @@ This snippet uses the current built-in image-generation default so the JSON has 
 }
 ```
 
+The snippet uses the current built-in image-generation default so the JSON has concrete names. It is not a provider recommendation; replace `provider` and `model` with any supported image provider and model you intend to use.
+
 See [Provider Notes](#provider-notes) for Custom, AIHubMix, MiniMax, Gemini, Ollama, StepFun, Zhipu, and ModelScope configuration examples.
 
 > [!TIP]
 > Prefer environment variables for API keys. nanobot resolves `${VAR_NAME}` values from the environment at startup.
 
-## WebUI Usage
+## Usage
 
-1. Open Settings and enable **Image Generation** with a configured provider and model.
+1. Enable image generation in config with a configured provider and model.
 2. Describe the image or edit you want in chat.
 3. Include an aspect ratio or size in the request when the configured defaults are not suitable.
 4. Attach reference images when editing an existing image.
 
 Generated images are rendered as assistant media in the chat. Follow-up prompts such as "make it warmer", "change the background", or "try a 16:9 version" can reuse the most recent generated artifact.
 
-The WebUI hides provider storage details from the user. The agent sees the saved artifact path internally and can pass it back to `generate_image` as `reference_images` for iterative edits.
+nanobot hides provider storage details from the user. The agent sees the saved artifact path internally and can pass it back to `generate_image` as `reference_images` for iterative edits.
 
 ## Configuration Reference
 
@@ -397,7 +390,7 @@ Use the reference image. Keep the same robot and composition, change the palette
 
 | Symptom | Check |
 |---------|-------|
-| `generate_image` is not available | Enable image generation in **Settings → Image** and save. For manual config changes, restart the gateway |
+| `generate_image` is not available | Set `tools.imageGeneration.enabled` to `true` and restart the gateway |
 | Missing API key error | Configure `providers.<provider>.apiKey`; if using `${VAR_NAME}`, confirm the environment variable is visible to the gateway process |
 | `unsupported image generation provider` | Use `openrouter`, `openai`, `openai_codex`, `custom`, `aihubmix`, `minimax`, `gemini`, `ollama`, `stepfun`, `zhipu`, or `modelscope` |
 | AIHubMix says `Incorrect model ID` | Use `model: "gpt-image-2-free"`; nanobot expands it to the required `openai/gpt-image-2-free` model path internally |

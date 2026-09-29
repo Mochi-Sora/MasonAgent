@@ -236,37 +236,36 @@ def test_list_shows_next_run(tmp_path) -> None:
     assert "(UTC)" in result
 
 
-def test_list_includes_protected_dream_system_job_with_memory_purpose(tmp_path) -> None:
+def test_list_includes_protected_system_job_with_purpose(tmp_path) -> None:
     tool = _make_tool(tmp_path)
     tool._cron.register_system_job(CronJob(
-        id="dream",
-        name="dream",
+        id="heartbeat",
+        name="heartbeat",
         schedule=CronSchedule(kind="cron", expr="0 */2 * * *", tz="UTC"),
         payload=CronPayload(kind="system_event"),
     ))
 
     result = tool._list_jobs()
 
-    assert "- dream (id: dream, cron: 0 */2 * * * (UTC))" in result
-    assert "Dream memory consolidation for long-term memory." in result
+    assert "- heartbeat (id: heartbeat, cron: 0 */2 * * * (UTC))" in result
+    assert "System-managed internal job." in result
     assert "cannot be removed" in result
 
 
-def test_remove_protected_dream_job_returns_clear_feedback(tmp_path) -> None:
+def test_remove_protected_system_job_returns_clear_feedback(tmp_path) -> None:
     tool = _make_tool(tmp_path)
     tool._cron.register_system_job(CronJob(
-        id="dream",
-        name="dream",
+        id="heartbeat",
+        name="heartbeat",
         schedule=CronSchedule(kind="cron", expr="0 */2 * * *", tz="UTC"),
         payload=CronPayload(kind="system_event"),
     ))
 
-    result = tool._remove_job("dream")
+    result = tool._remove_job("heartbeat")
 
-    assert "Cannot remove job `dream`." in result
-    assert "Dream memory consolidation job for long-term memory" in result
-    assert "cannot be removed" in result
-    assert tool._cron.get_job("dream") is not None
+    assert "Cannot remove job `heartbeat`." in result
+    assert "protected system-managed cron job" in result
+    assert tool._cron.get_job("heartbeat") is not None
 
 
 def test_add_cron_job_defaults_to_tool_timezone(tmp_path) -> None:

@@ -25,8 +25,7 @@ nanobot agent -m "Hello!"
 ## Install nanobot
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 ```
 
 ## Enable the Email channel
@@ -112,8 +111,7 @@ to be migrated. Existing values are not automatically rewritten.
    ```
 
    The example is for a receiver using `mx.google.com`; use your confirmed
-   receiver identity instead. JSON uses a list; the WebUI accepts comma-separated
-   values. Wildcards and URLs are not accepted. Multiple configured identities
+   receiver identity instead. Wildcards and URLs are not accepted. Multiple configured identities
    are alternatives, not permission to combine multiple trusted result headers.
 4. Check the IMAP/SMTP connection, re-enable Email, and restart the gateway after
    editing a configuration file. Send one ordinary message from an allowed

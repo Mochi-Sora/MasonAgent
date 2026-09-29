@@ -7,11 +7,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# This installer installs a local nanobot checkout in editable mode, so the
+# running command always reflects the source tree it was installed from.
 $Package = "nanobot-ai"
-$InstallTarget = $Package
-$InstallSource = "PyPI"
+# The public repository URL. It enables remote installs without an explicit
+# --git flag.
+$DefaultGitUrl = "https://github.com/Mochi-Sora/MasonAgent"
+$script:RequestedRepo = $null
+$script:RequestedGit = $env:NANOBOT_INSTALL_GIT
+$script:RepoRoot = $null
+$script:InstallSource = ""
 $script:NanobotRunner = $null
 $script:NanobotPython = $null
+$script:NanobotBin = $null
 $script:LastInstallSucceeded = $false
 
 function Write-Info {
@@ -25,24 +33,127 @@ function Fail {
 }
 
 function Show-InstallFailureHint {
-    [Console]::Error.WriteLine("Error: could not install nanobot from $InstallSource.")
+    [Console]::Error.WriteLine("Error: could not install nanobot from $($script:InstallSource).")
     [Console]::Error.WriteLine("If pip mentioned externally-managed-environment, use uv, pipx, or a virtual environment instead of system pip.")
     [Console]::Error.WriteLine("You can also run manually:")
-    [Console]::Error.WriteLine("  uv tool install --force --upgrade $InstallTarget")
+    [Console]::Error.WriteLine("  uv tool install --force --upgrade --editable $($script:RepoRoot)")
     [Console]::Error.WriteLine("  $Python -m venv `$HOME\.nanobot\venv")
-    [Console]::Error.WriteLine("  `$HOME\.nanobot\venv\Scripts\python.exe -m pip install --upgrade $InstallTarget")
+    [Console]::Error.WriteLine("  `$HOME\.nanobot\venv\Scripts\python.exe -m pip install --upgrade --editable $($script:RepoRoot)")
     [Console]::Error.WriteLine("Then start setup with:")
     [Console]::Error.WriteLine("  nanobot onboard --wizard")
-    throw "could not install nanobot from $InstallSource"
+    throw "could not install nanobot from $($script:InstallSource)"
 }
 
 function Show-Usage {
-    Write-Host "Usage: install.ps1 [-DryRun|--dry-run]"
+    Write-Host "Usage: install.ps1 [-DryRun] [--repo PATH] [--git URL]"
     Write-Host ""
-    Write-Host "By default this installs or upgrades nanobot-ai from PyPI."
-    Write-Host "Use --dry-run to print what would happen without installing or starting setup."
+    Write-Host "By default this installs the nanobot checkout that contains this script"
+    Write-Host "in editable mode. Run it from a clone:"
     Write-Host ""
-    Write-Host "For current main, clone the repository and run 'python -m pip install -e .'."
+    Write-Host "  .\scripts\install.ps1"
+    Write-Host ""
+    Write-Host "Options:"
+    Write-Host "  --repo PATH  Install a different local checkout in editable mode."
+    Write-Host "  --git URL    Clone (or update) the repository into"
+    Write-Host "               `$HOME\.nanobot\src and install from that clone."
+    Write-Host "  -DryRun      Print what would happen without installing or starting setup."
+    Write-Host ""
+    Write-Host "Environment:"
+    Write-Host "  NANOBOT_SKIP_WIZARD=1   Skip the setup wizard."
+    Write-Host "  NANOBOT_VENV=path       Use a different managed virtual environment."
+    Write-Host "  NANOBOT_SRC_DIR=path    Clone into a different directory for --git."
+    Write-Host "  NANOBOT_INSTALL_GIT=URL Default repository for --git."
+    Write-Host "  PYTHON=python           Use a specific Python interpreter."
+}
+
+function Test-Checkout {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+    $Pyproject = Join-Path $Path "pyproject.toml"
+    $InitFile = Join-Path $Path "nanobot\__init__.py"
+    if (-not (Test-Path -LiteralPath $Pyproject) -or -not (Test-Path -LiteralPath $InitFile)) {
+        return $false
+    }
+    $Content = Get-Content -LiteralPath $Pyproject -Raw
+    return [bool]($Content -match '(?m)^name\s*=\s*"nanobot-ai"')
+}
+
+function Resolve-GitCheckout {
+    param([string]$Url)
+    $HomeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { $null }
+    if ($env:NANOBOT_SRC_DIR) {
+        $SrcDir = $env:NANOBOT_SRC_DIR
+    } elseif ($HomeDir) {
+        $SrcDir = Join-Path $HomeDir ".nanobot\src"
+    } else {
+        Fail "Installing from a git URL needs HOME or NANOBOT_SRC_DIR to choose a clone directory."
+    }
+    if ($DryRun) {
+        Write-Info "Dry run: would clone or update $Url in $SrcDir."
+    } else {
+        if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+            Fail "Installing from a git URL requires git on PATH."
+        }
+        if (Test-Path -LiteralPath (Join-Path $SrcDir ".git")) {
+            Write-Info "Updating $SrcDir from $Url..."
+            & git -C $SrcDir pull --ff-only *> $null
+            if ($LASTEXITCODE -ne 0) {
+                Fail "Could not update $SrcDir. Remove that directory and rerun, or use --repo with a local checkout."
+            }
+        } else {
+            Write-Info "Cloning $Url into $SrcDir..."
+            $Parent = Split-Path -Parent $SrcDir
+            if ($Parent) {
+                New-Item -ItemType Directory -Force -Path $Parent *> $null
+            }
+            & git clone --depth 1 $Url $SrcDir
+            if ($LASTEXITCODE -ne 0) {
+                Fail "Could not clone $Url into $SrcDir."
+            }
+        }
+    }
+    $script:RepoRoot = $SrcDir
+    if ((-not $DryRun) -or (Test-Path -LiteralPath $script:RepoRoot)) {
+        if (-not (Test-Checkout $script:RepoRoot)) {
+            Fail "The repository at $($script:RepoRoot) does not look like a nanobot checkout."
+        }
+    }
+}
+
+function Resolve-Checkout {
+    if ($script:RequestedRepo) {
+        if (-not (Test-Path -LiteralPath $script:RequestedRepo)) {
+            Fail "--repo directory not found: $($script:RequestedRepo)"
+        }
+        $Candidate = (Resolve-Path -LiteralPath $script:RequestedRepo).Path
+        if (-not (Test-Checkout $Candidate)) {
+            Fail "--repo $Candidate is not a nanobot checkout (expected pyproject.toml with name = `"nanobot-ai`")"
+        }
+        $script:RepoRoot = $Candidate
+        return
+    }
+
+    if ($script:RequestedGit) {
+        Resolve-GitCheckout $script:RequestedGit
+        return
+    }
+
+    if ($PSScriptRoot) {
+        $Candidate = Split-Path -Parent $PSScriptRoot
+        if (Test-Checkout $Candidate) {
+            $script:RepoRoot = $Candidate
+            return
+        }
+    }
+
+    if ($DefaultGitUrl) {
+        Resolve-GitCheckout $DefaultGitUrl
+        return
+    }
+
+    Fail "No nanobot checkout found. Run this script from a clone (.\scripts\install.ps1), pass --repo PATH, or pass --git URL."
 }
 
 function Test-Python {
@@ -110,10 +221,13 @@ function Invoke-Nanobot {
 
     switch ($script:NanobotRunner) {
         "uv" {
-            & uv tool run --from $InstallTarget nanobot @NanobotArgs
+            & uv tool run --from $Package nanobot @NanobotArgs
         }
         "pipx" {
-            & pipx run --spec $InstallTarget nanobot @NanobotArgs
+            & pipx run --spec $Package nanobot @NanobotArgs
+        }
+        "direct" {
+            & $script:NanobotBin @NanobotArgs
         }
         "python" {
             & $script:NanobotPython -m nanobot @NanobotArgs
@@ -126,8 +240,9 @@ function Invoke-Nanobot {
 
 function Get-NanobotCommand {
     switch ($script:NanobotRunner) {
-        "uv" { return "uv tool run --from $InstallTarget nanobot" }
-        "pipx" { return "pipx run --spec $InstallTarget nanobot" }
+        "uv" { return "uv tool run --from $Package nanobot" }
+        "pipx" { return "pipx run --spec $Package nanobot" }
+        "direct" { return $script:NanobotBin }
         "python" { return "$script:NanobotPython -m nanobot" }
         default { return "nanobot" }
     }
@@ -154,9 +269,9 @@ function Test-BrowserSession {
 }
 
 function Install-WithActivePython {
-    Write-Info "Detected an active virtual environment. Installing into it..."
+    Write-Info "Detected an active virtual environment. Installing $($script:InstallSource) into it..."
     Ensure-Pip $Python
-    & $Python -m pip install --upgrade $InstallTarget
+    & $Python -m pip install --upgrade --editable $script:RepoRoot
     if ($LASTEXITCODE -ne 0) {
         Show-InstallFailureHint
     }
@@ -166,8 +281,8 @@ function Install-WithActivePython {
 
 function Install-WithUv {
     $script:LastInstallSucceeded = $false
-    Write-Info "Installing or upgrading nanobot from $InstallSource with uv tool..."
-    & uv tool install --python $Python --force --upgrade $InstallTarget
+    Write-Info "Installing $($script:InstallSource) with uv tool in editable mode..."
+    & uv tool install --python $Python --force --upgrade --editable $script:RepoRoot
     if ($LASTEXITCODE -ne 0) {
         return
     }
@@ -177,10 +292,30 @@ function Install-WithUv {
 
 function Install-WithPipx {
     $script:LastInstallSucceeded = $false
-    Write-Info "Installing or upgrading nanobot from $InstallSource with pipx..."
-    & pipx install --python $Python --force $InstallTarget
+    Write-Info "Installing $($script:InstallSource) with pipx in editable mode..."
+    & pipx install --python $Python --force --editable $script:RepoRoot
     if ($LASTEXITCODE -ne 0) {
         return
+    }
+    $PipxBinDir = $null
+    try {
+        $PipxBinDir = (& pipx environment --value PIPX_BIN_DIR 2>$null | Select-Object -First 1)
+    } catch {}
+    if (-not $PipxBinDir) {
+        $HomeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+        if ($HomeDir) {
+            $PipxBinDir = Join-Path $HomeDir ".local\bin"
+        }
+    }
+    if ($PipxBinDir) {
+        $PipxBinDir = "$PipxBinDir".Trim()
+        $Candidate = Join-Path $PipxBinDir "nanobot.exe"
+        if (Test-Path -LiteralPath $Candidate) {
+            $script:NanobotRunner = "direct"
+            $script:NanobotBin = $Candidate
+            $script:LastInstallSucceeded = $true
+            return
+        }
     }
     $script:NanobotRunner = "pipx"
     $script:LastInstallSucceeded = $true
@@ -211,9 +346,9 @@ function Install-WithManagedVenv {
         Fail "The managed venv uses Python older than 3.11. Remove it or set NANOBOT_VENV to a new path."
     }
 
-    Write-Info "Installing or upgrading nanobot from $InstallSource in $VenvDir..."
+    Write-Info "Installing $($script:InstallSource) in $VenvDir..."
     Ensure-Pip $VenvPython
-    & $VenvPython -m pip install --upgrade $InstallTarget
+    & $VenvPython -m pip install --upgrade --editable $script:RepoRoot
     if ($LASTEXITCODE -ne 0) {
         Show-InstallFailureHint
     }
@@ -222,13 +357,28 @@ function Install-WithManagedVenv {
     $script:NanobotPython = $VenvPython
 }
 
-foreach ($Arg in $RemainingArgs) {
+for ($Index = 0; $Index -lt $RemainingArgs.Count; $Index++) {
+    $Arg = $RemainingArgs[$Index]
     switch ($Arg) {
         "--dev" {
             $Dev = $true
         }
         "--dry-run" {
             $DryRun = $true
+        }
+        "--repo" {
+            if ($Index + 1 -ge $RemainingArgs.Count) {
+                Fail "--repo requires a path"
+            }
+            $Index++
+            $script:RequestedRepo = $RemainingArgs[$Index]
+        }
+        "--git" {
+            if ($Index + 1 -ge $RemainingArgs.Count) {
+                Fail "--git requires a URL"
+            }
+            $Index++
+            $script:RequestedGit = $RemainingArgs[$Index]
         }
         "-h" {
             Show-Usage
@@ -245,36 +395,36 @@ foreach ($Arg in $RemainingArgs) {
 }
 
 if ($Dev) {
-    Fail "--dev installed an untracked main snapshot and is no longer supported; clone the repository and run 'python -m pip install -e .' instead."
+    Write-Info "-Dev is the default now: this installer always installs a checkout in editable mode."
 }
 
 $Python = Find-Python
 $Version = & $Python --version
 Write-Info "Using Python: $Version"
 
+Resolve-Checkout
+$script:InstallSource = "the checkout at $($script:RepoRoot)"
+
 if ($DryRun) {
-    Write-Info "Dry run: would install or upgrade nanobot from $InstallSource."
+    Write-Info "Dry run: would install or upgrade nanobot from $($script:InstallSource)."
     if (Test-VirtualEnv $Python) {
-        Write-Info "Dry run: active virtual environment detected; would run: $Python -m pip install --upgrade $InstallTarget"
+        Write-Info "Dry run: active virtual environment detected; would run: $Python -m pip install --upgrade --editable $script:RepoRoot"
         Write-Info "Dry run: would run nanobot as: $Python -m nanobot"
     } elseif (Get-Command uv -ErrorAction SilentlyContinue) {
-        Write-Info "Dry run: would run: uv tool install --python $Python --force --upgrade $InstallTarget"
-        Write-Info "Dry run: would run nanobot as: uv tool run --from $InstallTarget nanobot"
+        Write-Info "Dry run: would run: uv tool install --python $Python --force --upgrade --editable $script:RepoRoot"
+        Write-Info "Dry run: would run nanobot as: uv tool run --from $Package nanobot"
     } elseif (Get-Command pipx -ErrorAction SilentlyContinue) {
-        Write-Info "Dry run: would run: pipx install --python $Python --force $InstallTarget"
-        Write-Info "Dry run: would run nanobot as: pipx run --spec $InstallTarget nanobot"
+        Write-Info "Dry run: would run: pipx install --python $Python --force --editable $script:RepoRoot"
+        Write-Info "Dry run: would run nanobot as: pipx run --spec $Package nanobot"
     } else {
         $HomeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { "~" }
         $VenvDir = if ($env:NANOBOT_VENV) { $env:NANOBOT_VENV } else { Join-Path $HomeDir ".nanobot\venv" }
         Write-Info "Dry run: would create or reuse a dedicated virtual environment: $VenvDir"
-        Write-Info "Dry run: would run: $VenvDir\Scripts\python.exe -m pip install --upgrade $InstallTarget"
+        Write-Info "Dry run: would run: $VenvDir\Scripts\python.exe -m pip install --upgrade --editable $script:RepoRoot"
         Write-Info "Dry run: would run nanobot as: $VenvDir\Scripts\python.exe -m nanobot"
     }
     if ($env:NANOBOT_SKIP_WIZARD -eq "1") {
         Write-Info "Dry run: would skip automatic setup because NANOBOT_SKIP_WIZARD=1."
-    } elseif ((Test-FreshNanobotInstall) -and (Test-BrowserSession)) {
-        Write-Info "Dry run: would start the WebUI for this fresh desktop install."
-        Write-Info "Dry run: would fall back to the setup wizard for older releases."
     } else {
         Write-Info "Dry run: would run the setup wizard."
     }
@@ -317,24 +467,8 @@ if ($LASTEXITCODE -ne 0) {
 
 if ($env:NANOBOT_SKIP_WIZARD -eq "1") {
     Write-Info "Skipping automatic setup because NANOBOT_SKIP_WIZARD=1."
-    Write-Info "Run this later: $(Get-NanobotCommand) webui"
+    Write-Info "Run this later: $(Get-NanobotCommand) onboard"
     return
-}
-
-if ((Test-FreshNanobotInstall) -and (Test-BrowserSession)) {
-    Invoke-Nanobot @("webui", "--help") *> $null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Info "Starting nanobot WebUI..."
-        Write-Info "Configure your first provider and model in Settings > Models."
-        Write-Info "Run this later: $(Get-NanobotCommand) webui"
-        Invoke-Nanobot @("webui", "--yes")
-        if ($LASTEXITCODE -ne 0) {
-            Fail "WebUI did not start."
-        }
-        return
-    }
-    Write-Info "The installed release does not support nanobot webui yet."
-    Write-Info "Falling back to the setup wizard..."
 }
 
 Write-Info "Starting setup wizard..."

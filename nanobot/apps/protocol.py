@@ -1,7 +1,7 @@
 """Neutral manifest shape for settings-managed agent apps.
 
 The manifest is intentionally descriptive. Installers still live in their
-own adapters, while this protocol gives the WebUI and future registries one
+own adapters, while this protocol gives settings tooling and future registries one
 small vocabulary for capabilities, trust, and verified install/remove plans.
 """
 

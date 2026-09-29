@@ -11,10 +11,10 @@ import pytest
 
 from nanobot.agent.automation_turns import AutomationTurnError
 from nanobot.bus.events import InboundMessage, OutboundMessage
+from nanobot.session.turn_metadata import WEBUI_MESSAGE_SOURCE_METADATA_KEY, WEBUI_TURN_METADATA_KEY
 from nanobot.triggers.local_runner import run_local_trigger_queue
 from nanobot.triggers.local_store import LocalTriggerStore, TriggerDisabledError
 from nanobot.triggers.local_types import LocalTrigger, TriggerDelivery
-from nanobot.webui.metadata import WEBUI_MESSAGE_SOURCE_METADATA_KEY, WEBUI_TURN_METADATA_KEY
 
 
 def _channel_is_enabled(_name: str) -> bool:

@@ -2,7 +2,7 @@
 
 Persisted subagent announcements mirror ``agent/subagent_announce.md``: header,
 full ``Task:`` assignment (model context), ``Result:``, and a trailing model-only
-``Summarize…`` instruction. External channels (embedded WebUI, session previews)
+``Summarize…`` instruction. External channels and session previews
 should show only the header plus a truncated result body.
 """
 

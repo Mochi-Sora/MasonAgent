@@ -1,4 +1,4 @@
-"""WebUI OAuth connection flow for Linear workspace installations."""
+"""OAuth connection flow for Linear workspace installations."""
 
 from __future__ import annotations
 

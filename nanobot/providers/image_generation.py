@@ -131,7 +131,7 @@ def _b64_image_data_url(value: str) -> str:
 def _aihubmix_size(aspect_ratio: str | None, image_size: str | None) -> str:
     """Return an OpenAI Images API size string for AIHubMix.
 
-    The WebUI emits compact size hints like ``1K`` for OpenRouter. AIHubMix's
+    The CLI wizard emits compact size hints like ``1K`` for OpenRouter. AIHubMix's
     Images API expects OpenAI-style dimensions or ``auto``, so only pass
     through explicit dimension strings and otherwise derive the closest
     supported orientation from aspect ratio.

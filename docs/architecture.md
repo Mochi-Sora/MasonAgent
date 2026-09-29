@@ -8,7 +8,7 @@ For the product-level mental model, read [`concepts.md`](./concepts.md) first.
 
 ```mermaid
 flowchart LR
-    Channel["Channel<br/>CLI, WebUI, chat apps"] --> Bus["MessageBus<br/>InboundMessage"]
+    Channel["Channel<br/>CLI, chat apps"] --> Bus["MessageBus<br/>InboundMessage"]
     Bus --> Loop["AgentLoop<br/>session, workspace, context"]
     Loop --> Runner["AgentRunner<br/>provider/tool loop"]
     Runner --> Provider["Provider<br/>LLM backend"]
@@ -30,8 +30,8 @@ Main files:
 | Turn orchestration | `nanobot/agent/loop.py` |
 | Provider/tool conversation loop | `nanobot/agent/runner.py` |
 | Context construction | `nanobot/agent/context.py` |
-| Session storage and compaction | `nanobot/session/manager.py` |
-| Long-term memory and Dream | `nanobot/agent/memory.py` |
+| Session storage and compaction | `nanobot/session/manager.py`, `nanobot/agent/memory.py` |
+| Long-term memory, working state, consolidation | `nanobot/memory/store.py`, `nanobot/memory/state.py`, `nanobot/memory/consolidation.py` |
 
 ## Agent Loop vs Agent Runner
 
@@ -90,34 +90,17 @@ Main files:
 | Base channel contract | `nanobot/channels/base.py` |
 | Channel packages | `nanobot/channels/<channel>/` |
 | Discovery and lifecycle | `nanobot/channels/manager.py` |
-| WebSocket/WebUI channel | `nanobot/channels/websocket/` |
 
 Channels are discovered by scanning self-contained packages under `nanobot/channels/`. Add a channel by contributing one package that follows [`channel-package-guide.md`](./channel-package-guide.md).
 
-## WebUI and Gateway
+## Gateway
 
 `nanobot gateway` starts:
 
 - enabled chat channels;
-- the WebSocket channel when configured;
 - workspace-scoped cron service;
-- system jobs such as Dream and heartbeat;
-- the health endpoint on `gateway.port`.
-
-The packaged WebUI is served by the WebSocket channel, not the health endpoint:
-
-| Surface | Default |
-|---|---|
-| Health endpoint | `http://127.0.0.1:18790/health` |
-| WebUI/WebSocket | `http://127.0.0.1:8765` |
-
-WebUI source lives in `webui/`. The production build is written to `nanobot/web/dist/` and bundled into the wheel.
-
-Useful docs:
-
-- [`webui.md`](./webui.md) for the WebUI user guide;
-- [`../webui/README.md`](../webui/README.md) for frontend source development;
-- [`websocket.md`](./websocket.md) for protocol details.
+- system jobs such as heartbeat, memory consolidation, and the daily memory rollover;
+- the health endpoint on `gateway.port` (`http://127.0.0.1:18790/health` by default).
 
 ## Tools
 
@@ -136,8 +119,12 @@ Important files:
 | Cron | `nanobot/agent/tools/cron.py`, `nanobot/cron/` |
 | Image generation | `nanobot/agent/tools/image_generation.py` |
 | Runtime self-inspection | `nanobot/agent/tools/self.py` |
+| Capability discovery | `nanobot/agent/tools/capability_gate.py`, `nanobot/agent/tools/capability_search.py` |
+| Memory tools | `nanobot/agent/tools/memory.py` |
 
 Tool behavior is part of the model contract. Keep user-visible tool names, schemas, and error messages stable unless a change is intentional.
+
+With `tools.lazyCapabilities.enabled` (the default), only `find_capabilities`, `update_state`, `recall_memory`, and `recall_backup` are sent on every request. The capability gate hides the remaining tools and skills until the model finds them through `find_capabilities`, and the names-only catalog lives in that tool's description rather than the system prompt.
 
 ## Config and Paths
 
@@ -152,7 +139,7 @@ Defaults:
 | Sessions | `<config-dir>/sessions/<workspace-id>/*.jsonl` (default: `~/.nanobot/sessions/...`) |
 | Memory | `<workspace>/memory/` |
 | Cron store | `<workspace>/cron/jobs.json` |
-| WebUI/media/log runtime data | config directory subdirectories such as `webui/`, `media/`, and `logs/` |
+| Media and log runtime data | config directory subdirectories such as `media/` and `logs/` |
 
 The schema accepts both camelCase and snake_case keys, but saves config with camelCase aliases.
 
@@ -160,7 +147,7 @@ The schema accepts both camelCase and snake_case keys, but saves config with cam
 
 Runtime code distinguishes the configured agent workspace from the effective
 project workspace carried by a session scope. They are often the same path, but
-a WebUI chat may select a separate project:
+a session may select a separate project:
 
 | Concern | Path owner |
 |---|---|
@@ -176,16 +163,18 @@ explicit; do not treat the entire agent workspace as an allowed root.
 
 ## Memory and Sessions
 
-Session history is the near-term conversation replay. Memory is the longer-term workspace state.
+Session history is the near-term conversation replay. Memory is the longer-term workspace state, stored in a SQLite database plus a small working-state file.
 
 | Store | File area |
 |---|---|
 | Session JSONL files | `<config-dir>/sessions/<workspace-id>/` |
-| Long-term memory | `<workspace>/memory/MEMORY.md` |
-| Consolidation source history | `<workspace>/memory/history.jsonl` |
+| Working state | `<workspace>/memory/state.md` (about 2 KB, injected into the system prompt, cleared at rollover) |
+| Long-term memory | Curated memories and links in `<workspace>/memory/memory.db` (searched with `recall_memory`) |
+| Backup episodes | Today's verbatim turns in the same database (searched with `recall_backup`), discarded at the daily rollover |
+| Archived summaries | `<workspace>/memory/history.jsonl`, written by session compaction |
 | Bootstrap identity files | `<workspace>/SOUL.md`, `<workspace>/USER.md`, templates under `nanobot/templates/` |
 
-Dream is implemented in `nanobot/agent/memory.py` and scheduled by the runtime when enabled.
+Consolidation is implemented in `nanobot/memory/consolidation.py`; the daily rollover and legacy import live in `nanobot/memory/maintenance.py` and `nanobot/memory/migration.py`. Consolidation runs as a cron system job (default every 2 hours) and once more before `memory_rollover` at 00:00, which discards the previous day's backup and clears the working state in place. Only consolidation writes long-term memory, and the model never edits it directly. The SQLite memory subsystem does not support Windows.
 
 ## Security Boundaries
 
@@ -199,7 +188,7 @@ Security-sensitive code paths include:
 | PTH guard and CLI startup security | `nanobot/security/` and CLI entrypoints |
 | Channel access control | channel config in `nanobot/channels/*.py` |
 
-When changing tools, channels, file access, WebUI workspace behavior, or network fetching, treat security as part of the functional behavior and update docs if the user-facing boundary changes.
+When changing tools, channels, file access, workspace behavior, or network fetching, treat security as part of the functional behavior and update docs if the user-facing boundary changes.
 
 ## Extension Points
 
@@ -208,7 +197,7 @@ When changing tools, channels, file access, WebUI workspace behavior, or network
 | Provider | Add `ProviderSpec` in `providers/registry.py`, add schema field in `config/schema.py`, implement provider only if the generic backend is not enough |
 | Channel | Export a `ChannelPlugin` descriptor, keep its runtime and optional setup surfaces in one package, and follow [`channel-package-guide.md`](./channel-package-guide.md) |
 | Tool | Implement a tool under `agent/tools/` or expose a plugin entry point |
-| Agent Plugin | Add a v1 package under `<workspace>/plugins/` and enable it from Apps |
+| Agent Plugin | Add a v1 package under `<workspace>/plugins/` |
 | MCP | Add `tools.mcpServers` config or bundle the server in an Agent Plugin |
 | Skill | Add workspace skills under `<workspace>/skills/`, bundle them in an Agent Plugin, or add built-in skills under `nanobot/skills/` |
 | CLI App | Add it to the CLI Apps catalog; the installer owns its executable lifecycle and writes a skills-only Agent Plugin |
@@ -222,8 +211,6 @@ Common checks:
 ```bash
 pytest tests/test_openai_api.py::test_function -v
 ruff check nanobot/
-cd webui && bun run test
-cd webui && bun run build
 ```
 
 Choose tests based on the changed surface:
@@ -232,8 +219,7 @@ Choose tests based on the changed surface:
 |---|---|
 | Provider behavior | Provider unit tests or a mocked API path; `nanobot agent -m "Hello!"` with safe config when possible |
 | Channel behavior | Channel tests plus `nanobot gateway` startup path |
-| WebUI behavior | WebUI tests/build and, for routing/settings/chat changes, browser-level verification through the gateway |
 | Tool behavior | Tool unit tests and an agent-run path when schema or model-facing behavior changes |
 | Docs | Link checks, command accuracy against CLI/schema, and `git diff --check` |
 
-For user-facing flows, prefer at least one verification path through the public surface the user actually touches: CLI command, HTTP endpoint, WebSocket/WebUI, chat channel, or packaged import.
+For user-facing flows, prefer at least one verification path through the public surface the user actually touches: CLI command, HTTP endpoint, chat channel, or packaged import.

@@ -18,8 +18,7 @@ not already named in nanobot.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 ```
 
 Verify the endpoint responds before debugging nanobot:

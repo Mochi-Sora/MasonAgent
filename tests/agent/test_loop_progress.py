@@ -10,13 +10,11 @@ from agent.session_helpers import run_session
 from nanobot.agent.context import TranscriptInput
 from nanobot.agent.hooks import create_file_edit_activity_hook
 from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.context import current_request_context
 from nanobot.agent.tools.filesystem import WriteFileTool
 from nanobot.bus.events import InboundMessage
 from nanobot.bus.outbound_events import (
     GoalStatusEvent,
     ProgressEvent,
-    SessionUpdatedEvent,
     StreamDeltaEvent,
     StreamedResponseEvent,
     StreamEndEvent,
@@ -24,13 +22,7 @@ from nanobot.bus.outbound_events import (
 )
 from nanobot.bus.queue import MessageBus
 from nanobot.providers.base import LLMResponse, ToolCallRequest
-from nanobot.providers.factory import ProviderSnapshot
-from nanobot.session.webui_turns import WebuiTurnCoordinator, WebuiTurnRoutePolicy
 from nanobot.utils.progress_events import output_events
-from nanobot.webui.metadata import (
-    WEBSOCKET_TURN_OWNER_METADATA_KEY,
-    WEBUI_TURN_METADATA_KEY,
-)
 
 
 def _make_loop(tmp_path: Path) -> AgentLoop:
@@ -45,15 +37,6 @@ def _make_loop(tmp_path: Path) -> AgentLoop:
         hook_factories=[create_file_edit_activity_hook],
     )
 
-
-def _attach_webui_runtime_events(loop: AgentLoop, bus: MessageBus) -> None:
-    loop.turn_delivery_factory.route_policy = WebuiTurnRoutePolicy(loop.sessions)
-    coordinator = WebuiTurnCoordinator(
-        bus=bus,
-        sessions=loop.sessions,
-        schedule_background=lambda coro: loop.schedule_background(coro),
-    )
-    coordinator.subscribe()
 
 
 class TestToolEventProgress:
@@ -374,8 +357,8 @@ class TestToolEventProgress:
         assert outbound.event.file_edit_events == edit_events
 
     @pytest.mark.asyncio
-    async def test_goal_turn_keeps_file_edit_progress_for_webui(self, tmp_path: Path) -> None:
-        """The /goal command rewrites the prompt but must not bypass WebUI file-edit progress."""
+    async def test_goal_turn_keeps_file_edit_progress(self, tmp_path: Path) -> None:
+        """The /goal command rewrites the prompt but must not bypass file-edit progress."""
         bus = MessageBus()
         provider = MagicMock()
         provider.get_default_model.return_value = "test-model"
@@ -504,7 +487,6 @@ class TestToolEventProgress:
         provider.chat_stream_with_retry = chat_stream_with_retry
         provider.chat_with_retry = AsyncMock()
         loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="openai-codex/gpt-5.5")
-        _attach_webui_runtime_events(loop, bus)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         await run_session(loop, InboundMessage(
@@ -531,9 +513,6 @@ class TestToolEventProgress:
         assert len(stream_end) == 1
         assert final[-1].content == "Hello"
         assert isinstance(final[-1].event, StreamedResponseEvent)
-        turn_end_msgs = [m for m in outbound if isinstance(m.event, TurnEndEvent)]
-        assert len(turn_end_msgs) == 1
-        assert turn_end_msgs[0].content == ""
         provider.chat_with_retry.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -557,7 +536,6 @@ class TestToolEventProgress:
         provider.chat_stream_with_retry = chat_stream_with_retry
         provider.chat_with_retry = AsyncMock()
         loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         await run_session(loop, InboundMessage(
@@ -587,7 +565,6 @@ class TestToolEventProgress:
         loop = _make_loop(tmp_path)
         loop.max_iterations = 1
         loop.tools.get_definitions = MagicMock(return_value=[])
-        _attach_webui_runtime_events(loop, loop.bus)
         calls = 0
 
         async def chat(*, on_content_delta=None, **kwargs):
@@ -649,7 +626,6 @@ class TestToolEventProgress:
         provider.chat_stream_with_retry = chat_stream_with_retry
         provider.chat_with_retry = AsyncMock()
         loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         await run_session(loop, InboundMessage(
@@ -690,7 +666,6 @@ class TestToolEventProgress:
 
         provider.chat_stream_with_retry = chat_stream_with_retry
         loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
         loop.max_iterations = 1
         loop.tools.get_definitions = MagicMock(return_value=[])
 
@@ -778,7 +753,6 @@ class TestToolEventProgress:
             workspace=tmp_path,
             model="openai-codex/gpt-5.5",
         )
-        _attach_webui_runtime_events(loop, bus)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         await run_session(loop, InboundMessage(
@@ -802,159 +776,6 @@ class TestToolEventProgress:
         assert final[0].event is None
         assert provider.chat_stream_with_retry.await_count == 3
 
-    @pytest.mark.asyncio
-    async def test_independent_late_subagent_result_gets_complete_webui_turn(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "openai-codex/gpt-5.5"
-        first_request_started = asyncio.Event()
-        release_first_request = asyncio.Event()
-        requests: list[list[dict]] = []
-        request_contexts = []
-        tool_call = ToolCallRequest(id="call1", name="custom_tool", arguments={})
-        responses = iter([
-            LLMResponse(content="Checking", tool_calls=[tool_call]),
-            LLMResponse(content="The late result is ready", tool_calls=[]),
-        ])
-
-        async def chat_stream_with_retry(*, messages, on_content_delta, **kwargs):
-            requests.append([dict(message) for message in messages])
-            response = next(responses)
-            if len(requests) == 1:
-                first_request_started.set()
-                await release_first_request.wait()
-            await on_content_delta(response.content or "")
-            return response
-
-        provider.chat_stream_with_retry = chat_stream_with_retry
-        provider.chat_with_retry = AsyncMock()
-        loop = AgentLoop(
-            bus=bus,
-            provider=provider,
-            workspace=tmp_path,
-            model="openai-codex/gpt-5.5",
-        )
-        _attach_webui_runtime_events(loop, bus)
-        loop.tools.get_definitions = MagicMock(return_value=[])
-        loop.tools.prepare_call = MagicMock(return_value=(None, {}, None))
-
-        async def execute_tool(*args, **kwargs):
-            request_contexts.append(current_request_context())
-            return "ok"
-
-        loop.tools.execute = execute_tool
-
-        session_key = "websocket:chat-a"
-        session = loop.sessions.get_or_create(session_key)
-        session.add_message("user", "Run this in the background")
-        session.metadata.update({"webui": True, "title": "Existing title"})
-        loop.sessions.save(session)
-        dispatch = asyncio.create_task(run_session(loop, InboundMessage(
-            channel="system",
-            sender_id="subagent",
-            chat_id=session_key,
-            content="Background research completed",
-            session_key_override=session_key,
-            metadata={
-                "injected_event": "subagent_result",
-                "subagent_task_id": "sub-1",
-            },
-        )))
-
-        await asyncio.wait_for(first_request_started.wait(), timeout=1)
-        await loop._pending_queues[session_key].put(InboundMessage(
-            channel="websocket",
-            sender_id="user",
-            chat_id="chat-a",
-            content="Can you include the key detail?",
-            session_key_override=session_key,
-        ))
-        release_first_request.set()
-        await asyncio.wait_for(dispatch, timeout=2)
-
-        outbound = []
-        while bus.outbound_size > 0:
-            outbound.append(await bus.consume_outbound())
-
-        assert len(requests) == 2
-        assert requests[0][-1]["role"] == "user"
-        assert requests[0][-1]["content"].endswith("Background research completed")
-        assert any(
-            message.get("role") == "user"
-            and message.get("content") == "Can you include the key detail?"
-            for message in requests[1]
-        )
-        assert len(request_contexts) == 1
-        request_ctx = request_contexts[0]
-        assert request_ctx is not None
-        assert request_ctx.metadata == {
-            "injected_event": "subagent_result",
-            "subagent_task_id": "sub-1",
-        }
-        statuses = [
-            message.event.status
-            for message in outbound
-            if isinstance(message.event, GoalStatusEvent)
-        ]
-        assert statuses == ["running", "idle"]
-        assert [
-            message.content
-            for message in outbound
-            if isinstance(message.event, StreamDeltaEvent)
-        ] == ["Checking", "The late result is ready"]
-        assert any(isinstance(message.event, ProgressEvent) for message in outbound)
-        assert len([
-            message for message in outbound if isinstance(message.event, TurnEndEvent)
-        ]) == 1
-        assert len([
-            message for message in outbound
-            if isinstance(message.event, StreamedResponseEvent)
-        ]) == 1
-        visible_events = [
-            message
-            for message in outbound
-            if isinstance(
-                message.event,
-                GoalStatusEvent
-                | ProgressEvent
-                | StreamDeltaEvent
-                | StreamEndEvent
-                | StreamedResponseEvent
-                | TurnEndEvent,
-            )
-        ]
-        assert visible_events
-        turn_ids = {
-            message.metadata.get(WEBUI_TURN_METADATA_KEY)
-            for message in visible_events
-        }
-        assert len(turn_ids) == 1
-        turn_id = turn_ids.pop()
-        assert isinstance(turn_id, str)
-        assert turn_id.startswith("subagent:")
-        owners = {
-            message.metadata.get(WEBSOCKET_TURN_OWNER_METADATA_KEY)
-            for message in visible_events
-        }
-        assert len(owners) == 1
-        assert isinstance(owners.pop(), str)
-        assert all(
-            (message.channel, message.chat_id) == ("websocket", "chat-a")
-            and message.metadata.get("webui") is True
-            and message.metadata.get("_wants_stream") is True
-            and set(message.metadata) <= {
-                "webui",
-                "_wants_stream",
-                WEBSOCKET_TURN_OWNER_METADATA_KEY,
-                WEBUI_TURN_METADATA_KEY,
-                "latency_ms",
-            }
-            for message in visible_events
-        )
-        provider.chat_with_retry.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_stream_timeout_recovery_continues_in_new_segment(
@@ -975,7 +796,6 @@ class TestToolEventProgress:
         provider.chat_stream_with_retry = chat_stream_with_retry
         provider.chat_with_retry = AsyncMock()
         loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="openai-codex/gpt-5.5")
-        _attach_webui_runtime_events(loop, bus)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         await run_session(loop, InboundMessage(
@@ -1065,317 +885,3 @@ class TestToolEventProgress:
         assert streamed == ["I will", " inspect it."]
         assert progress[0][0] == 'custom_tool("foo.txt")'
         assert all(item[0] != "I will inspect it." for item in progress)
-
-    @pytest.mark.asyncio
-    async def test_websocket_dispatch_publishes_final_turn_end_marker(self, tmp_path: Path) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "test-model"
-        provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Done", tool_calls=[]))
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
-        loop.tools.get_definitions = MagicMock(return_value=[])
-
-        await run_session(loop, InboundMessage(
-            channel="websocket",
-            sender_id="u1",
-            chat_id="chat1",
-            content="say hello",
-        ))
-
-        outbound = []
-        while bus.outbound_size > 0:
-            outbound.append(await bus.consume_outbound())
-
-        done_msgs = [m for m in outbound if m.content == "Done"]
-        assert len(done_msgs) == 1
-        assert not isinstance(done_msgs[0].event, TurnEndEvent)
-
-        turn_end_msgs = [m for m in outbound if isinstance(m.event, TurnEndEvent)]
-        assert len(turn_end_msgs) == 1
-        assert turn_end_msgs[0].content == ""
-        assert turn_end_msgs[0].chat_id == "chat1"
-        assert outbound.index(done_msgs[0]) < outbound.index(turn_end_msgs[0])
-
-    @pytest.mark.asyncio
-    async def test_websocket_dispatch_publishes_turn_end_after_error(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "test-model"
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
-
-        async def raise_from_turn(*_args, **_kwargs):
-            raise RuntimeError("boom")
-
-        loop._process_message = raise_from_turn  # type: ignore[method-assign]
-
-        await run_session(loop, InboundMessage(
-            channel="websocket",
-            sender_id="u1",
-            chat_id="chat1",
-            content="say hello",
-        ))
-
-        outbound = []
-        while bus.outbound_size > 0:
-            outbound.append(await bus.consume_outbound())
-
-        error_msgs = [m for m in outbound if m.content == "Sorry, I encountered an error."]
-        turn_end_msgs = [m for m in outbound if isinstance(m.event, TurnEndEvent)]
-        statuses = [m for m in outbound if isinstance(m.event, GoalStatusEvent)]
-
-        assert len(error_msgs) == 1
-        assert len(turn_end_msgs) == 1
-        assert turn_end_msgs[0].content == ""
-        assert turn_end_msgs[0].chat_id == "chat1"
-        assert [m.event.status for m in statuses if isinstance(m.event, GoalStatusEvent)] == ["idle"]
-        assert outbound.index(error_msgs[0]) < outbound.index(turn_end_msgs[0])
-        assert outbound.index(turn_end_msgs[0]) < outbound.index(statuses[-1])
-
-    @pytest.mark.asyncio
-    async def test_webui_title_generation_runs_after_turn_end(self, tmp_path: Path) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "test-model"
-        title_started = asyncio.Event()
-        release_title = asyncio.Event()
-        calls = 0
-
-        async def chat_stream_with_retry(*_args: object, **_kwargs: object) -> LLMResponse:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                return LLMResponse(content="Done", tool_calls=[])
-            title_started.set()
-            await release_title.wait()
-            return LLMResponse(content="Generated title", tool_calls=[])
-
-        provider.chat_stream_with_retry = AsyncMock(side_effect=chat_stream_with_retry)
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
-        loop.tools.get_definitions = MagicMock(return_value=[])
-
-        # The blocked title call proves ordering; allow Windows CI time for turn I/O.
-        await asyncio.wait_for(run_session(loop, InboundMessage(
-            channel="websocket",
-            sender_id="u1",
-            chat_id="chat1",
-            content="say hello",
-            metadata={"webui": True},
-        )), timeout=5.0)
-
-        outbound: list = []
-        for _ in range(12):
-            outbound.append(await asyncio.wait_for(bus.consume_outbound(), timeout=5.0))
-            if isinstance(outbound[-1].event, TurnEndEvent):
-                break
-        else:
-            raise AssertionError("turn-end event not found")
-
-        done_with_body = [m for m in outbound if m.content == "Done"]
-        assert len(done_with_body) == 1
-        assert isinstance(outbound[-1].event, TurnEndEvent)
-
-        await asyncio.wait_for(title_started.wait(), timeout=5.0)
-        release_title.set()
-        session_updated = None
-        for _ in range(10):
-            candidate = await asyncio.wait_for(bus.consume_outbound(), timeout=5.0)
-            if isinstance(candidate.event, SessionUpdatedEvent):
-                session_updated = candidate
-                break
-        assert session_updated is not None
-
-        assert isinstance(session_updated.event, SessionUpdatedEvent)
-        assert session_updated.event.scope == "metadata"
-        assert provider.chat_stream_with_retry.await_count == 2
-
-    @pytest.mark.asyncio
-    async def test_webui_title_generation_uses_turn_model_snapshot(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "test-model"
-        provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Done", tool_calls=[]))
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
-        loop.tools.get_definitions = MagicMock(return_value=[])
-
-        captured: dict[str, object] = {}
-
-        async def fake_title_after_turn(**kwargs: object) -> bool:
-            captured.update(kwargs)
-            return False
-
-        monkeypatch.setattr(
-            "nanobot.session.webui_turns.maybe_generate_webui_title_after_turn",
-            fake_title_after_turn,
-        )
-        scheduled_title: list[object] = []
-
-        def schedule_background(coro: object) -> None:
-            name = getattr(coro, "__qualname__", "")
-            if "_generate_title_and_notify" in name:
-                scheduled_title.append(coro)
-            elif hasattr(coro, "close"):
-                coro.close()
-
-        loop.schedule_background = schedule_background  # type: ignore[method-assign]
-
-        await run_session(loop, InboundMessage(
-            channel="websocket",
-            sender_id="u1",
-            chat_id="chat1",
-            content="say hello",
-            metadata={"webui": True},
-        ))
-
-        assert len(scheduled_title) == 1
-        next_provider = MagicMock()
-        next_provider.generation = loop.llm_runtime().generation
-        loop.runtime_resolver.adopt_snapshot(ProviderSnapshot(
-            provider=next_provider,
-            model="switched-after-turn",
-            context_window_tokens=loop.context_window_tokens,
-            signature=("switched-after-turn",),
-        ))
-
-        await scheduled_title[0]  # type: ignore[misc]
-
-        assert captured["provider"] is provider
-        assert captured["model"] == "test-model"
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("metadata", [{}, {"webui": False}])
-    async def test_webui_title_requires_inbound_opt_in(
-        self,
-        tmp_path: Path,
-        metadata: dict[str, object],
-    ) -> None:
-        from nanobot.session.manager import SessionManager
-        from nanobot.session.webui_turns import maybe_generate_webui_title_after_turn
-
-        sessions = SessionManager(tmp_path)
-        session = sessions.get_or_create("websocket:chat1")
-        session.metadata["webui"] = True
-        session.add_message("user", "say hello")
-        session.add_message("assistant", "Hello")
-        sessions.save(session)
-        provider = MagicMock()
-        provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Greeting"))
-
-        generated = await maybe_generate_webui_title_after_turn(
-            channel="websocket",
-            chat_id="chat1",
-            metadata=metadata,
-            sessions=sessions,
-            session_key=session.key,
-            provider=provider,
-            model="test-model",
-        )
-
-        assert generated is False
-        provider.chat_stream_with_retry.assert_not_awaited()
-        assert "title" not in session.metadata
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("metadata", [{}, {"webui": False}])
-    async def test_webui_turn_without_opt_in_does_not_schedule_title(
-        self,
-        tmp_path: Path,
-        metadata: dict[str, object],
-    ) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "test-model"
-        provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Done"))
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
-        loop.tools.get_definitions = MagicMock(return_value=[])
-        session = loop.sessions.get_or_create("websocket:chat1")
-        session.metadata["webui"] = True
-        loop.sessions.save(session)
-        scheduled: list[object] = []
-
-        def schedule_background(coro: object) -> None:
-            scheduled.append(coro)
-            if hasattr(coro, "close"):
-                coro.close()
-
-        loop.schedule_background = schedule_background  # type: ignore[method-assign]
-
-        await run_session(loop, InboundMessage(
-            channel="websocket",
-            sender_id="u1",
-            chat_id="chat1",
-            content="say hello",
-            metadata=metadata,
-        ))
-
-        assert scheduled == []
-        provider.chat_stream_with_retry.assert_awaited_once()
-        assert "title" not in session.metadata
-
-    @pytest.mark.asyncio
-    async def test_webui_command_turn_does_not_schedule_title_generation(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "test-model"
-        provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Done", tool_calls=[]))
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        _attach_webui_runtime_events(loop, bus)
-
-        async def fake_title_after_turn(**_kwargs: object) -> bool:
-            raise AssertionError("command-only turns should not generate titles")
-
-        monkeypatch.setattr(
-            "nanobot.session.webui_turns.maybe_generate_webui_title_after_turn",
-            fake_title_after_turn,
-        )
-        scheduled: list[object] = []
-        loop.schedule_background = scheduled.append  # type: ignore[method-assign]
-
-        await run_session(loop, InboundMessage(
-            channel="websocket",
-            sender_id="u1",
-            chat_id="chat1",
-            content="/model",
-            metadata={"webui": True},
-        ))
-
-        assert scheduled == []
-
-    @pytest.mark.asyncio
-    async def test_non_websocket_dispatch_does_not_publish_turn_end_marker(self, tmp_path: Path) -> None:
-        bus = MessageBus()
-        provider = MagicMock()
-        provider.get_default_model.return_value = "test-model"
-        provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Done", tool_calls=[]))
-        loop = AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
-        loop.tools.get_definitions = MagicMock(return_value=[])
-
-        await run_session(loop, InboundMessage(
-            channel="slack",
-            sender_id="u1",
-            chat_id="chat1",
-            content="say hello",
-        ))
-
-        outbound = []
-        while bus.outbound_size > 0:
-            outbound.append(await bus.consume_outbound())
-
-        assert len(outbound) == 1
-        assert outbound[0].content == "Done"
-        assert not isinstance(outbound[0].event, TurnEndEvent)

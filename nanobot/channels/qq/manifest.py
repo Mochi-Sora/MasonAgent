@@ -29,5 +29,4 @@ PLUGIN = ChannelPlugin(
         "aiohttp>=3.9.0,<4.0.0",
         "qq-botpy>=1.2.0,<2.0.0",
     ),
-    webui="webui/index.ts",
 )

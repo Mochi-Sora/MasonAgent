@@ -1,4 +1,4 @@
-"""CLI model discovery exercises the same provider boundary as WebUI."""
+"""CLI model discovery exercises the provider catalog boundary."""
 
 from types import SimpleNamespace
 

@@ -29,7 +29,7 @@ class WeixinConnectSession:
 
 
 class WeixinConnectStore:
-    """In-memory WeChat QR login sessions for the WebUI."""
+    """In-memory WeChat QR login sessions for interactive setup."""
 
     def __init__(self) -> None:
         self._sessions: dict[str, WeixinConnectSession] = {}

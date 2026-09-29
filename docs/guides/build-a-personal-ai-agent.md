@@ -1,7 +1,7 @@
 # How to Build a Personal AI Agent with nanobot
 
 This guide builds a personal AI agent you can run locally, talk to from the
-terminal or browser, and later connect to chat apps, memory, tools, and
+terminal, and later connect to chat apps, memory, tools, and
 automations.
 
 ## What you will build
@@ -9,7 +9,7 @@ automations.
 - a configured nanobot install
 - one working model provider
 - one local agent reply
-- a browser WebUI session for ongoing work
+- an ongoing chat session for longer work
 
 ## When to use this
 
@@ -34,22 +34,22 @@ First prove the runtime can answer:
 nanobot agent -m "Hello!"
 ```
 
-Then open the browser workbench:
+Then start an interactive session for longer work:
 
 ```bash
-nanobot webui
+nanobot agent
 ```
 
-The WebUI starts the local gateway, opens a browser, and keeps persistent chat
-sessions for longer work.
+The interactive session keeps persistent chat history and tool access for
+deeper tasks.
 
 ## Production notes
 
 - Keep one workspace per project or personal context.
 - Use `modelPresets` when you want stable names for fast, deep, local, or
   fallback models.
-- Keep `nanobot gateway` running for WebUI, chat apps, automations, and the
-  WebSocket channel.
+- Keep `nanobot gateway` running for chat apps, automations, and
+  background delivery.
 - Use the Python SDK or OpenAI-compatible API when another program should call
   the agent.
 
@@ -65,15 +65,15 @@ sessions for longer work.
 ## Troubleshooting
 
 - `nanobot status` shows the config path, workspace path, and active model.
-- If `nanobot agent -m "Hello!"` fails, fix provider setup before opening the
-  WebUI or chat apps.
-- If the WebUI opens but does not answer, check gateway logs and provider
+- If `nanobot agent -m "Hello!"` fails, fix provider setup before connecting
+  chat apps.
+- If a chat app does not answer, check gateway logs and provider
   credentials.
 
 ## Related nanobot docs
 
 - [Quick Start](../quick-start.md)
 - [Concepts](../concepts.md)
-- [WebUI](../webui.md)
+
 - [Configuration](../configuration.md)
 - [Troubleshooting](../troubleshooting.md)

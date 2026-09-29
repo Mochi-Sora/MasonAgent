@@ -287,8 +287,7 @@ def format_pairing_reply(code: str) -> str:
     return (
         "Hi! This is your private nanobot.\n\n"
         f"Your pairing code is: `{code}`\n\n"
-        "Open the nanobot WebUI and enter this code to pair your chat account.\n"
-        f"Without the WebUI, approve it from an already paired chat with "
+        "Ask an already paired chat to approve this code with "
         f"`/pairing approve {code}`."
     )
 

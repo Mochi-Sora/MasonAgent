@@ -32,7 +32,7 @@ Match the recipe to the credential or endpoint you already have:
 3. Merge the recipe snippet into `~/.nanobot/config.json`.
 4. Run `nanobot status`.
 5. Run `nanobot agent -m "Hello!"`.
-6. If the CLI works, then connect WebUI, gateway, or chat apps.
+6. If the CLI works, continue with the gateway or chat apps.
 
 The active model should normally come from `agents.defaults.modelPreset`, and that name should point to an entry in `modelPresets`. Direct `agents.defaults.provider` and `agents.defaults.model` still work for older configs, but presets are easier to switch and easier to reuse as fallbacks.
 

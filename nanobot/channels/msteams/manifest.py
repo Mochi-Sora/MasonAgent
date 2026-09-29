@@ -35,5 +35,4 @@ PLUGIN = ChannelPlugin(
         "PyJWT>=2.0,<3.0",
         "cryptography>=41.0",
     ),
-    webui="webui/index.ts",
 )

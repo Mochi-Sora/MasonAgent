@@ -72,6 +72,7 @@ async def test_process_message_hands_complete_replay_to_runner(tmp_path: Path) -
         return_value=LLMResponse(content="ok", tool_calls=[], usage=None)
     )
     loop.tools.get_definitions = MagicMock(return_value=[])
+    loop.tools_config.lazy_capabilities.enabled = False
 
     session = loop.sessions.get_or_create("cli:test")
     with patch.object(session, "get_history", wraps=session.get_history) as get_history:
@@ -90,6 +91,7 @@ async def test_runner_checkpoint_keeps_current_user_as_replay_boundary(tmp_path:
         return_value=LLMResponse(content="ok", tool_calls=[], usage=None)
     )
     loop.tools.get_definitions = MagicMock(return_value=[])
+    loop.tools_config.lazy_capabilities.enabled = False
 
     session = loop.sessions.get_or_create("cli:test")
     session.add_message("user", "old")

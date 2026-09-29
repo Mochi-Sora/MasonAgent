@@ -7,19 +7,16 @@ from unittest.mock import MagicMock
 import pytest
 
 from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.bus.queue import MessageBus
 from nanobot.bus.runtime_events import RuntimeModelChanged
 from nanobot.config.errors import ConfigLoadError
-from nanobot.config.loader import save_config
-from nanobot.config.schema import Config, ModelPresetConfig
+from nanobot.config.schema import ModelPresetConfig
 from nanobot.providers.base import GenerationSettings
 from nanobot.providers.factory import ProviderSnapshot, load_provider_snapshot
 from nanobot.session.model_selection import (
     SESSION_MODEL_PRESET_METADATA_KEY,
     model_preset_from_metadata,
 )
-from nanobot.webui.settings_api import update_agent_settings
 
 
 def _provider(default_model: str, max_tokens: int = 123) -> MagicMock:
@@ -309,35 +306,3 @@ def test_next_turn_captures_generation_changed_after_previous_admission(
     assert first.generation.max_tokens == 1024
     assert second.generation.temperature == 0.8
     assert second.generation.max_tokens == 512
-
-
-def test_settings_context_window_refreshes_runtime_state(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    config_path = tmp_path / "config.json"
-    config = Config()
-    config.agents.defaults.workspace = str(tmp_path / "workspace")
-    config.agents.defaults.model = "openai/gpt-4o"
-    config.agents.defaults.provider = "openai"
-    config.agents.defaults.context_window_tokens = 65_536
-    config.providers.openai.api_key = "sk-test"
-    save_config(config, config_path)
-    monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
-
-    def loader(*, preset_name: str | None = None) -> ProviderSnapshot:
-        return load_provider_snapshot(config_path, preset_name=preset_name)
-
-    loop = AgentLoop.from_config(
-        config,
-        tool_registry=ToolRegistry(),
-        provider_snapshot_loader=loader,
-    )
-
-    payload = update_agent_settings({"context_window_tokens": ["262144"]})
-    loop.runtime_resolver.invalidate()
-    loop.llm_runtime()
-
-    assert payload["requires_restart"] is False
-    assert loop.context_window_tokens == 262_144
-    assert loop.llm_runtime().context_window_tokens == 262_144

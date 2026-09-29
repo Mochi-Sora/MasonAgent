@@ -25,7 +25,7 @@ from nanobot.utils.file_edit_events import (
 
 
 class FileEditActivityHook(AgentHook):
-    """Translate file-editing tool lifecycle events into WebUI progress events."""
+    """Translate file-editing tool lifecycle events into typed progress events."""
 
     def __init__(
         self,

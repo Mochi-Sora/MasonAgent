@@ -2,24 +2,24 @@
 
 Use these docs to get a working agent first, then open a task guide only when you need the next capability. Source-level design and extension details are kept in the contributor section.
 
-Repository docs follow the current source tree and can be newer than the latest package release. For published release docs, visit [nanobot.wiki](https://nanobot.wiki/docs/latest/getting-started/nanobot-overview).
+Repository docs follow the current source tree. Upstream nanobot's published documentation lives at [nanobot.wiki](https://nanobot.wiki/docs/latest/getting-started/nanobot-overview) and may describe features that differ from this fork.
 
 ## Start Here
 
 | Your situation | Read this | You are done when... |
 |---|---|---|
-| Terminals, Python, or API keys are new to you | [Beginner walkthrough](./start-without-technical-background.md) | The browser can send `Hello!` and receive a reply |
-| You are comfortable running commands | [Install and Quick Start](./quick-start.md) | `nanobot status` is healthy and the WebUI or CLI can get one reply |
+| Terminals, Python, or API keys are new to you | [Beginner walkthrough](./start-without-technical-background.md) | The terminal can send `Hello!` and receive a reply |
+| You are comfortable running commands | [Install and Quick Start](./quick-start.md) | `nanobot status` is healthy and the CLI can get one reply |
 | Something already failed | [Troubleshooting](./troubleshooting.md) | You have isolated the problem to install, config, model, gateway, channel, or tool access |
 
 The recommended first-run path is:
 
 1. Install nanobot.
-2. Let the installer open `nanobot webui` on a fresh local desktop.
-3. Configure a provider and model in **Settings → Models**.
-4. Send `Hello!` before configuring anything else.
+2. Let the installer open the setup wizard on a fresh local desktop.
+3. Configure a provider and model in the wizard.
+4. Send `Hello!` with `nanobot agent -m "Hello!"` before configuring anything else.
 
-Most people do not need to edit JSON for the first run. The WebUI handles the initial provider, model, and local browser settings. SSH, headless, existing-config, and older-release installs retain `nanobot onboard --wizard` as a terminal fallback. After the WebUI opens, use **Settings** for models and built-in capabilities, **Settings → Channels** for chat apps, and **Apps** for Agent Plugins, CLI Apps, and MCP integrations.
+Most people do not need to edit JSON for the first run. `nanobot onboard --wizard` handles the initial provider, model, and channel settings. SSH, headless, and existing-config installs can run the same wizard at any time. After setup, edit `~/.nanobot/config.json` for models, built-in capabilities, channel settings, and MCP integrations, and use `nanobot plugins list` to see optional channel packages.
 
 ## Add One Capability
 
@@ -27,12 +27,11 @@ Pick the row that matches what you want to accomplish next:
 
 | Goal | Guide |
 |---|---|
-| Learn the browser workbench | [WebUI](./webui.md) |
 | Connect Telegram, Discord, Slack, Feishu, WeChat, Email, or another chat app | [Chat Apps](./chat-apps.md) |
 | Choose a hosted, OAuth, company, or local model | [Provider Cookbook](./provider-cookbook.md) |
 | Add model fallbacks | [Configure Model Fallback](./guides/configure-model-fallback.md) |
 | Enable web search | [Configure Web Search](./guides/configure-web-search.md) |
-| Manage Agent Plugins, CLI Apps, or MCP integrations | [WebUI Apps](./webui.md#apps) |
+| Manage Agent Plugins, CLI Apps, or MCP integrations | [CLI reference](./cli-reference.md) |
 | Add an MCP tool server | [Configure MCP Tools](./guides/configure-mcp-tools.md) |
 | Generate images | [Image Generation](./image-generation.md) |
 | Schedule work or create a local trigger | [Automations](./automations.md) |
@@ -64,7 +63,6 @@ Use reference pages to look up an exact option after you know what you are tryin
 | Every configuration field and default | [Configuration](./configuration.md) |
 | Provider and model behavior | [Providers and Models](./providers.md) |
 | Chat channel prerequisites and manual JSON | [Chat Apps](./chat-apps.md) |
-| WebSocket authentication and wire protocol | [WebSocket](./websocket.md) |
 | Python SDK classes, events, sessions, and hooks | [Python SDK](./python-sdk.md) |
 | OpenAI-compatible HTTP routes and payloads | [OpenAI-Compatible API](./openai-api.md) |
 | Runtime self-inspection and tuning | [My Tool](./my-tool.md) |
@@ -80,6 +78,5 @@ These pages explain implementation and extension points. You do not need them to
 | Understand source ownership and runtime flow | [Architecture](./architecture.md) |
 | Set up a development environment | [Development](./development.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Add a channel package | [Channel Package Guide](./channel-package-guide.md) |
-| Build the WebUI source | [WebUI Development](../webui/README.md) |
 
-If a command or screen no longer matches these docs, please [open an issue](https://github.com/HKUDS/nanobot/issues) with your nanobot version, operating system, and the page that needs correction.
+If a command or screen no longer matches these docs, please [open an issue](https://github.com/Mochi-Sora/MasonAgent/issues) with your nanobot version, operating system, and the page that needs correction.

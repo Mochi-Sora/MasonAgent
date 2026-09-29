@@ -812,16 +812,16 @@ async def test_running_service_honors_external_disable(tmp_path) -> None:
 def test_remove_job_refuses_system_jobs(tmp_path) -> None:
     service = CronService(tmp_path / "cron" / "jobs.json")
     service.register_system_job(CronJob(
-        id="dream",
-        name="dream",
+        id="heartbeat",
+        name="heartbeat",
         schedule=CronSchedule(kind="cron", expr="0 */2 * * *", tz="UTC"),
         payload=CronPayload(kind="system_event"),
     ))
 
-    result = service.remove_job("dream")
+    result = service.remove_job("heartbeat")
 
     assert result == "protected"
-    assert service.get_job("dream") is not None
+    assert service.get_job("heartbeat") is not None
 
 
 def test_remove_system_job_retires_persisted_system_job(tmp_path) -> None:
@@ -843,12 +843,12 @@ def test_remove_system_job_retires_persisted_system_job(tmp_path) -> None:
     assert service.remove_system_job("heartbeat") is False
     other = CronService(store_path)
     other.register_system_job(CronJob(
-        id="dream",
-        name="dream",
+        id="heartbeat",
+        name="heartbeat",
         schedule=CronSchedule(kind="cron", expr="0 */2 * * *", tz="UTC"),
         payload=CronPayload(kind="system_event"),
     ))
-    assert other.remove_job("dream") == "protected"
+    assert other.remove_job("heartbeat") == "protected"
 
 
 def test_remove_system_job_without_store_file(tmp_path) -> None:
@@ -1222,14 +1222,14 @@ def test_update_job_not_found(tmp_path) -> None:
 def test_update_job_rejects_system_job(tmp_path) -> None:
     service = CronService(tmp_path / "cron" / "jobs.json")
     service.register_system_job(CronJob(
-        id="dream",
-        name="dream",
+        id="heartbeat",
+        name="heartbeat",
         schedule=CronSchedule(kind="cron", expr="0 */2 * * *", tz="UTC"),
         payload=CronPayload(kind="system_event"),
     ))
-    result = service.update_job("dream", name="hacked")
+    result = service.update_job("heartbeat", name="hacked")
     assert result == "protected"
-    assert service.get_job("dream").name == "dream"
+    assert service.get_job("heartbeat").name == "heartbeat"
 
 
 def test_update_job_validates_schedule(tmp_path) -> None:

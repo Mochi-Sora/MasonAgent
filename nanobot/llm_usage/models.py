@@ -32,7 +32,7 @@ class LLMCallRecord:
             raise ValueError("LLM usage timestamps must be non-negative")
         if not self.provider.strip() or not self.model.strip():
             raise ValueError("LLM usage provider and model must be non-empty")
-        if self.source not in {"user", "api", "cron", "dream", "system"}:
+        if self.source not in {"user", "api", "cron", "dream", "consolidation", "system"}:
             raise ValueError("invalid LLM usage source")
         if not self.finish_reason.strip():
             raise ValueError("LLM usage finish_reason must be non-empty")

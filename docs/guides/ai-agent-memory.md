@@ -1,15 +1,15 @@
 # How AI Agent Memory Works in nanobot
 
 This guide explains how to use nanobot's long-term AI agent memory: session
-history, compressed archives, durable memory files, Dream consolidation, and
-Git-backed memory changes.
+history, compacted conversation summaries, the working state, SQLite long-term
+memory, and the verbatim backup that consolidation promotes from.
 
 ## What you will build
 
 - a workspace with persistent session history
-- compressed history archives for older turns
-- durable memory files such as `USER.md` and `MEMORY.md`
-- a Dream workflow for curating long-term memory
+- a working state the agent keeps current with `update_state`
+- curated long-term memory that survives across sessions
+- a searchable backup of today's turns
 
 ## When to use this
 
@@ -21,47 +21,57 @@ curated durable knowledge.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot agent -m "Hello!"
 ```
 
 ## Minimal working example
 
-Ask the agent to remember a stable fact in a normal session, then run Dream:
+Ask the agent to remember a stable fact in a normal session:
 
 ```text
-/dream
+Remember that I prefer concise release notes.
 ```
 
-Inspect recent memory changes:
+The agent records it in the working state with `update_state`, and the turn is
+captured verbatim in today's backup. A consolidation pass runs every two hours
+by default and promotes worthwhile entries from the backup into long-term memory.
+
+In a later session, ask about it:
 
 ```text
-/dream-log
+What do I prefer for release notes?
 ```
 
-The exact files live in the active workspace, usually under
-`~/.nanobot/workspace/`.
+The agent searches long-term memory with `recall_memory` (and can fall back to
+`recall_backup` for exact recent wording) before answering. Memory lives in the
+active workspace, usually under `~/.nanobot/workspace/`.
 
 ## Production notes
 
 - Use one workspace per project or personal context.
-- Keep durable facts concise; old session details belong in `history.jsonl`.
-- Use `/dream-prompt init` when a workspace needs custom memory guidance.
-- Review Git-backed memory changes when memory affects important workflows.
+- Long-term memory is curated automatically in `memory/memory.db`; set
+  `agents.defaults.memory.consolidation.modelOverride` to a cheaper model preset
+  if consolidation should not use the main model.
+- Back up the workspace's `memory/` directory, including `memory.db` and
+  `state.md`.
+- The backup tier covers the current day only; keep session history or your own
+  exports when you need exact older transcripts.
+- The memory subsystem is SQLite-based and does not support Windows.
 
 ## Security notes
 
-- Memory files may contain sensitive user or project facts.
-- Avoid sharing workspaces without reviewing `SOUL.md`, `USER.md`, and
-  `memory/MEMORY.md`.
+- Memory may contain sensitive user or project facts.
+- Avoid sharing workspaces without reviewing `SOUL.md`, `USER.md`,
+  `memory/state.md`, and `memory/memory.db`.
 - Use separate workspaces for personal and team contexts.
 
 ## Troubleshooting
 
-- If memory feels stale, run `/dream` and inspect `/dream-log`.
-- If memory changed incorrectly, use `/dream-restore` to inspect and restore
-  previous versions.
+- If memory feels stale, remember consolidation is periodic; the agent can still
+  search today's backup with `recall_backup`.
+- If a fact must survive, ask the agent to remember it; consolidation decides
+  what is promoted from the backup.
 - If a new session lacks context, confirm it uses the same workspace.
 
 ## Related nanobot docs

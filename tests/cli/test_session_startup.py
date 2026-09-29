@@ -22,7 +22,6 @@ def isolate_config_path(monkeypatch: pytest.MonkeyPatch) -> None:
         ["gateway", "--foreground"],
         ["gateway", "--background"],
         ["serve"],
-        ["webui", "--yes", "--no-open"],
     ],
 )
 @pytest.mark.parametrize("override", [False, True])
@@ -90,22 +89,3 @@ def test_workspace_override_can_resolve_conflict_without_saving(tmp_path: Path) 
     assert config_path.read_bytes() == before
     assert not workspace.exists()
     assert not (tmp_path / "sessions").exists()
-
-
-def test_webui_checks_resolved_workspace_before_saving(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps({"agents": {"defaults": {"workspace": "${TEST_WORKSPACE}"}}}),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("TEST_WORKSPACE", str(tmp_path))
-    before = config_path.read_bytes()
-
-    result = runner.invoke(app, ["webui", "--config", str(config_path), "--yes", "--no-open"])
-
-    assert result.exit_code == 1
-    assert "chat history must be outside" in result.stdout
-    assert config_path.read_bytes() == before
-    assert set(tmp_path.iterdir()) == {config_path}

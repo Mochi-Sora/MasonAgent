@@ -260,8 +260,6 @@ class CronTool(Tool):
 
     @staticmethod
     def _system_job_purpose(job: CronJob) -> str:
-        if job.name == "dream":
-            return "Dream memory consolidation for long-term memory."
         return "System-managed internal job."
 
     def _list_jobs(self) -> str:
@@ -286,13 +284,6 @@ class CronTool(Tool):
         if result == "removed":
             return f"Removed job {job_id}"
         if result == "protected":
-            job = self._cron.get_job(job_id)
-            if job and job.name == "dream":
-                return (
-                    "Cannot remove job `dream`.\n"
-                    "This is a system-managed Dream memory consolidation job for long-term memory.\n"
-                    "It remains visible so you can inspect it, but it cannot be removed."
-                )
             return (
                 f"Cannot remove job `{job_id}`.\n"
                 "This is a protected system-managed cron job."

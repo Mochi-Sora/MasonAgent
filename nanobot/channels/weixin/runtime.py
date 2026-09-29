@@ -492,7 +492,7 @@ class WeixinChannel(BaseChannel):
         """Write the QR-login token and base_url back to config.json.
 
         The connect flow saves account state to ``account.json`` (via
-        ``_save_state``), but the WebUI's post-connect ``enable`` step calls
+        ``_save_state``), but the interactive ``enable`` step calls
         ``set_channel_config_enabled`` which reads config.json. Without
         persisting the token here, that step would overwrite it with the
         default empty value, losing the freshly obtained credential.
@@ -923,7 +923,7 @@ class WeixinChannel(BaseChannel):
         return self._load_state()
 
     def connect_open_client(self) -> None:
-        """Open the short-lived HTTP client used by WebUI QR login."""
+        """Open the short-lived HTTP client used by QR login."""
         self._client = self._new_http_client(httpx.Timeout(60, connect=30))
         self._running = True
 

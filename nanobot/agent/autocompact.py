@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine
 from loguru import logger
 
 from nanobot.events import NO_EVENTS, EventSink
-from nanobot.session.keys import is_dream_session
 from nanobot.session.manager import Session, SessionManager
 from nanobot.session.summary import (
     SessionSummary,
@@ -70,8 +69,7 @@ class AutoCompact:
         now = datetime.now()
         for info in self.sessions.list_sessions():
             key = info.get("key", "")
-            # Dream sessions are per-run; persistent maintenance sessions still compact.
-            if not key or is_dream_session(key) or key in self._archiving:
+            if not key or key in self._archiving:
                 continue
             if key in active_session_keys:
                 continue
@@ -87,9 +85,6 @@ class AutoCompact:
                 schedule_background(self._archive(key, runtime=runtime))
 
     async def _archive(self, key: str, *, runtime: LLMRuntime) -> None:
-        if is_dream_session(key):
-            self._archiving.discard(key)
-            return
         try:
             summary = await self.consolidator.compact_idle_session(
                 key,
@@ -110,10 +105,6 @@ class AutoCompact:
             self._archiving.discard(key)
 
     def prepare_session(self, session: Session, key: str) -> tuple[Session, SessionSummary | None]:
-        if is_dream_session(key):
-            self._archiving.discard(key)
-            self._summaries.pop(key, None)
-            return session, None
         if key in self._archiving or self._is_expired(session.updated_at):
             logger.info("Auto-compact: reloading session {} (archiving={})", key, key in self._archiving)
             session = self.sessions.get_or_create(key)

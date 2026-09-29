@@ -57,5 +57,4 @@ PLUGIN = ChannelPlugin(
     display_name="Email",
     runtime=f"{__package__}.runtime:EmailChannel",
     setup=SETUP_SPEC,
-    webui="webui/index.ts",
 )

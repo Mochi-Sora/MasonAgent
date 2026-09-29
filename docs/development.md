@@ -26,7 +26,7 @@ class ProvidersConfig(BaseModel):
     myprovider: ProviderConfig = Field(default_factory=ProviderConfig)
 ```
 
-Environment variables, config matching, provider status, and WebUI credential display derive from those two entries.
+Environment variables, config matching, provider status, and credential resolution derive from those two entries.
 
 Useful `ProviderSpec` options:
 
@@ -49,7 +49,7 @@ Transcription is intentionally split into two layers:
 - `nanobot/audio/transcription_registry.py` owns provider names, aliases, default models, and adapter loading.
 - `nanobot/providers/transcription.py` owns provider-specific HTTP behavior.
 
-Credentials still live under `providers.<provider>` so chat channels and WebUI resolve API keys and API bases the same way.
+Credentials still live under `providers.<provider>` so chat channels and every other consumer resolve API keys and API bases the same way.
 
 1. Add provider credentials to `ProvidersConfig`.
 
@@ -113,8 +113,7 @@ At minimum, cover:
 
 - config resolution in `tests/providers/test_transcription.py`
 - adapter request/response behavior and retry/error handling
-- WebUI settings payload/update behavior in `tests/webui/test_settings_api.py`
-- provider brand mapping if the provider appears in Settings
+- provider brand mapping if the provider has a display name
 
 6. Update user-facing docs.
 

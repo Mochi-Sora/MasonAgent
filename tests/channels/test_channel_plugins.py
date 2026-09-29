@@ -35,7 +35,7 @@ from nanobot.channels.contracts import (
 )
 from nanobot.channels.manager import ORIGIN_REPLY_FINGERPRINTS_MAX_SIZE, ChannelManager
 from nanobot.channels.plugin import ChannelPlugin, load_channel_package
-from nanobot.config.loader import load_config, save_config
+from nanobot.config.loader import save_config
 from nanobot.config.schema import ChannelsConfig, Config
 from nanobot.providers.transcription import GroqTranscriptionProvider as _GroqProvider
 from nanobot.providers.transcription import OpenAITranscriptionProvider as _OpenAIProvider
@@ -282,7 +282,6 @@ def test_channels_config_keeps_shared_delivery_defaults():
 @pytest.mark.parametrize(
     "name",
     [
-        "websocket",
         "telegram",
         "discord",
         "slack",
@@ -410,113 +409,6 @@ def test_feature_payload_uses_unified_instance_activation(monkeypatch):
     assert payload["features"][0]["ready"] is True
     assert payload["features"][0]["status"] == "enabled"
     assert payload["enabled_count"] == 1
-
-
-def test_multi_plugin_action_defaults_to_default_instance(
-    monkeypatch,
-    tmp_path,
-):
-    from nanobot.config import loader
-    from nanobot.webui.nanobot_features_api import nanobot_features_action
-
-    class _ManagedMultiPlugin(_FakeMultiChannel):
-        name = "managedmulti"
-
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps({
-            "channels": {
-                "managedmulti": {
-                    "enabled": True,
-                    "instances": [
-                        {"id": "default", "enabled": True, "token": "default"},
-                        {"id": "product", "enabled": True, "token": "product"},
-                    ],
-                }
-            }
-        }),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(loader, "_current_config_path", config_path)
-    _stub_channel_registry(
-        monkeypatch,
-        _channel_plugin(_ManagedMultiPlugin, management=_fake_multi_management()),
-    )
-    monkeypatch.setattr("nanobot.optional_features.optional_dependency_groups", lambda: {})
-
-    disabled = nanobot_features_action("disable", {"name": ["managedmulti"]})
-    saved = json.loads(config_path.read_text(encoding="utf-8"))["channels"]["managedmulti"]
-    assert saved["enabled"] is True
-    assert [item["enabled"] for item in saved["instances"]] == [False, True]
-    assert disabled["features"][0]["enabled"] is True
-
-    enabled = nanobot_features_action("enable", {"name": ["managedmulti"]})
-    saved = json.loads(config_path.read_text(encoding="utf-8"))["channels"]["managedmulti"]
-    assert saved["enabled"] is True
-    assert [item["enabled"] for item in saved["instances"]] == [True, True]
-    assert enabled["features"][0]["enabled"] is True
-
-    explicit = nanobot_features_action(
-        "disable",
-        {"name": ["managedmulti"], "instance_id": ["default"]},
-    )
-    saved = json.loads(config_path.read_text(encoding="utf-8"))["channels"]["managedmulti"]
-    assert saved["enabled"] is True
-    assert [item["enabled"] for item in saved["instances"]] == [False, True]
-    assert explicit["features"][0]["enabled"] is True
-
-
-async def test_single_channel_enable_applies_defaults_before_hot_reload(
-    monkeypatch,
-    tmp_path,
-):
-    from nanobot.config import loader
-    from nanobot.webui.nanobot_features_api import nanobot_features_action
-
-    class _SingleDefaultsPlugin(_FakePlugin):
-        name = "singleplugin"
-
-        @classmethod
-        def default_config(cls):
-            return {
-                "enabled": False,
-                "endpoint": "https://plugin.example/api",
-                "retries": 3,
-            }
-
-        def __init__(self, config, bus):
-            super().__init__(config, bus)
-            self.endpoint = config["endpoint"]
-            self.retries = config["retries"]
-
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps({"channels": {"singleplugin": {"enabled": False}}}),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(loader, "_current_config_path", config_path)
-    _stub_channel_registry(monkeypatch, _channel_plugin(_SingleDefaultsPlugin))
-    monkeypatch.setattr("nanobot.optional_features.optional_dependency_groups", lambda: {})
-    manager = ChannelManager(
-        Config.model_validate({"channels": {"singleplugin": {"enabled": False}}}),
-        MessageBus(),
-    )
-
-    payload = nanobot_features_action("enable", {"name": ["singleplugin"]})
-    hot_reload = await manager.apply_channel_feature_action("enable", "singleplugin")
-
-    saved = json.loads(config_path.read_text(encoding="utf-8"))["channels"]["singleplugin"]
-    assert saved == {
-        "enabled": True,
-        "endpoint": "https://plugin.example/api",
-        "retries": 3,
-    }
-    assert payload["features"][0]["enabled"] is True
-    assert hot_reload["ok"] is True
-    assert hot_reload["requires_restart"] is False
-    assert set(manager.channels) == {"singleplugin"}
-    assert manager.channels["singleplugin"].endpoint == "https://plugin.example/api"
-    assert manager.channels["singleplugin"].retries == 3
 
 
 def test_channel_manager_preserves_single_instance_plugin_owned_instances(monkeypatch):
@@ -658,43 +550,6 @@ def test_plugin_contract_error_is_isolated_in_feature_payload(monkeypatch):
     assert features["setupplugin"]["configured"] is True
 
 
-def test_plugin_setup_contract_drives_save_and_validation(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-):
-    from nanobot.channels.validation import validate_channel_config
-    from nanobot.config import loader
-    from nanobot.webui.settings_routes import WebUISettingsRouter
-    from nanobot.webui.settings_services import WebUISettingsServices
-
-    config_path = tmp_path / "config.json"
-    save_config(Config(), config_path)
-    monkeypatch.setattr(loader, "_current_config_path", config_path)
-    _stub_channel_registry(
-        monkeypatch,
-        _channel_plugin(_SetupPlugin, setup=_SETUP_PLUGIN_SPEC),
-    )
-    router = object.__new__(WebUISettingsRouter)
-    router.settings = WebUISettingsServices.create(config_path)
-
-    saved = router._save_channel_config_values(
-        "setupplugin",
-        {
-            "channels.setupplugin.token": "plugin-secret",
-            "channels.setupplugin.region": "eu",
-        },
-    )
-    validation = validate_channel_config("setupplugin")
-
-    assert saved == [
-        "channels.setupplugin.token",
-        "channels.setupplugin.region",
-    ]
-    assert load_config(config_path).channels.setupplugin["token"] == "plugin-secret"
-    assert validation["status"] == "connected"
-    assert validation["checks"][0]["id"] == "plugin"
-
-
 def test_generic_plugin_validation_enforces_composite_requirements(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -748,41 +603,6 @@ def test_generic_plugin_validation_enforces_composite_requirements(
     assert "deviceId" in partial["missing_fields"]
     assert complete["status"] == "configured"
     assert complete["can_enable"] is True
-
-
-def test_webui_save_rejects_duplicate_feishu_ids_without_writing(monkeypatch, tmp_path):
-    from nanobot.config import loader
-    from nanobot.webui.settings_api import WebUISettingsError
-    from nanobot.webui.settings_routes import WebUISettingsRouter
-    from nanobot.webui.settings_services import WebUISettingsServices
-
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps({
-            "channels": {
-                "feishu": {
-                    "instances": [
-                        {"id": "default", "enabled": True, "appId": "A"},
-                        {"id": "default", "enabled": False, "appId": "B"},
-                    ]
-                }
-            }
-        }),
-        encoding="utf-8",
-    )
-    before = config_path.read_text(encoding="utf-8")
-    monkeypatch.setattr(loader, "_current_config_path", config_path)
-    router = object.__new__(WebUISettingsRouter)
-    router.settings = WebUISettingsServices.create(config_path)
-
-    with pytest.raises(WebUISettingsError, match="duplicate Feishu instance id 'default'") as error:
-        router._save_channel_config_values(
-            "feishu",
-            {"channels.feishu.appId": "updated"},
-        )
-
-    assert error.value.status == 400
-    assert config_path.read_text(encoding="utf-8") == before
 
 
 def test_discover_plugins_skips_names_outside_enabled_set():
@@ -992,46 +812,6 @@ def test_manager_reports_dependency_install_failure_as_runtime_failure(monkeypat
         "instance_id": "default",
         "error": "Channel dependencies could not be installed. Check gateway logs.",
     }
-
-
-def test_manager_loads_websocket_from_default_config():
-    from nanobot.channels.manager import ChannelManager
-
-    class _FakeWebSocket(_FakePlugin):
-        name = "websocket"
-        display_name = "WebSocket"
-
-        def __init__(self, config, bus, *, gateway):
-            super().__init__(config, bus)
-            self.gateway = gateway
-
-        @classmethod
-        def default_config(cls):
-            return {"enabled": True, "host": "127.0.0.1"}
-
-    plugin = _channel_plugin(_FakeWebSocket, default_enabled=True)
-    with patch("nanobot.channels.registry.discover_plugins", return_value={"websocket": plugin}):
-        mgr = ChannelManager(Config(), MessageBus(), webui_static_dist=False)
-
-    assert "websocket" in mgr.channels
-    assert mgr.channels["websocket"].config["enabled"] is True
-    assert mgr.channels["websocket"].config["host"] == "127.0.0.1"
-
-
-def test_manager_respects_explicitly_disabled_websocket_config():
-    from nanobot.channels.manager import ChannelManager
-
-    config = Config.model_validate({"channels": {"websocket": {"enabled": False}}})
-    plugin = ChannelPlugin(
-        name="websocket",
-        display_name="WebSocket",
-        runtime="missing.websocket.runtime:WebSocketChannel",
-        default_enabled=True,
-    )
-    with patch("nanobot.channels.registry.discover_plugins", return_value={"websocket": plugin}):
-        mgr = ChannelManager(config, MessageBus(), webui_static_dist=False)
-
-    assert "websocket" not in mgr.channels
 
 
 @pytest.mark.asyncio
@@ -1753,14 +1533,14 @@ def test_plugins_disable_channel_writes_config(monkeypatch, tmp_path):
     assert data["channels"]["matrix"]["homeserver"] == "keep"
 
 
-def test_plugins_disable_rejects_non_channel_and_allows_websocket(monkeypatch, tmp_path):
+def test_plugins_disable_rejects_non_channel_and_allows_channel(monkeypatch, tmp_path):
     from typer.testing import CliRunner
 
     from nanobot.cli.commands import app
 
     config_path = tmp_path / "config.json"
     runner = CliRunner()
-    _stub_channel_packages(monkeypatch, "matrix", "websocket")
+    _stub_channel_packages(monkeypatch, "matrix", "discord")
     monkeypatch.setattr(
         "nanobot.optional_features.optional_dependency_groups",
         lambda: {"bedrock": ["boto3>=1.43.0"]},
@@ -1770,38 +1550,19 @@ def test_plugins_disable_rejects_non_channel_and_allows_websocket(monkeypatch, t
         app,
         ["plugins", "disable", "bedrock", "--config", str(config_path)],
     )
-    websocket = runner.invoke(
+    discord = runner.invoke(
         app,
-        ["plugins", "disable", "websocket", "--config", str(config_path)],
+        ["plugins", "disable", "discord", "--config", str(config_path)],
     )
 
     assert non_channel.exit_code == 1
     assert "Feature 'bedrock' cannot be disabled" in non_channel.output
-    assert websocket.exit_code == 0
-    assert "Disabled channel 'websocket'" in websocket.output
-    assert json.loads(config_path.read_text(encoding="utf-8"))["channels"]["websocket"][
+    assert discord.exit_code == 0
+    assert "Disabled channel 'discord'" in discord.output
+    assert json.loads(config_path.read_text(encoding="utf-8"))["channels"]["discord"][
         "enabled"
     ] is False
 
-
-def test_enable_optional_feature_blocks_install_when_disallowed(monkeypatch, tmp_path):
-    from nanobot.optional_features import OptionalFeatureError, enable_optional_feature
-
-    config_path = tmp_path / "config.json"
-    monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
-    _stub_channel_registry(monkeypatch)
-    monkeypatch.setattr(
-        "nanobot.optional_features.optional_dependency_groups",
-        lambda: {"bedrock": ["boto3>=1.43.0"]},
-    )
-    monkeypatch.setattr("nanobot.optional_features.extra_installed", lambda _name, _deps: False)
-
-    with pytest.raises(OptionalFeatureError) as exc:
-        enable_optional_feature("bedrock", config_path=config_path, allow_install=False)
-
-    assert exc.value.status == 403
-    assert "remote WebUI is disabled" in exc.value.message
-    assert not config_path.exists()
 
 
 def test_enable_optional_feature_skips_install_when_dependency_present(
@@ -1831,7 +1592,7 @@ def test_enable_optional_feature_skips_install_when_dependency_present(
 
     monkeypatch.setattr("nanobot.optional_features.install_extra", _install_extra)
 
-    payload = enable_optional_feature("bedrock", config_path=config_path, allow_install=False)
+    payload = enable_optional_feature("bedrock", config_path=config_path)
 
     assert install_calls == []
     assert payload["last_action"]["message"] == "Enabled feature 'bedrock'"
@@ -1892,46 +1653,6 @@ def test_enable_optional_feature_reports_install_failure(monkeypatch, tmp_path):
     assert not config_path.exists()
 
 
-def test_install_only_adds_channel_support_without_enabling_it(monkeypatch, tmp_path):
-    from nanobot.optional_features import InstallResult
-    from nanobot.webui.nanobot_features_api import nanobot_features_action
-
-    config_path = tmp_path / "config.json"
-    config_path.write_text(
-        json.dumps({"channels": {"fakeplugin": {"enabled": False, "marker": "keep"}}}),
-        encoding="utf-8",
-    )
-    before = config_path.read_bytes()
-    _stub_channel_registry(
-        monkeypatch,
-        _channel_plugin(_FakePlugin, dependencies=("fake-sdk>=1",)),
-    )
-    monkeypatch.setattr("nanobot.optional_features.optional_dependency_groups", lambda: {})
-    installed = False
-
-    def extra_installed(_name: str, _dependencies: list[str] | None) -> bool:
-        return installed
-
-    def install_extra(name: str, dependencies: list[str], *, runner) -> InstallResult:
-        nonlocal installed
-        installed = True
-        return InstallResult(True, f"{name} support", ["pip", *dependencies])
-
-    monkeypatch.setattr("nanobot.optional_features.extra_installed", extra_installed)
-    monkeypatch.setattr("nanobot.optional_features.install_extra", install_extra)
-
-    payload = nanobot_features_action(
-        "enable",
-        {"name": ["fakeplugin"], "install_only": ["true"]},
-        config_path=config_path,
-    )
-
-    feature = payload["features"][0]
-    assert config_path.read_bytes() == before
-    assert feature["installed"] is True
-    assert feature["enabled"] is False
-    assert payload["requires_restart"] is True
-
 
 def test_disable_optional_feature_rejects_unknown_features_and_non_channels(
     monkeypatch,
@@ -1941,7 +1662,7 @@ def test_disable_optional_feature_rejects_unknown_features_and_non_channels(
 
     config_path = tmp_path / "config.json"
     monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
-    _stub_channel_packages(monkeypatch, "matrix", "websocket")
+    _stub_channel_packages(monkeypatch, "matrix", "discord")
     monkeypatch.setattr(
         "nanobot.optional_features.optional_dependency_groups",
         lambda: {"bedrock": ["boto3>=1.43.0"]},
@@ -1969,7 +1690,7 @@ def test_disable_optional_feature_writes_channel_disabled(monkeypatch, tmp_path)
         json.dumps({"channels": {"matrix": {"enabled": True, "homeserver": "keep"}}}),
         encoding="utf-8",
     )
-    _stub_channel_packages(monkeypatch, "matrix", "websocket")
+    _stub_channel_packages(monkeypatch, "matrix", "discord")
     monkeypatch.setattr("nanobot.optional_features.optional_dependency_groups", lambda: {})
 
     payload = disable_optional_feature("matrix", config_path=config_path)
@@ -1980,10 +1701,10 @@ def test_disable_optional_feature_writes_channel_disabled(monkeypatch, tmp_path)
     assert payload["last_action"]["message"] == "Disabled channel 'matrix'"
     assert payload["requires_restart"] is True
 
-    payload = disable_optional_feature("websocket", config_path=config_path)
+    payload = disable_optional_feature("discord", config_path=config_path)
     data = json.loads(config_path.read_text(encoding="utf-8"))
-    assert data["channels"]["websocket"]["enabled"] is False
-    assert payload["last_action"]["message"] == "Disabled channel 'websocket'"
+    assert data["channels"]["discord"]["enabled"] is False
+    assert payload["last_action"]["message"] == "Disabled channel 'discord'"
 
 
 def test_disable_multi_instance_channel_without_importing_runtime(monkeypatch, tmp_path):
@@ -2080,7 +1801,7 @@ def test_optional_features_payload_counts_enabled_channel_with_missing_dependenc
     assert payload["enabled_count"] == 1
 
 
-def test_live_runtime_status_overrides_enabled_configuration_for_webui():
+def test_live_runtime_status_overrides_enabled_configuration():
     from nanobot.optional_features import with_channel_runtime_status
 
     payload = {
@@ -2130,7 +1851,6 @@ def test_package_manifest_metadata_drives_optional_feature_payload(monkeypatch):
         dependencies=("demo-sdk>=1",),
         default_enabled=True,
         capabilities=frozenset({"custom_ui"}),
-        webui="webui/entry.tsx",
     )
     config = Config.model_validate({"channels": {"demo": {"enabled": False}}})
     checked_extras: list[tuple[str, list[str] | None]] = []
@@ -2153,7 +1873,6 @@ def test_package_manifest_metadata_drives_optional_feature_payload(monkeypatch):
     assert checked_extras == [("demo", ["demo-sdk>=1"])]
     assert demo["display_name"] == "Demo Chat"
     assert demo["capabilities"] == ["custom_ui"]
-    assert demo["webui"] == "webui/entry.tsx"
 
 
 def test_optional_features_payload_reflects_saved_channel_config(monkeypatch):
@@ -3783,27 +3502,6 @@ async def test_notify_restart_done_waits_until_channel_starts():
     assert sent_msg.channel == "feishu"
     assert sent_msg.chat_id == "oc_123"
     assert sent_msg.content.startswith("Restart completed")
-
-
-@pytest.mark.asyncio
-async def test_websocket_restart_notice_does_not_overwrite_recovery_state():
-    """WebSocket attach/recovery events already own reconnect state."""
-    fake_config = SimpleNamespace(
-        channels=ChannelsConfig(),
-        providers=SimpleNamespace(groq=SimpleNamespace(api_key="")),
-    )
-    mgr = ChannelManager.__new__(ChannelManager)
-    mgr.config = fake_config
-    mgr.bus = MessageBus()
-    channel = _StartableChannel(fake_config, mgr.bus)
-    channel._running = True
-    mgr.channels = {"websocket": channel}
-    mgr._send_with_retry = AsyncMock()
-
-    notice = RestartNotice(channel="websocket", chat_id="chat", started_at_raw="100.0")
-    await mgr._send_restart_notice_when_started(notice)
-
-    mgr._send_with_retry.assert_not_awaited()
 
 
 @pytest.mark.asyncio

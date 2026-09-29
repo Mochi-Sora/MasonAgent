@@ -15,7 +15,6 @@ from nanobot.cli.process_identity import named_executable, set_cli_process_ident
     [
         (["agent"], "nanobot-agent"),
         (["gateway", "--background"], "nanobot-gateway"),
-        (["webui"], "nanobot-webui"),
         (["status"], "nanobot"),
         ([], "nanobot"),
     ],
@@ -52,10 +51,10 @@ def test_legacy_console_entrypoint_still_sets_subcommand_identity(
     commands: list[list[str]] = []
     monkeypatch.setattr("nanobot.cli.commands.set_cli_process_identity", commands.append)
 
-    result = CliRunner().invoke(app, ["webui", "--help"])
+    result = CliRunner().invoke(app, ["gateway", "--help"])
 
     assert result.exit_code == 0
-    assert commands == [["webui"]]
+    assert commands == [["gateway"]]
 
 
 def test_legacy_console_entrypoint_routes_bare_command_to_agent(

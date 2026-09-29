@@ -8,7 +8,7 @@ from nanobot.channels.weixin.validation import validate
 
 SETUP_SPEC = ChannelSetupSpec(
     fields={
-        # QR-managed credentials must not be exposed to generic WebUI autosave.
+        # QR-managed credentials are provisioned by the QR login flow; keep them out of setup forms.
         "token": field("secret", writable=False, snapshot=False),
         "allowFrom": field("list"),
         "baseUrl": field(default="https://ilinkai.weixin.qq.com"),
@@ -42,5 +42,4 @@ PLUGIN = ChannelPlugin(
         "qrcode[pil]>=8.0",
         "pycryptodome>=3.20.0",
     ),
-    webui="webui/index.tsx",
 )

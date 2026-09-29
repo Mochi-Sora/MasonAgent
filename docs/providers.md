@@ -2,24 +2,7 @@
 
 Use this page when the first reply fails because of provider/model mismatch, or when you want to adapt the concrete setup example to a different provider. If you already know which provider you want and only need a pasteable setup, use [`provider-cookbook.md`](./provider-cookbook.md).
 
-For normal local setup, open **Settings → Models** in the WebUI to add provider credentials, create a model preset, and select the active model. Use the JSON below for manual deployments, local endpoints, provider-specific fields, or diagnosis.
-
-The model picker fetches online catalogs for OpenAI Codex, xAI Grok, and GitHub
-Copilot. An explicit authorization failure hides the picker’s search and model
-list and offers **Sign in again** using the existing provider login flow.
-Successful WebUI sign-in clears the catalog cache and restores model selection.
-Existing presets, selected models, and unsaved preset details are preserved.
-Network, rate-limit, and service failures instead keep cached or built-in lists
-available, label them as potentially out of date, and ask you to try again later
-(failed refreshes are cached briefly). Manual model IDs remain available for
-these temporary failures. A successful chat may have used a fallback preset and
-does not prove that the selected provider's authorization is still valid.
-When a live chat uses a fallback model, a dismissible notice above the composer
-names that model and links to model settings. If the provider explicitly rejected
-OAuth credentials, the notice instead names the provider that needs a new login,
-with fallback completion as secondary information. Network errors, ordinary
-permission denials, and rate limits do not request reauthentication. The notice
-does not change your selected preset.
+For normal local setup, run `nanobot onboard --wizard` to add provider credentials and create a model preset, or edit `config.json` directly. Use the JSON below for manual deployments, local endpoints, provider-specific fields, or diagnosis.
 
 For every setup, answer three questions:
 
@@ -171,8 +154,7 @@ the built-in `orcarouter` provider and use a model ID from OrcaRouter's catalog:
 Use the model ID exactly as OrcaRouter lists it. `orcarouter/auto` routes to a
 suitable upstream automatically; explicit IDs such as
 `anthropic/claude-sonnet-4.6` or `openai/gpt-5` are also accepted. OrcaRouter API keys start with
-`sk-orca-`. The WebUI can load the account's model catalog after the API key is saved under
-**Settings → Models**.
+`sk-orca-`. Use OrcaRouter's catalog to pick a currently available model ID.
 
 ### Eden AI Gateway
 
@@ -204,8 +186,7 @@ the full `provider/model` identifier listed by Eden AI:
 
 Nanobot sends the model ID unchanged, including its provider prefix. Use
 Eden AI's [model listing](https://www.edenai.co/docs/v3/llms/listing-models)
-to choose a currently available model. The WebUI can also load that catalog
-after the Eden AI API key is saved under **Settings → Models**.
+to choose a currently available model.
 
 ### OpenCode Zen and Go
 
@@ -336,9 +317,9 @@ Arbitrary custom provider names are OpenAI-compatible only; they do not use the 
 }
 ```
 
-`providers.openai.apiType` may be set when you need to force a specific OpenAI API surface. Other providers reject `apiType`; leave it unset outside `providers.openai`. Replace the model with a model ID available to your OpenAI account. Direct OpenAI Responses, OpenAI Codex, Azure OpenAI Responses, and eligible GitHub Copilot models share [opaque Responses state retention](./configuration.md#responses-state-and-compaction); native compaction is enabled only where the backend supports it. The WebUI exposes provider-native switches for OpenAI web search, Codex Fast mode, DeepSeek web search, and Grok X Search. These switches write the corresponding raw provider request fields under `extraBody`.
+`providers.openai.apiType` may be set when you need to force a specific OpenAI API surface. Other providers reject `apiType`; leave it unset outside `providers.openai`. Replace the model with a model ID available to your OpenAI account. Direct OpenAI Responses, OpenAI Codex, Azure OpenAI Responses, and eligible GitHub Copilot models share [opaque Responses state retention](./configuration.md#responses-state-and-compaction); native compaction is enabled only where the backend supports it. Provider-native features for OpenAI web search, Codex Fast mode, DeepSeek web search, and Grok X Search are enabled by setting the corresponding raw provider request fields under `extraBody`.
 
-DeepSeek is the model-level exception in the OpenAI-compatible provider: `deepseek-v4-flash` and `deepseek-v4-pro` automatically use DeepSeek's native Responses API. Its native `web_search` tool is enabled by default and shows its lifecycle in WebUI chat activity; set `providers.deepseek.extraBody.tools` to `[]` to disable it.
+DeepSeek is the model-level exception in the OpenAI-compatible provider: `deepseek-v4-flash` and `deepseek-v4-pro` automatically use DeepSeek's native Responses API. Its native `web_search` tool is enabled by default and shows its lifecycle in the chat transcript; set `providers.deepseek.extraBody.tools` to `[]` to disable it.
 
 ### Custom OpenAI-Compatible Endpoint
 
@@ -589,9 +570,9 @@ For OpenAI Codex:
 nanobot provider login openai-codex --set-main
 ```
 
-The WebUI reads the account's Codex model catalog online, including current
-context-window and reasoning-effort metadata. A small compatible catalog remains
-available when the service cannot be reached.
+nanobot refreshes the account's Codex model catalog online, including current
+context-window and reasoning-effort metadata, and falls back to a small compatible
+catalog when the service cannot be reached.
 
 For an eligible X Premium / Grok subscription:
 
@@ -599,19 +580,19 @@ For an eligible X Premium / Grok subscription:
 nanobot provider login xai-grok --set-main
 ```
 
-This selects `xai-grok/grok-4.6`. The WebUI model selector reads xAI's online
-model catalog, so newly available subscription models appear without a nanobot
+This selects `xai-grok/grok-4.6`. nanobot reads xAI's online
+model catalog, so newly available subscription models work without a nanobot
 release. Online metadata is cached and enriched with nanobot's curated labels;
 if xAI is temporarily unavailable, nanobot uses the last successful catalog or
-a small built-in fallback instead of emptying the selector. The same catalog
+a small built-in fallback. The same catalog
 controls whether the provider exposes the hosted `x_search` tool; models that do
 not advertise support continue without hosted X Search.
 When enabled, Grok can search current X posts and return inline source links
 without invoking a local nanobot tool. Credentials are stored under the
 active instance's `auth/xai.json` (normally `~/.nanobot/auth/xai.json`), not in
 `config.json` and not in Grok Build's credential file.
-Hosted X Search remains enabled by default and can be disabled with the WebUI
-switch or `providers.xaiGrok.extraBody.tools: []`.
+Hosted X Search remains enabled by default and can be disabled with
+`providers.xaiGrok.extraBody.tools: []`.
 
 The login is xAI subscription OAuth, not X Developer OAuth. It follows the
 public client contract documented and implemented by
@@ -620,22 +601,15 @@ xAI may change that upstream contract independently of nanobot.
 
 For GitHub Copilot:
 
-You can also sign in from the WebUI's model settings. The sign-in dialog shows a
-device code: copy it, select **Open GitHub**, and enter the code on GitHub. Keep
-the dialog open; nanobot detects approval and refreshes the model catalog
-automatically. Closing the dialog cancels the pending sign-in without replacing
-your saved credentials. This works from a remote browser too; no browser needs
-to open on the gateway machine.
-
-For terminal sign-in:
-
 ```bash
 nanobot provider login github-copilot --set-main
 ```
 
-The WebUI reads the models enabled for the signed-in Copilot account. nanobot
+The login prints a device code; enter it on GitHub while the command waits.
+
+nanobot reads the models enabled for the signed-in Copilot account and
 lists entries that support its current Copilot chat-completions or Responses
-transport and hides models that it cannot route safely.
+transport, hiding models that it cannot route safely.
 
 Each command authenticates the selected provider and makes its current default model active. OpenAI Codex and eligible GitHub Copilot models participate in [Responses state retention](./configuration.md#responses-state-and-compaction), while native compaction remains provider-capability-specific. OAuth providers are not valid automatic fallbacks. See [`troubleshooting.md`](./troubleshooting.md#provider-and-model-problems) for proxy, headless-login, model-name, and config-key errors.
 

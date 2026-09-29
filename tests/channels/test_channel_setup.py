@@ -1,6 +1,4 @@
 import ast
-import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -28,7 +26,6 @@ EXPECTED_CHANNELS = {
     "signal",
     "slack",
     "telegram",
-    "websocket",
     "wecom",
     "weixin",
     "whatsapp",
@@ -39,27 +36,6 @@ INTERNAL_CHANNEL_FIELDS = {
     "signal": {"allowFrom"},
     "weixin": {"token"},
     "whatsapp": {"databasePath", "lidMappings"},
-    # nanobot WebUI owns this transport and intentionally has no channel dialog.
-    "websocket": {
-        "allowFrom",
-        "host",
-        "maxMessageBytes",
-        "path",
-        "pingIntervalS",
-        "pingTimeoutS",
-        "port",
-        "publicWsUrl",
-        "sslCertfile",
-        "sslKeyfile",
-        "streaming",
-        "token",
-        "tokenIssuePath",
-        "tokenIssueSecret",
-        "tokenTtlS",
-        "trustedProxyAuth",
-        "unixSocketPath",
-        "websocketRequiresToken",
-    },
 }
 
 
@@ -121,7 +97,7 @@ def test_channel_setup_spec_separates_writable_and_snapshot_fields() -> None:
     assert "allowFrom" not in discord.snapshot_fields
 
 
-def test_webui_forms_have_writable_mattermost_and_whatsapp_contracts() -> None:
+def test_forms_have_writable_mattermost_and_whatsapp_contracts() -> None:
     mattermost = channel_setup_spec("mattermost")
     whatsapp = channel_setup_spec("whatsapp")
 
@@ -167,39 +143,9 @@ def test_every_channel_is_a_self_contained_package() -> None:
         assert plugin.name == name
         assert plugin.runtime.startswith(f"nanobot.channels.{name}.runtime:")
         assert plugin.setup is channel_setup_spec(name)
-        if plugin.webui is not None:
-            assert (package_dir / plugin.webui).is_file()
 
 
-def test_channel_locales_cover_authoritative_setup_contracts() -> None:
-    channel_dir = Path(channel_setup_module.__file__).parent
-    for name in EXPECTED_CHANNELS:
-        plugin = load_channel_package(name)
-        assert plugin is not None
-        if plugin.webui is None or plugin.setup is None:
-            continue
-        english = json.loads(
-            (channel_dir / name / "webui" / "locales" / "en.json").read_text(encoding="utf-8")
-        )
-        setup_messages = english["setup"]
-        field_messages = setup_messages.get("fields", {})
-        contract_message_keys = {
-            re.sub(r"[^A-Za-z0-9_-]+", "_", field_name)
-            for field_name in plugin.setup.fields
-        }
-        assert not set(field_messages) - contract_message_keys, (
-            f"{name} has locale copy for fields outside its setup contract"
-        )
-        for field_name, field in plugin.setup.fields.items():
-            if not field.writable:
-                continue
-            message_key = re.sub(r"[^A-Za-z0-9_-]+", "_", field_name)
-            assert message_key in field_messages, f"{name} field {field_name} has no locale copy"
-        if plugin.setup.official_url:
-            assert setup_messages.get("officialLabel"), f"{name} has no localized official label"
-
-
-def test_every_runtime_channel_field_has_a_webui_contract() -> None:
+def test_every_runtime_channel_field_has_a_setup_contract() -> None:
     for name, plugin in discover_plugins().items():
         runtime_fields = _flatten_channel_fields(plugin.load_channel_class().default_config())
         runtime_fields.discard("enabled")
@@ -209,14 +155,14 @@ def test_every_runtime_channel_field_has_a_webui_contract() -> None:
         internal_fields = INTERNAL_CHANNEL_FIELDS.get(name, set())
 
         assert not runtime_fields - contract_fields - internal_fields, (
-            f"{name} runtime fields missing from WebUI contract: "
+            f"{name} runtime fields missing from setup contract: "
             f"{sorted(runtime_fields - contract_fields - internal_fields)}"
         )
         assert not {
             field_name
             for field_name in runtime_fields - internal_fields
             if field_name not in setup.route_field_types
-        }, f"{name} has user-configurable runtime fields that WebUI cannot save"
+        }, f"{name} has user-configurable runtime fields that cannot be saved"
 
 
 def test_channel_manifests_only_import_contract_modules() -> None:
@@ -246,7 +192,7 @@ def test_channel_manifests_only_import_contract_modules() -> None:
         assert not unexpected, f"{name} imports runtime dependencies: {unexpected}"
 
 
-def test_feishu_package_manifest_owns_runtime_and_webui_metadata() -> None:
+def test_feishu_package_manifest_owns_runtime_metadata() -> None:
     plugin = load_channel_package("feishu")
 
     assert plugin is not None
@@ -254,17 +200,15 @@ def test_feishu_package_manifest_owns_runtime_and_webui_metadata() -> None:
     assert plugin.dependencies == ("lark-oapi>=1.5.0,<2.0.0",)
     assert plugin.connector == "nanobot.channels.feishu.connect:FeishuConnectStore"
     assert plugin.management.multi_instance is True
-    assert plugin.webui == "webui/index.tsx"
 
 
-def test_weixin_package_manifest_owns_runtime_and_webui_metadata() -> None:
+def test_weixin_package_manifest_owns_runtime_metadata() -> None:
     plugin = load_channel_package("weixin")
 
     assert plugin is not None
     assert plugin.runtime == "nanobot.channels.weixin.runtime:WeixinChannel"
     assert plugin.dependencies == ("qrcode[pil]>=8.0", "pycryptodome>=3.20.0")
     assert plugin.connector == "nanobot.channels.weixin.connect:WeixinConnectStore"
-    assert plugin.webui == "webui/index.tsx"
 
 
 def test_whatsapp_package_manifest_owns_browser_connector() -> None:
@@ -272,14 +216,12 @@ def test_whatsapp_package_manifest_owns_browser_connector() -> None:
 
     assert plugin is not None
     assert plugin.connector == "nanobot.channels.whatsapp.connect:WhatsAppConnectStore"
-    assert plugin.webui == "webui/index.tsx"
 
 
 def test_mochat_package_manifest_exposes_required_setup() -> None:
     plugin = load_channel_package("mochat")
 
     assert plugin is not None
-    assert plugin.webui == "webui/index.ts"
     assert plugin.settings_visible is True
     assert plugin.setup is not None
     assert plugin.setup.simple_required_fields == ("clawToken",)
@@ -303,17 +245,6 @@ for name in {sorted(EXPECTED_CHANNELS)!r}:
     )
 
     assert result.returncode == 0, result.stderr
-
-
-def test_channel_plugin_normalizes_webui_entry() -> None:
-    plugin = ChannelPlugin(
-        name="demo",
-        display_name="Demo",
-        runtime="example.demo.runtime:DemoChannel",
-        webui="webui\\index.tsx",
-    )
-
-    assert plugin.webui == "webui/index.tsx"
 
 
 def test_channel_plugin_name_must_match_package_identifier() -> None:
@@ -349,13 +280,3 @@ def test_channel_default_enabled_uses_package_manifest(monkeypatch) -> None:
 
     assert channel_default_enabled("demo") is True
     assert channel_default_enabled("missing") is False
-
-
-def test_websocket_manifest_declares_the_only_default_enabled_channel() -> None:
-    enabled = {
-        name
-        for name in EXPECTED_CHANNELS
-        if (plugin := load_channel_package(name)) is not None and plugin.default_enabled
-    }
-
-    assert enabled == {"websocket"}

@@ -624,7 +624,7 @@ class FallbackProvider(LLMProvider):
             if fallback_response.finish_reason != "error":
                 # Do not publish a model switch merely because a fallback was
                 # attempted.  A fallback can fail just like the primary, and
-                # the WebUI would otherwise show a misleading success signal.
+                # consumers would otherwise show a misleading success signal.
                 # Publish only after this response is known to be usable.
                 await self._notify_fallback_model(fallback_model, primary_response)
                 logger.info(

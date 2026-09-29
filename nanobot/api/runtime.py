@@ -1,4 +1,4 @@
-"""Background process control for the WebUI-managed OpenAI-compatible API."""
+"""Background process control for the managed OpenAI-compatible API."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def api_runtime_paths(config_path: Path) -> ProcessRuntimePaths:
 
 
 class ApiRuntime(ManagedProcessRuntime[ApiStartOptions]):
-    """Manage a WebUI-controlled OpenAI-compatible API process."""
+    """Manage a background ``nanobot serve`` process."""
 
     service_name = "api"
 

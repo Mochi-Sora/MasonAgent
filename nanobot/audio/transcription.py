@@ -61,7 +61,7 @@ class EffectiveTranscriptionConfig:
 
 
 class TranscriptionIngressError(Exception):
-    """Stable transcription upload error surfaced to WebUI clients."""
+    """Stable transcription upload error surfaced to callers."""
 
     def __init__(self, detail: str, **extra: Any):
         super().__init__(detail)
@@ -153,7 +153,7 @@ async def transcribe_audio_data_url(
     *,
     duration_ms: Any = None,
 ) -> str:
-    """Validate, persist, transcribe, and remove a WebUI audio data URL."""
+    """Validate, persist, transcribe, and remove an uploaded audio data URL."""
     if not isinstance(data_url, str) or not data_url:
         raise TranscriptionIngressError("missing_audio")
     if not config.enabled:
@@ -176,7 +176,7 @@ async def transcribe_audio_data_url(
     try:
         audio_path = save_base64_data_url(
             data_url,
-            get_media_dir("webui-transcription"),
+            get_media_dir("transcription"),
             max_bytes=max_bytes,
         )
     except FileSizeExceeded as exc:

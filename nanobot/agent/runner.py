@@ -23,6 +23,11 @@ from nanobot.agent.context_governance import (
     TranscriptBuilder,
 )
 from nanobot.agent.hook import AgentHook, AgentHookContext, AgentRunHookContext
+from nanobot.agent.tools.capability_gate import (
+    CapabilityGate,
+    bind_capability_gate,
+    reset_capability_gate,
+)
 from nanobot.agent.tools.context import tool_log_content_allowed
 from nanobot.agent.tools.execution import execute_tool_calls
 from nanobot.agent.tools.registry import ToolRegistry
@@ -113,6 +118,8 @@ class AgentRunSpec:
     provider_state: ProviderConversationState | None = None
     llm_usage_source: LLMUsageSource | None = None
     events: EventSink = NO_EVENTS
+    # When set, only discovered tools are sent to the provider (see CapabilityGate).
+    capability_gate: CapabilityGate | None = None
 
 
 @dataclass(slots=True)
@@ -288,6 +295,7 @@ class AgentRunner:
         llm_usage_source_token = bind_llm_usage_source(
             spec.llm_usage_source or source_from_session_key(spec.session_key)
         )
+        capability_gate_token = bind_capability_gate(spec.capability_gate)
 
         try:
             await hook.before_run(context)
@@ -334,6 +342,7 @@ class AgentRunner:
                         )
             finally:
                 reset_llm_usage_source(llm_usage_source_token)
+                reset_capability_gate(capability_gate_token)
 
     @staticmethod
     def _initial_transcript_and_compaction(
@@ -879,7 +888,11 @@ class AgentRunner:
         malformed_retry: bool = False,
         transcript: list[dict[str, Any]] | None,
     ) -> tuple[LLMResponse, LLMUsage]:
-        tool_definitions = spec.tools.get_definitions()
+        tool_definitions = (
+            spec.capability_gate.visible_definitions()
+            if spec.capability_gate is not None
+            else spec.tools.get_definitions()
+        )
         messages, provider_context = await self.context_governor.prepare_request(
             request_state,
             messages,

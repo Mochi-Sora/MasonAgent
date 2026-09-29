@@ -35,7 +35,7 @@ _CLASSIC_DEPENDENCIES = {
 
 
 def __getattr__(name: str) -> Any:
-    """Preserve patchable classic-agent symbols without loading them for the TUI."""
+    """Preserve patchable classic-agent symbols with lazy imports."""
     dependency = _CLASSIC_DEPENDENCIES.get(name)
     if dependency is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -66,56 +66,9 @@ def agent(
         "--logs/--no-logs",
         help="Show nanobot runtime logs during chat",
     ),
-    classic: bool = typer.Option(
-        False,
-        "--classic",
-        "--no-tui",
-        help="Use the classic Python prompt instead of the native terminal UI",
-    ),
-    theme: str = typer.Option(
-        "auto",
-        "--theme",
-        help="Terminal UI appearance: auto, dark, or light",
-    ),
 ):
     """Chat in the terminal or send one message non-interactively."""
     runtime_config = _load_runtime_config(config, workspace)
-    theme = theme.strip().lower()
-    if theme not in {"auto", "dark", "light"}:
-        raise typer.BadParameter("must be auto, dark, or light", param_hint="--theme")
-    native_tui = message is None and not classic
-    if native_tui:
-        from nanobot.cli.tui_launcher import TuiSessionError, TuiUnavailableError, launch_tui
-        from nanobot.config.loader import get_config_path
-
-        if not sys.stdin.isatty() or not sys.stdout.isatty():
-            raise typer.BadParameter(
-                "the native TUI requires an interactive terminal; use --message for "
-                "one-shot input or --classic for the legacy prompt",
-                param_hint="terminal",
-            )
-        if not markdown:
-            raise typer.BadParameter("--no-markdown requires --classic", param_hint="--no-markdown")
-        if logs:
-            raise typer.BadParameter("--logs requires --classic", param_hint="--logs")
-        try:
-            exit_code = launch_tui(
-                runtime_config,
-                config_path=get_config_path().resolve(strict=False),
-                workspace_override=workspace,
-                session_id=session_id,
-                theme=theme,
-            )
-        except TuiSessionError as exc:
-            raise typer.BadParameter(str(exc), param_hint="--session") from exc
-        except TuiUnavailableError as exc:
-            console.print(f"[red]Native TUI unavailable: {exc}[/red]")
-            console.print("[dim]Use `nanobot agent --classic` only if you want the old prompt.[/dim]")
-            raise typer.Exit(1) from exc
-        else:
-            if exit_code:
-                raise typer.Exit(exit_code)
-            return
 
     from nanobot.agent.hooks import create_file_edit_activity_hook
     from nanobot.agent.tools.mcp import MCPProvider

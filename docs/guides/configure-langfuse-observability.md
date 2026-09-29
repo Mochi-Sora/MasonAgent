@@ -19,8 +19,7 @@ cost, or prompt behavior during development or production operation.
 Install nanobot and prove the agent works:
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot agent -m "Hello!"
 ```
 

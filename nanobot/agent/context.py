@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence, cast
 
+from loguru import logger
+
 from nanobot.agent.memory import MemoryStore
 from nanobot.agent.skills import SkillsLoader
 from nanobot.agent.tools import image_generation as image_generation_tools
@@ -19,6 +21,10 @@ from nanobot.bus.events import (
     RUNTIME_CONTROL_SESSION_DISCARD,
     InboundMessage,
 )
+from nanobot.memory.maintenance import maybe_rollover
+from nanobot.memory.migration import import_legacy
+from nanobot.memory.state import DEFAULT_STATE_MAX_CHARS, MemoryState
+from nanobot.memory.store import MemoryDB
 from nanobot.runtime_context import (
     RUNTIME_CONTEXT_MESSAGE_META,
     RuntimeContextBlock,
@@ -92,11 +98,39 @@ class ContextBuilder:
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md", "USER.md"]
     _SKIPPABLE_DEFAULTS = {"AGENTS.md", "USER.md"}
 
-    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None):
+    def __init__(
+        self,
+        workspace: Path,
+        timezone: str | None = None,
+        disabled_skills: list[str] | None = None,
+        memory_enabled: bool = True,
+        memory_state_max_chars: int = DEFAULT_STATE_MAX_CHARS,
+        memory_consolidation_enabled: bool = True,
+        lazy_capabilities: bool = True,
+    ):
         self.workspace = workspace
         self.timezone = timezone
         self.memory = MemoryStore(workspace)
+        self.memory_db = MemoryDB(workspace / "memory" / "memory.db", enabled=memory_enabled)
+        self.memory_state = MemoryState(workspace, max_chars=memory_state_max_chars)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
+        self._consolidation_enabled = memory_consolidation_enabled
+        self._lazy_capabilities = lazy_capabilities
+        if memory_enabled:
+            self._maintain_memory()
+
+    def _maintain_memory(self) -> None:
+        """Best-effort startup maintenance: legacy import plus the daily rollover."""
+        try:
+            import_legacy(self.workspace, self.memory_db)
+            if self.memory_db.path.exists():
+                maybe_rollover(
+                    self.memory_db,
+                    self.memory_state,
+                    consolidation_enabled=self._consolidation_enabled,
+                )
+        except Exception:
+            logger.exception("Memory maintenance failed")
 
     def build_system_prompt(
         self,
@@ -116,6 +150,9 @@ class ContextBuilder:
 
         parts.append(render_template("agent/tool_contract.md"))
 
+        if self._lazy_capabilities:
+            parts.append(render_template("agent/capability_search.md"))
+
         project_path = root.expanduser().resolve()
         if project_path != self.workspace.expanduser().resolve():
             parts.append(
@@ -125,9 +162,10 @@ class ContextBuilder:
             )
 
         if include_memory:
-            memory = self.memory.read_memory()
-            if memory and not self._is_template_content(memory, "memory/MEMORY.md"):
-                parts.append(f"# Memory\n\n## Long-term Memory\n{memory}")
+            parts.append(render_template("agent/memory.md"))
+            state = self.memory_state.read()
+            if state:
+                parts.append(f"# State\n\n{state}")
 
         active_skills = self.skills.get_always_skills()
         if active_skills:
@@ -135,12 +173,13 @@ class ContextBuilder:
             if active_content:
                 parts.append(f"# Active Skills\n\n{active_content}")
 
-        skills_summary = self.skills.build_skills_summary(
-            exclude=set(active_skills),
-            workspace=root,
-        )
-        if skills_summary:
-            parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
+        if not self._lazy_capabilities:
+            skills_summary = self.skills.build_skills_summary(
+                exclude=set(active_skills),
+                workspace=root,
+            )
+            if skills_summary:
+                parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary))
 
         if session_summary and session_summary["text"] != "(nothing)":
             parts.append(
@@ -212,8 +251,9 @@ class ContextBuilder:
                     content = load_bundled_template("SOUL.md") or content
                 if not content.strip():
                     continue
-                if filename in self._SKIPPABLE_DEFAULTS and self._is_template_content(
-                    content, filename
+                if filename in self._SKIPPABLE_DEFAULTS and (
+                    self._is_template_content(content, filename)
+                    or self._is_template_content(content, f"legacy/{filename}")
                 ):
                     continue
                 parts.append(f"## {filename}\n\n{content}")

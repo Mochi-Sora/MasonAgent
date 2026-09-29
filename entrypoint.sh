@@ -11,7 +11,7 @@ if [ "$RENDER" = "true" ]; then
     echo "[entrypoint] Render deploy — starting as $(id)"
     mkdir -p "$dir" || echo "[entrypoint] warning: mkdir $dir failed"
     config="$dir/config.json"
-    # Initialize config only when it does not already exist, so WebUI/provider
+    # Initialize config only when it does not already exist, so provider/model
     # settings edited at runtime survive restarts. The disk persists config.json
     # across deploys; overwriting it every boot would discard those changes.
     if [ ! -f "$config" ]; then

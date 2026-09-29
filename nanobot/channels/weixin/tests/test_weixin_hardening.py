@@ -61,7 +61,7 @@ def test_weixin_defaults_protect_context_quota() -> None:
     assert config.block_streaming is False
 
 
-def test_weixin_webui_manifest_covers_runtime_configuration() -> None:
+def test_weixin_manifest_covers_runtime_configuration() -> None:
     runtime_fields = set(WeixinConfig().model_dump(mode="json", by_alias=True))
 
     assert set(SETUP_SPEC.fields) == runtime_fields - {"enabled"}

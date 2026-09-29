@@ -84,7 +84,7 @@ class MyTool(Tool):
         "_runtime_vars",
         # Subsystems
         "runner", "sessions", "consolidator",
-        "dream", "auto_compact", "context", "commands",
+        "auto_compact", "context", "commands",
         # Sensitive runtime state (credentials, message routing, task tracking)
         "_pending_queues",
         "_session_locks", "_active_tasks", "_background_tasks",

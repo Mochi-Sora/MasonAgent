@@ -11,13 +11,6 @@ These commands work inside chat channels and interactive agent sessions:
 | `/status` | Show bot status |
 | `/model` | Show the current model and available model presets |
 | `/model <preset>` | Switch and persist the model preset for the current session |
-| `/dream` | Run Dream memory consolidation now |
-| `/dream-log` | Show the latest Dream memory change |
-| `/dream-log <sha>` | Show a specific Dream memory change |
-| `/dream-restore` | List recent Dream memory versions |
-| `/dream-restore <sha>` | Restore memory to the state before a specific change |
-| `/dream-prompt` | Show how Dream is being guided for memory |
-| `/dream-prompt init` | Create an editable Dream memory guide at `prompts/dream.md` |
 | `/skill` | List enabled skills and their descriptions |
 | `/trigger` | Show local trigger usage |
 | `/trigger <name>` | Create a named local trigger for the current chat/session |
@@ -115,8 +108,7 @@ nanobot trigger --config ./bot-a/config.json trg_8K4P2Q9X "Nightly report"
 nanobot trigger --workspace ./bot-a/workspace trg_8K4P2Q9X "Nightly report"
 ```
 
-Manage triggers from the WebUI Automations view. You can search, pause/resume,
-rename, delete, and copy the trigger command there. A session may have multiple
+Manage triggers from the linked chat. A session may have multiple
 triggers, just like it may have multiple scheduled automations.
 
 See [Automations](./automations.md) for how local triggers fit with scheduled

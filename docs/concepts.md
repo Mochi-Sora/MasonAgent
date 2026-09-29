@@ -12,12 +12,12 @@ nanobot has one small core loop and several ways to enter it:
 |---|---|
 | Agent loop | Builds context, selects the session, calls the provider, runs tools, and publishes replies |
 | Providers | LLM backends such as OpenRouter, Anthropic, OpenAI, Bedrock, Ollama, vLLM, and other OpenAI-compatible APIs |
-| Channels | User-facing transports such as CLI, WebUI/WebSocket, Telegram, Discord, Slack, Feishu, WeChat, Email, Mattermost, and others |
+| Channels | User-facing transports such as CLI, Telegram, Discord, Slack, Feishu, WeChat, Email, Mattermost, and others |
 | Tools | Capabilities the model may call, including files, shell, web search/fetch, MCP, cron, image generation, and subagents |
-| Memory | Workspace files and session history that keep useful context across turns |
+| Memory | Working state, SQLite long-term memory, today's backup, and session history |
 | Gateway | Long-running process that connects enabled channels and serves the health endpoint |
 
-The simplest path is `nanobot agent -m "Hello!"`: one inbound message goes through the agent loop and prints the reply in your terminal. The long-running path is `nanobot gateway`: channels receive messages from chat apps or the WebUI, publish them to the same agent loop, and send replies back to the originating channel.
+The simplest path is `nanobot agent -m "Hello!"`: one inbound message goes through the agent loop and prints the reply in your terminal. The long-running path is `nanobot gateway`: channels receive messages from chat apps, publish them to the same agent loop, and send replies back to the originating channel.
 
 ## Config vs Workspace
 
@@ -41,7 +41,7 @@ The config file controls what nanobot may use. The workspace is where nanobot ke
 
 ### Agent Workspace and Project Workspace
 
-The configured workspace is the **agent workspace**. A WebUI chat can also select
+The configured workspace is the **agent workspace**. A session can also carry
 a different **project workspace** for repository-specific work without moving the
 agent's identity or durable state.
 
@@ -72,19 +72,18 @@ A normal turn follows this flow:
 4. If the model asks for tools, the runner executes them and feeds results back to the model.
 5. The final reply is saved to the session and sent back through the channel.
 
-That flow is the same whether the message starts in the CLI, WebUI, Telegram, Discord, or another channel.
+That flow is the same whether the message starts in the CLI, Telegram, Discord, or another channel.
 
-## CLI, Gateway, API, and WebUI
+## CLI, Gateway, and API
 
 | Entry point | Command | Use it for |
 |---|---|---|
 | CLI one-shot | `nanobot agent -m "..."` | First-run checks, scripts, and quick local questions |
 | CLI interactive | `nanobot agent` | Terminal chat with persistent session history |
-| Gateway | `nanobot gateway` | Chat apps, WebUI, heartbeat, Dream, and long-running service mode |
+| Gateway | `nanobot gateway` | Chat apps, heartbeat, memory consolidation, and long-running service mode |
 | OpenAI-compatible API | `nanobot serve` | Programmatic access through `/v1/chat/completions` |
-| WebUI | `nanobot webui` | Prepare the local WebUI, start the gateway, and open the browser workbench |
 
-The WebUI launcher is the normal browser entry point. Underneath, the gateway keeps the WebSocket channel and other long-running services alive. The gateway health endpoint is on `gateway.port` (`18790` by default); the browser WebUI is served on `8765` by default, not by the health endpoint.
+The gateway keeps enabled channels and other long-running services alive. Its health endpoint is on `gateway.port` (`18790` by default).
 
 ## Provider and Model Selection
 
@@ -116,20 +115,24 @@ See [`providers.md`](./providers.md) for practical examples and [`configuration.
 
 ## Channels and Sessions
 
-Each channel maps inbound messages to a session key. That lets independent conversations keep separate history. The WebUI also supports multiple chats and workspace-scoped metadata for project workspaces.
+Each channel maps inbound messages to a session key. That lets independent conversations keep separate history.
 
 `agents.defaults.unifiedSession` can intentionally share one session across channels for a single-user multi-device setup. Leave it off if you expect separate people, groups, channels, or projects to keep separate context.
 
-## Memory, Sessions, and Dream
+## Memory and Sessions
 
-nanobot uses two related stores:
+nanobot separates short-term replay from longer-lived memory:
 
 | Store | Location | Purpose |
 |---|---|---|
 | Sessions | `<config-dir>/sessions/<workspace-id>/*.jsonl` | Recent conversation turns replayed into context |
-| Memory | `<workspace>/memory/MEMORY.md` and `<workspace>/memory/history.jsonl` | Long-term facts and consolidated history |
+| Working state | `<workspace>/memory/state.md` | Compact scratchpad (about 2 KB) kept in the system prompt and rewritten with `update_state` |
+| Long-term memory | `<workspace>/memory/memory.db` | Curated facts, preferences, and decisions, searched with `recall_memory` |
+| Backup | `<workspace>/memory/memory.db` | Today's turns captured verbatim, searched with `recall_backup`; discarded at the daily rollover |
 
-Dream is a periodic consolidation job. It reads accumulated history and updates workspace memory so useful context can survive beyond short session replay.
+Consolidation is a periodic LLM pass that promotes worthwhile backup entries into long-term memory, merges duplicates, links related memories, and writes small generated skills under `skills/`. The model never writes long-term memory directly; it keeps the working state current with `update_state` and checks `recall_memory`/`recall_backup` before claiming it does not remember something. Consolidation runs every two hours by default and once more before the daily rollover, which discards the previous days' backup and clears `state.md` in place.
+
+Memory is SQLite-backed (`memory/memory.db`) and does not support Windows. When upgrading a file-based workspace, a customized `memory/MEMORY.md` and the existing `memory/history.jsonl` are imported once and moved to `memory/legacy/`. From then on, `memory/history.jsonl` holds the archived conversation summaries written by session compaction.
 
 The configured workspace contains a `.nanobot/workspace-id` file. It contains only an
 opaque random identifier—never conversation content or credentials. Keep it with workspace
@@ -151,11 +154,9 @@ replacing them:
 | Skill | Workflow guidance loaded progressively or invoked with `$skill-name` |
 | MCP server | Runtime tools exposed to the agent |
 | CLI App | Locally managed executable whose adapter is packaged and activated like a plugin |
-| Apps | WebUI surface for reviewing and managing these capabilities |
 
 Native providers, channels, built-in tools, standalone workspace skills, and
 directly configured MCP servers keep their existing extension paths. See
-[`webui.md#apps`](./webui.md#apps) for the user-facing flow and
 [`configuration.md#agent-plugins-v1`](./configuration.md#agent-plugins-v1) for
 the package contract.
 
@@ -171,14 +172,17 @@ Tools are discovered automatically from built-in modules and plugin entry points
 - image generation;
 - subagents and runtime self-inspection.
 
-Security-sensitive controls live in [`configuration.md#security`](./configuration.md#security). For production or shared chat apps, also configure channel access controls such as `allowFrom`, pairing, or WebSocket tokens.
+Tool schemas are loaded lazily by default. Only `find_capabilities`, `update_state`, `recall_memory`, and `recall_backup` are visible up front; the model loads every other tool or skill on demand by calling `find_capabilities` with a plain-language need. The names-only capability catalog lives in that tool's description instead of the system prompt.
+
+Security-sensitive controls live in [`configuration.md#security`](./configuration.md#security). For production or shared chat apps, also configure channel access controls such as `allowFrom` or pairing.
 
 ## Background Jobs
 
 When `nanobot gateway` starts, it runs workspace-scoped automations and
 registers system jobs:
 
-- `dream`, when `agents.defaults.dream.enabled` is true;
+- `consolidation`, when `agents.defaults.memory.enabled` and `agents.defaults.memory.consolidation.enabled` are true;
+- `memory_rollover`, daily at 00:00, when `agents.defaults.memory.enabled` is true;
 - `heartbeat`, when `gateway.heartbeat.enabled` is true.
 
 Heartbeat reads `<workspace>/HEARTBEAT.md`. If the file has tasks under `## Active Tasks`, nanobot executes them and sends only useful/actionable results to the most recently active chat target. Routine "nothing changed" results are suppressed.

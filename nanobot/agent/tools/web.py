@@ -41,7 +41,7 @@ _VOLCENGINE_TIME_RANGES = {"OneDay", "OneWeek", "OneMonth", "OneYear"}
 _VOLCENGINE_DATE_RANGE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}$")
 
 
-# Single source of truth for selectable search providers (CLI wizard + WebUI).
+# Single source of truth for selectable search providers (CLI wizard and config).
 # "credential" describes what each provider needs: none / api_key / base_url /
 # optional_api_key.
 SEARCH_PROVIDER_OPTIONS: tuple[dict[str, str], ...] = (

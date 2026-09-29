@@ -195,7 +195,7 @@ class ChannelSetupSpec:
         )
 
     def to_public_dict(self, channel_name: str) -> dict[str, Any]:
-        """Serialize the writable setup contract for generic WebUI consumers."""
+        """Serialize the writable setup contract for generic settings consumers."""
         simple_required = set(self.simple_required_fields)
         fields: list[dict[str, Any]] = []
         for name, field in self.fields.items():

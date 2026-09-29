@@ -50,12 +50,12 @@ class TranscriptionConfig(Base):
     max_upload_mb: int = Field(default=25, ge=1, le=100)
 
 
-class DreamConfig(Base):
-    """Dream memory consolidation configuration."""
+class MemoryConsolidationConfig(Base):
+    """Periodic long-term memory consolidation configuration."""
 
     _HOUR_MS = 3_600_000
 
-    enabled: bool = True  # Register the periodic Dream consolidation job on startup
+    enabled: bool = True  # Register the periodic consolidation job on startup
     interval_h: int = Field(default=2, ge=1)  # Every 2 hours by default
     cron: str | None = Field(
         default=None,
@@ -64,7 +64,7 @@ class DreamConfig(Base):
     model_override: str | None = Field(
         default=None,
         validation_alias=AliasChoices("modelOverride", "model", "model_override"),
-    )  # Model preset name for Dream sessions
+    )  # Model preset name for consolidation runs
 
     def build_schedule(self, timezone: str) -> CronSchedule:
         """Build the runtime schedule, preferring the legacy cron override if present."""
@@ -76,8 +76,24 @@ class DreamConfig(Base):
         """Return a human-readable summary for logs and startup output."""
         if self.cron:
             return f"cron {self.cron} (legacy)"
-        hours = self.interval_h
-        return f"every {hours}h"
+        return f"every {self.interval_h}h"
+
+
+class MemoryConfig(Base):
+    """Long-term memory (SQLite) configuration."""
+
+    enabled: bool = True  # Capture turns and expose the memory tools
+    state_max_chars: int = Field(default=2048, ge=256, le=16384)
+    consolidation: MemoryConsolidationConfig = Field(
+        default_factory=MemoryConsolidationConfig,
+    )
+
+
+class LazyCapabilitiesConfig(Base):
+    """On-demand tool/skill discovery via `find_capabilities`."""
+
+    enabled: bool = True  # Send only discovered tools; hide the rest behind search
+    always_visible: list[str] = Field(default_factory=list)  # Extra tool names kept in every request
 
 
 class InlineFallbackConfig(Base):
@@ -154,7 +170,7 @@ class AgentDefaults(Base):
         default=60,
         ge=0,
     )  # Minimum interval in seconds between scans for idle sessions
-    dream: DreamConfig = Field(default_factory=DreamConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
     @model_validator(mode="before")
     @classmethod
@@ -398,6 +414,9 @@ class ToolsConfig(Base):
         default_factory=lambda: _lazy_default("nanobot.agent.tools.image_generation", "ImageGenerationToolConfig"),
     )
     max_session_messages_per_minute: int = Field(default=6, ge=1)
+    lazy_capabilities: LazyCapabilitiesConfig = Field(
+        default_factory=LazyCapabilitiesConfig,
+    )
     restrict_to_workspace: bool = False  # policy intent: keep tool access inside workspace when possible
     webui_allow_local_service_access: bool = Field(
         default=True,
@@ -407,14 +426,7 @@ class ToolsConfig(Base):
             "allowLocalPreviewAccess",
             "allow_local_preview_access",
         ),
-    )  # allow WebUI Full Access shell checks against localhost services; legacy allowLocalPreviewAccess still reads
-    webui_allow_remote_package_install: bool = Field(
-        default=False,
-        validation_alias=AliasChoices(
-            "webuiAllowRemotePackageInstall",
-            "webui_allow_remote_package_install",
-        ),
-    )  # allow non-local WebUI clients to install optional packages and agent skills
+    )  # allow shell checks against localhost services; legacy allowLocalPreviewAccess still reads
     mcp_servers: dict[str, MCPServerConfig] = Field(default_factory=dict)
     ssrf_whitelist: list[str] = Field(default_factory=list)  # CIDR ranges to exempt from SSRF blocking (e.g. ["100.64.0.0/10"] for Tailscale)
 
@@ -461,9 +473,13 @@ class Config(BaseSettings):
         name = self.agents.defaults.model_preset
         if name and name != "default" and name not in self.model_presets:
             raise ValueError(f"model_preset {name!r} not found in model_presets")
-        dream_name = self.agents.defaults.dream.model_override
-        if dream_name and dream_name != "default" and dream_name not in self.model_presets:
-            raise ValueError(f"Dream model preset {dream_name!r} not found in model_presets")
+        consolidation_name = self.agents.defaults.memory.consolidation.model_override
+        if consolidation_name and consolidation_name != "default":
+            if consolidation_name not in self.model_presets:
+                raise ValueError(
+                    f"Memory consolidation model preset {consolidation_name!r} "
+                    "not found in model_presets"
+                )
         for fallback in self.agents.defaults.fallback_models:
             if isinstance(fallback, str) and fallback not in self.model_presets:
                 raise ValueError(f"fallback_models entry {fallback!r} not found in model_presets")

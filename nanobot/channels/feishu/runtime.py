@@ -121,8 +121,8 @@ def fetch_feishu_app_identity(
 ) -> dict[str, str]:
     """Fetch the user-facing Feishu/Lark app identity for display.
 
-    This is best-effort metadata for WebUI presentation.  Callers should treat
-    an empty result as a normal fallback path.
+    This is best-effort presentation metadata.  Callers should treat an empty
+    result as a normal fallback path.
     """
     if not FEISHU_AVAILABLE or not app_id or not app_secret:
         return {}
@@ -614,8 +614,8 @@ def poll_registration_once(
 ) -> dict[str, Any]:
     """Poll the Feishu/Lark device-code flow once.
 
-    This non-blocking shape is used by WebUI. The CLI keeps using
-    ``_poll_registration`` to wait in the terminal.
+    This non-blocking shape lets callers poll one step at a time. The CLI keeps
+    using ``_poll_registration`` to wait in the terminal.
     """
     current_domain = domain
     base_url = _accounts_base_url(current_domain)
@@ -693,9 +693,9 @@ def sync_saved_feishu_identity_boundary(
 ) -> bool:
     """Persist the Feishu app identity marker and clear access if it changed.
 
-    WebUI connect normally handles this at save time. This startup check catches
-    manual config edits so approved users do not accidentally carry over to a
-    different Feishu/Lark app in the same local instance slot.
+    The connect flow normally handles this at save time. This startup check
+    catches manual config edits so approved users do not accidentally carry over
+    to a different Feishu/Lark app in the same local instance slot.
     """
     current_identity_key = feishu_app_identity_key(app_id, domain)
     if not current_identity_key:

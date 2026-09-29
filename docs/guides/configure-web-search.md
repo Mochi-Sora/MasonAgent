@@ -7,7 +7,7 @@ providers.
 ## What you will build
 
 - web tools enabled in nanobot
-- one search provider selected in the WebUI or `config.json`
+- one search provider selected in `config.json`
 - optional web fetch settings for page reading
 
 ## When to use this
@@ -18,8 +18,7 @@ research, source discovery, or page fetching during a task.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot agent -m "Hello!"
 ```
 
@@ -27,14 +26,6 @@ Web tools are enabled by default. Configure them only when you want a specific
 provider, API key, proxy, fetch behavior, or SSRF allowlist.
 
 ## Minimal working example
-
-For local interactive setup:
-
-1. Run `nanobot webui`.
-2. Open **Settings → Web**.
-3. Enable web search, choose a provider, and enter its API key if required.
-4. Save and restart when prompted.
-5. Ask a question that requires current information and inspect the cited sources.
 
 For manual or deployment-managed config, use the default search provider:
 
@@ -67,7 +58,7 @@ Or use an API-backed provider:
 ```
 
 Ask a question that requires current information and inspect the tool activity
-in the WebUI or logs.
+in the logs.
 
 ## Production notes
 
@@ -99,4 +90,3 @@ in the WebUI or logs.
 
 - [Configuration: Web Tools](../configuration.md#web-tools)
 - [Security](../configuration.md#security)
-- [WebUI](../webui.md)

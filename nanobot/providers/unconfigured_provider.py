@@ -1,4 +1,4 @@
-"""Provider used while the local WebUI is waiting for first-time setup."""
+"""Provider used while no usable provider configuration exists yet."""
 
 from __future__ import annotations
 

@@ -17,8 +17,7 @@ outages, local model downtime, or cost-sensitive routing.
 ## Install
 
 ```bash
-python -m pip install nanobot-ai
-nanobot onboard --wizard
+./scripts/install.sh  # from a checkout; runs the setup wizard
 nanobot agent -m "Hello!"
 ```
 
@@ -63,17 +62,11 @@ for common providers.
 
 ## Production notes
 
-- In the WebUI, a reply produced by a named fallback preset shows its provider
-  logo and preset name next to the reply timestamp. Hover, focus, or click the
-  badge for an explanation. The composer still shows your selected preset;
-  primary replies have no fallback badge. Saved replies retain the name used
-  for that invocation, even after a preset is renamed or deleted. Older replies
-  without recorded attribution and unnamed inline fallback objects are not labeled.
 - Keep fallback context windows realistic; smaller fallback windows constrain
   how much context can fit.
 - Put cheaper or faster fallbacks before expensive ones when acceptable.
 - Use `/model <preset>` for runtime switching without editing config.
-- Keep preset names human-readable; the same name appears in the WebUI and `/model`.
+- Keep preset names human-readable; the same name appears in `/model`.
 
 ## Security notes
 

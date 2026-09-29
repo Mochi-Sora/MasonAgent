@@ -50,7 +50,9 @@ def _loop(tmp_path, responses: list[str], **kwargs) -> AgentLoop:
 @pytest.mark.asyncio
 async def test_transient_session_keeps_history_without_persisting_or_durable_tools(tmp_path) -> None:
     loop = _loop(tmp_path, ["first answer", "second answer"])
-    loop.context.memory.write_memory("private durable memory")
+    # A transient session keeps private state out of its prompt (policy.persist is False,
+    # which turns off the memory contract, the working state, and the skills index).
+    loop.context.memory_state.write("private working state marker")
     key = "websocket:transient-test"
     loop.sessions.get_or_create_transient(
         key,
@@ -61,10 +63,13 @@ async def test_transient_session_keeps_history_without_persisting_or_durable_too
     await loop._process_message(_message(key, "second question"))
 
     calls = loop.provider.chat_stream_with_retry.await_args_list
-    assert "private durable memory" not in str(calls[0].kwargs["messages"])
+    assert "private working state marker" not in str(calls[0].kwargs["messages"])
     tool_names = {item["function"]["name"] for item in calls[0].kwargs["tools"]}
-    assert "read_session" in tool_names
+    assert "find_capabilities" in tool_names
     assert {"create_goal", "update_goal", "spawn", "cron"}.isdisjoint(tool_names)
+    # Durable session tools stay registered; lazy discovery only hides them from the prompt.
+    assert loop.tools.has("read_session")
+    assert "read_session" not in tool_names
     assert "first answer" in str(calls[1].kwargs["messages"])
     session = loop.sessions.get_cached(key)
     assert session is not None

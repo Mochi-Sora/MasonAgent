@@ -20,7 +20,6 @@ from nanobot.session.recovery import (
     pending_followups,
     record_pending_followup,
 )
-from nanobot.webui import session_list_index, transcript
 
 
 def _persist(manager: SessionManager, session: Session) -> None:
@@ -53,116 +52,7 @@ async def test_restart_before_model_call_waits_for_confirmation(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
-async def test_stale_incomplete_transcript_waits_for_confirmation(tmp_path: Path, monkeypatch) -> None:
-    """A materialized shutdown must not reappear as an endless Working state."""
-    sessions = SessionManager(tmp_path)
-    session = sessions.get_or_create("websocket:chat")
-    _persist(sessions, session)
-    monkeypatch.setattr(
-        "nanobot.webui.transcript.has_unfinished_transcript_tail",
-        lambda _key: True,
-    )
-
-    coordinator, bus, restarted = _coordinator(tmp_path)
-    await coordinator.scan()
-
-    assert bus.inbound.empty()
-    state = restarted.get_or_create("websocket:chat").metadata[RECOVERY_METADATA_KEY]
-    assert state["status"] == "awaiting_user"
-    assert state["reason"] == "interrupted_without_checkpoint"
-    event = bus.outbound.get_nowait().event
-    assert isinstance(event, RecoveryStateEvent)
-    assert event.status == "awaiting_user"
-
-
-@pytest.mark.asyncio
-async def test_materialized_interruption_can_continue_from_saved_context(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Older shutdowns may have cleared the checkpoint after saving partial history."""
-    sessions = SessionManager(tmp_path)
-    session = sessions.get_or_create("websocket:chat")
-    session.messages.extend(
-        [
-            {"role": "user", "content": "research this"},
-            {"role": "assistant", "content": "I will check."},
-            {"role": "tool", "tool_call_id": "search-1", "content": "saved result"},
-        ]
-    )
-    _persist(sessions, session)
-    monkeypatch.setattr(
-        "nanobot.webui.transcript.has_unfinished_transcript_tail",
-        lambda _key: True,
-    )
-
-    coordinator, bus, restarted = _coordinator(tmp_path)
-    await coordinator.scan()
-
-    state = restarted.get_or_create("websocket:chat").metadata[RECOVERY_METADATA_KEY]
-    assert state["status"] == "awaiting_user"
-    assert state["reason"] == "interrupted_with_saved_context"
-    assert "can_continue" not in state
-    event = bus.outbound.get_nowait().event
-    assert isinstance(event, RecoveryStateEvent)
-    assert event.can_continue is None
-
-    await coordinator.handle_action(
-        "continue",
-        {"chat_id": "chat", "recovery_id": state["recovery_id"]},
-    )
-
-    continuation = bus.inbound.get_nowait()
-    assert continuation.session_key_override == "websocket:chat"
-
-
-@pytest.mark.asyncio
-async def test_transcript_only_interruption_is_discovered_without_materializing_completed_history(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    webui_dir = tmp_path / "webui"
-    webui_dir.mkdir()
-    monkeypatch.setattr(session_list_index, "get_webui_dir", lambda: webui_dir)
-    monkeypatch.setattr(transcript, "get_webui_dir", lambda: webui_dir)
-    unfinished_key = "websocket:unfinished"
-    completed_key = "websocket:completed"
-    (webui_dir / f"{SessionManager.safe_key(unfinished_key)}.jsonl").write_text(
-        '{"event":"user","chat_id":"unfinished","text":"keep going"}\n'
-        '{"event":"message","chat_id":"unfinished","kind":"progress","text":"Working"}\n',
-        encoding="utf-8",
-    )
-    (webui_dir / f"{SessionManager.safe_key(completed_key)}.jsonl").write_text(
-        '{"event":"user","chat_id":"completed","text":"done"}\n'
-        '{"event":"message","chat_id":"completed","text":"finished"}\n'
-        '{"event":"turn_end","chat_id":"completed"}\n',
-        encoding="utf-8",
-    )
-    coordinator, bus, sessions = _coordinator(tmp_path / "workspace")
-
-    await coordinator.scan()
-
-    restored = sessions.get_or_create(unfinished_key)
-    assert restored.metadata[RECOVERY_METADATA_KEY]["status"] == "awaiting_user"
-    assert restored.metadata[RECOVERY_METADATA_KEY]["reason"] == "interrupted_without_checkpoint"
-    assert restored.metadata[RECOVERY_METADATA_KEY]["can_continue"] is False
-    assert sessions.read_session_metadata(completed_key) is None
-    event = bus.outbound.get_nowait().event
-    assert isinstance(event, RecoveryStateEvent)
-    assert event.status == "awaiting_user"
-    assert event.can_continue is False
-    assert bus.outbound.get_nowait().event.scope == "thread"
-    assert bus.outbound.empty()
-
-    with pytest.raises(RecoveryActionError, match="context is unavailable"):
-        await coordinator.handle_action(
-            "continue",
-            {"chat_id": "unfinished", "recovery_id": event.recovery_id},
-        )
-
-
-@pytest.mark.asyncio
-async def test_scan_loads_only_sessions_that_need_webui_recovery(
+async def test_scan_loads_only_sessions_that_need_recovery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -185,14 +75,9 @@ async def test_scan_loads_only_sessions_that_need_webui_recovery(
         return get_or_create(key)
 
     monkeypatch.setattr(restarted, "get_or_create", tracked_get_or_create)
-    monkeypatch.setattr(
-        "nanobot.webui.transcript.has_unfinished_transcript_tail",
-        lambda _key: False,
-    )
-
     await coordinator.scan()
 
-    assert loaded == ["websocket:pending"]
+    assert sorted(loaded) == ["discord:pending", "websocket:pending"]
 
 
 @pytest.mark.asyncio
@@ -372,7 +257,7 @@ async def test_unknown_checkpoint_waits_for_confirmation(tmp_path: Path) -> None
         await coordinator.handle_action(
             "continue",
             {
-                "chat_id": "chat",
+                "chat_id": "websocket:chat",
                 "recovery_id": restored.metadata[RECOVERY_METADATA_KEY]["recovery_id"],
             },
         )
@@ -380,7 +265,7 @@ async def test_unknown_checkpoint_waits_for_confirmation(tmp_path: Path) -> None
     dismissed = await coordinator.handle_action(
         "dismiss",
         {
-            "chat_id": "chat",
+            "chat_id": "websocket:chat",
             "recovery_id": restored.metadata[RECOVERY_METADATA_KEY]["recovery_id"],
         },
     )
@@ -409,7 +294,7 @@ async def test_malformed_checkpoint_can_always_be_dismissed(tmp_path: Path) -> N
 
     result = await coordinator.handle_action(
         "dismiss",
-        {"chat_id": "chat", "recovery_id": state["recovery_id"]},
+        {"chat_id": "websocket:chat", "recovery_id": state["recovery_id"]},
     )
 
     assert result["status"] == "recovered"
@@ -442,7 +327,7 @@ async def test_known_but_malformed_checkpoint_cannot_continue(tmp_path: Path) ->
     with pytest.raises(RecoveryActionError, match="context is unavailable"):
         await coordinator.handle_action(
             "continue",
-            {"chat_id": "chat", "recovery_id": state["recovery_id"]},
+            {"chat_id": "websocket:chat", "recovery_id": state["recovery_id"]},
         )
 
 
@@ -583,7 +468,7 @@ async def test_explicit_recovery_continue_queues_once(tmp_path: Path) -> None:
     state = restarted.get_or_create("websocket:chat").metadata[RECOVERY_METADATA_KEY]
     result = await coordinator.handle_action(
         "continue",
-        {"chat_id": "chat", "recovery_id": state["recovery_id"]},
+        {"chat_id": "websocket:chat", "recovery_id": state["recovery_id"]},
     )
     assert result["status"] == "resuming"
     assert bus.inbound.get_nowait().metadata["_webui_recovery_id"] == state["recovery_id"]
@@ -669,12 +554,12 @@ async def test_recovery_action_rejects_stale_page_and_continues_current_state(
     with pytest.raises(RecoveryActionError, match="stale"):
         await coordinator.handle_action(
             "continue",
-            {"chat_id": "chat", "recovery_id": "old"},
+            {"chat_id": "websocket:chat", "recovery_id": "old"},
         )
 
     result = await coordinator.handle_action(
         "continue",
-        {"chat_id": "chat", "recovery_id": "current"},
+        {"chat_id": "websocket:chat", "recovery_id": "current"},
     )
     assert result["status"] == "resuming"
     assert bus.inbound.get_nowait().metadata["_webui_recovery_id"] == "current"
@@ -720,7 +605,7 @@ async def test_dismiss_does_not_queue_work(tmp_path: Path) -> None:
 
     result = await coordinator.handle_action(
         "dismiss",
-        {"chat_id": "chat", "recovery_id": "current"},
+        {"chat_id": "websocket:chat", "recovery_id": "current"},
     )
 
     assert result["status"] == "recovered"
@@ -751,7 +636,7 @@ async def test_scan_failure_is_visible_instead_of_aborting_other_sessions(
     with pytest.raises(RecoveryActionError, match="context is unavailable"):
         await coordinator.handle_action(
             "continue",
-            {"chat_id": "chat", "recovery_id": state["recovery_id"]},
+            {"chat_id": "websocket:chat", "recovery_id": state["recovery_id"]},
         )
 
 
