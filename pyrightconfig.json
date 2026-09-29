@@ -1,0 +1,8 @@
+{
+  "include": ["nanobot"],
+  "exclude": ["**/tests", "**/node_modules", "**/__pycache__", "**/.*"],
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.11",
+  "venvPath": ".",
+  "venv": ".venv"
+}
