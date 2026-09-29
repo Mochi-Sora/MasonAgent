@@ -155,6 +155,10 @@ class TurnContext:
 
     input_persisted_early: bool = False
     save_skip: int = 0
+    # Session length before this turn's messages were persisted outside the
+    # save step (the early user message or a subagent follow-up). None keeps
+    # the historical default: capture only messages appended during save.
+    capture_start: int | None = None
 
     outbound: OutboundMessage | None = None
     suppress_response: bool = False
@@ -2086,6 +2090,7 @@ class AgentLoop:
             # Providers without assistant-prefill support drop trailing
             # assistant messages, so using the persisted record as the current
             # prompt would hide an independently dispatched subagent result.
+            ctx.capture_start = len(session.messages)
             subagent_followup_persisted = self._persist_subagent_followup(
                 session,
                 ctx.msg,
@@ -2150,6 +2155,7 @@ class AgentLoop:
         elif stored_state is not None:
             session.provider_state = None
         if ctx.kind is TurnKind.USER:
+            ctx.capture_start = len(session.messages)
             ctx.input_persisted_early = self._persist_user_message_early(
                 ctx.msg,
                 session,
@@ -2232,6 +2238,7 @@ class AgentLoop:
             turn_latency_ms=ctx.turn_latency_ms,
             summary_checkpoint=None if ctx.ephemeral else ctx.summary_checkpoint,
             input_persisted_early=ctx.input_persisted_early,
+            capture_start=ctx.capture_start,
         )
         if (
             not ctx.ephemeral
@@ -2338,6 +2345,7 @@ class AgentLoop:
         turn_latency_ms: int | None = None,
         summary_checkpoint: SessionSummaryCheckpoint | None = None,
         input_persisted_early: bool = False,
+        capture_start: int | None = None,
     ) -> None:
         """Commit new-turn messages and an optional summary boundary."""
         declared_tool_call_ids = {
@@ -2464,7 +2472,11 @@ class AgentLoop:
         if saved_followup_ids:
             acknowledge_pending_followups(session, saved_followup_ids)
         session.updated_at = datetime.now()
-        self._capture_episodes(session, capture_from)
+        # Messages persisted before this save (the early user message, a
+        # subagent follow-up) were never captured; start there so the backup
+        # keeps the user's own words, not just the assistant replies.
+        start = capture_from if capture_start is None else capture_start
+        self._capture_episodes(session, max(0, min(start, len(session.messages))))
 
     def _capture_episodes(self, session: Session, start: int) -> None:
         """Best-effort capture of this turn's messages into the memory backup tier."""

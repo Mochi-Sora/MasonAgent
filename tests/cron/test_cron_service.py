@@ -1427,3 +1427,56 @@ def test_load_jobs_skips_null_run_history_elements(tmp_path) -> None:
     assert len(jobs[0].state.run_history) == 1
     assert jobs[0].state.run_history[0].run_at_ms == 1
     assert jobs[0].state.run_history[0].status == "ok"
+
+
+def _system_job(every_ms: int) -> CronJob:
+    return CronJob(
+        id="consolidation",
+        name="consolidation",
+        schedule=CronSchedule(kind="every", every_ms=every_ms, tz="UTC"),
+        payload=CronPayload(kind="system_event"),
+    )
+
+
+def test_register_system_job_keeps_phase_for_unchanged_schedule(tmp_path) -> None:
+    """Re-registering on restart must not restart the interval clock."""
+    service = CronService(tmp_path / "cron" / "jobs.json")
+
+    service.register_system_job(_system_job(7_200_000))
+    first = service.get_job("consolidation")
+    assert first is not None
+    assert first.state.next_run_at_ms is not None
+
+    service.register_system_job(_system_job(7_200_000))
+
+    assert service.get_job("consolidation").state.next_run_at_ms == first.state.next_run_at_ms
+
+
+def test_register_system_job_recomputes_after_schedule_change(tmp_path) -> None:
+    service = CronService(tmp_path / "cron" / "jobs.json")
+
+    service.register_system_job(_system_job(3_600_000))
+    first = service.get_job("consolidation")
+    assert first is not None
+
+    service.register_system_job(_system_job(7_200_000))
+
+    assert service.get_job("consolidation").state.next_run_at_ms != first.state.next_run_at_ms
+
+
+@pytest.mark.asyncio
+async def test_start_preserves_future_system_job_phase(tmp_path) -> None:
+    """A restart recomputes user jobs but keeps a system job's pending phase."""
+    store_path = tmp_path / "cron" / "jobs.json"
+    service = CronService(store_path)
+    service.register_system_job(_system_job(7_200_000))
+    expected = service.get_job("consolidation").state.next_run_at_ms
+    assert expected is not None
+
+    restarted = CronService(store_path)
+    restarted.register_system_job(_system_job(7_200_000))
+    await restarted.start()
+    try:
+        assert restarted.get_job("consolidation").state.next_run_at_ms == expected
+    finally:
+        restarted.stop()
