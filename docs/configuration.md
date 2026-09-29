@@ -2268,7 +2268,7 @@ The deprecated `agents.defaults.failOnToolError` field is silently ignored when 
 
 ## Auto Compact
 
-When a session is idle for longer than a configured threshold, nanobot summarizes its conversation context. When you return, the model receives that summary and new messages instead of replaying the messages covered by the summary. The original conversation remains in your saved chat history, but even its most recent messages are no longer included verbatim in the model's context after idle compaction.
+Idle compaction is a backup, not a routine. A session that has been idle for longer than the configured threshold is summarized only when its next prompt would otherwise consume at least half of the model's context window, so it stays dormant unless a session is genuinely heavy. The original conversation remains in your saved chat history, but the messages covered by the summary are no longer replayed to the model, and the summary itself is never re-injected into later prompts: the system prompt remains identity plus the working state, while older context is recalled on demand with the memory tools.
 
 ```json
 {
@@ -2283,7 +2283,7 @@ When a session is idle for longer than a configured threshold, nanobot summarize
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `agents.defaults.idleCompactAfterMinutes` | `15` | Minutes of idle time before auto-compaction starts. Set to `0` to disable. The default is close to a typical LLM KV cache expiry window, so stale sessions get compacted before the user returns. |
+| `agents.defaults.idleCompactAfterMinutes` | `15` | Minutes of idle time before auto-compaction becomes eligible. Set to `0` to disable. Compaction only runs when the session's next prompt would fill at least half the context window, so it remains a dormant backup unless a session is genuinely heavy. |
 | `agents.defaults.idleCompactCheckIntervalSeconds` | `60` | Minimum number of seconds between scans for idle sessions. Set to `0` to scan on every idle tick (~1 s). |
 
 `sessionTtlMinutes` remains accepted as a legacy alias for backward compatibility, but `idleCompactAfterMinutes` is the preferred config key going forward.

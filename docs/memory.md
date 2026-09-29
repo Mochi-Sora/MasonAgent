@@ -132,8 +132,10 @@ configured agent workspace when identity or memory must be isolated.
 
 `memory/history.jsonl` is not part of the memory tiers above. It still exists as the
 append-only log of compressed conversation summaries written when session context is
-compacted, and it is what the idle-compaction pipeline uses to reconstruct archived
-turns.
+compacted, and it is what the compaction pipeline uses to reconstruct archived
+turns. Archived summaries are never re-injected into later prompts: context
+compaction only removes old turns from replay, and anything older is recalled on
+demand.
 
 ## Configuration
 

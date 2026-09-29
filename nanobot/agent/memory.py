@@ -950,18 +950,17 @@ class Consolidator:
         *,
         runtime: LLMRuntime,
     ) -> tuple[int, str]:
-        """Estimate prompt size from the full replayable session history."""
+        """Estimate prompt size from the full replayable session history.
+
+        Archived summaries are not re-injected into prompts, so the probe
+        mirrors the real request: identity, working state, and replay history.
+        """
         history = self._full_replay_history(session)
         channel = session.key.split(":", 1)[0] if ":" in session.key else None
-        summary = session_summary_from_metadata(
-            session.metadata,
-            fallback_last_active=session.updated_at,
-        )
         probe_messages = self._build_messages(
             history=history,
             current_message="[token-probe]",
             channel=channel,
-            session_summary=summary,
         )
         return estimate_prompt_tokens_chain(
             runtime.provider,

@@ -26,7 +26,9 @@ def _make_loop(
     bus = MessageBus()
     provider = MagicMock()
     provider.get_default_model.return_value = "test-model"
-    provider.estimate_prompt_tokens.return_value = (10_000, "test")
+    # Above the auto-compact size threshold (half of the 128k window) so idle
+    # sessions in these tests qualify unless a test overrides the estimate.
+    provider.estimate_prompt_tokens.return_value = (100_000, "test")
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="ok", tool_calls=[]))
     provider.generation.max_tokens = 4096
     loop = AgentLoop(
@@ -324,8 +326,8 @@ class TestAutoCompact:
         await loop.aclose()
 
     @pytest.mark.asyncio
-    async def test_auto_compact_stores_summary(self, tmp_path):
-        """_archive should store the summary in _summaries."""
+    async def test_auto_compact_stores_summary_without_prompt_injection(self, tmp_path):
+        """_archive keeps the summary as metadata, never as prompt material."""
         loop = _make_loop(tmp_path, session_ttl_minutes=15)
         session = loop.sessions.get_or_create("cli:test")
         _add_turns(session, 6, prefix="hello")
@@ -337,12 +339,12 @@ class TestAutoCompact:
 
         await loop.auto_compact._archive("cli:test", runtime=loop.llm_runtime())
 
-        entry = loop.auto_compact._summaries.get("cli:test")
-        assert entry is not None
-        assert entry["text"] == "User said hello."
         session_after = loop.sessions.get_or_create("cli:test")
         assert len(session_after.messages) == 13
         assert session_after.get_history(max_messages=12) == []
+        assert session_after.metadata["_last_summary"]["text"] == "User said hello."
+        _, summary = loop.auto_compact.prepare_session(session_after, "cli:test")
+        assert summary is None
         await loop.aclose()
 
     @pytest.mark.asyncio
@@ -356,7 +358,7 @@ class TestAutoCompact:
 
         session_after = loop.sessions.get_or_create("cli:test")
         assert len(session_after.messages) == 0
-        assert "cli:test" not in loop.auto_compact._summaries
+        assert "_last_summary" not in session_after.metadata
         await loop.aclose()
 
     @pytest.mark.asyncio
@@ -572,8 +574,9 @@ class TestAutoCompactEdgeCases:
         session_after = loop.sessions.get_or_create("cli:test")
         assert len(session_after.messages) == 13
         assert session_after.get_history(max_messages=12) == []
-        assert loop.auto_compact._summaries["cli:test"]["text"] == "(nothing)"
         assert session_after.metadata["_last_summary"]["text"] == "(nothing)"
+        _, summary = loop.auto_compact.prepare_session(session_after, "cli:test")
+        assert summary is None
 
         await loop.aclose()
 
@@ -688,18 +691,14 @@ class TestAutoCompactIntegration:
             for m in session_after.get_history(max_messages=len(session_after.messages))
         )
 
-        # Summary should NOT be persisted in session (ephemeral, one-shot)
-        assert not any(
-            "[Resumed Session]" in str(m.get("content", "")) for m in session_after.messages
-        )
-        assert resumed_system_prompt.count(overview) == 1
+        # The archived summary is a compaction artifact, not prompt material:
+        # resumed turns keep identity + state + retained messages only.
+        assert overview not in resumed_system_prompt
+        assert "[Archived Context Summary]" not in resumed_system_prompt
         # Runtime context end marker should NOT be persisted
         assert not any(
             "[/Runtime Context]" in str(m.get("content", "")) for m in session_after.messages
         )
-
-        # Pending summary should be consumed (one-shot)
-        assert "cli:test" not in loop.auto_compact._summaries
 
         # The new message should be processed (response exists)
         assert response is not None
@@ -817,9 +816,9 @@ class TestProactiveAutoCompact:
         assert len(session_after.messages) == 11
         assert session_after.get_history(max_messages=10) == []
         assert len(archived_messages) == 10
-        entry = loop.auto_compact._summaries.get("cli:test")
-        assert entry is not None
-        assert entry["text"] == "User chatted about old things."
+        assert session_after.metadata["_last_summary"]["text"] == (
+            "User chatted about old things."
+        )
         await loop.aclose()
 
     @pytest.mark.asyncio
@@ -906,7 +905,8 @@ class TestProactiveAutoCompact:
         await self._run_check_expired(loop)
 
         # Empty session should not produce a summary
-        assert "cli:test" not in loop.auto_compact._summaries
+        session_after = loop.sessions.get_or_create("cli:test")
+        assert "_last_summary" not in session_after.metadata
         await loop.aclose()
 
     @pytest.mark.asyncio
@@ -1019,11 +1019,10 @@ class TestProactiveAutoCompact:
 
         await self._run_check_expired(loop)
         assert _fake_compact.state["count"] == 0
-        assert "cli:test" not in loop.auto_compact._summaries
+        assert "_last_summary" not in loop.sessions.get_or_create("cli:test").metadata
 
         await self._run_check_expired(loop)
         assert _fake_compact.state["count"] == 0
-        assert "cli:test" not in loop.auto_compact._summaries
         await loop.aclose()
 
     @pytest.mark.asyncio
@@ -1059,7 +1058,7 @@ class TestProactiveAutoCompact:
 
 
 class TestSummaryPersistence:
-    """Test that summary survives restart via session metadata."""
+    """Archived summaries survive in metadata but never re-enter prompts."""
 
     @pytest.mark.asyncio
     async def test_summary_persisted_in_session_metadata(self, tmp_path):
@@ -1085,95 +1084,8 @@ class TestSummaryPersistence:
         await loop.aclose()
 
     @pytest.mark.asyncio
-    async def test_summary_recovered_after_restart(self, tmp_path):
-        """Summary should be recovered from metadata when _summaries is empty (simulates restart)."""
-        loop = _make_loop(tmp_path, session_ttl_minutes=15)
-        session = loop.sessions.get_or_create("cli:test")
-        _add_turns(session, 6, prefix="hello")
-        last_active = datetime.now() - timedelta(minutes=20)
-        session.updated_at = last_active
-        loop.sessions.save(session)
-
-        loop.consolidator.compact_idle_session = _make_fake_compact(
-            loop, summary="User said hello.",
-        )
-
-        # Archive
-        await loop.auto_compact._archive("cli:test", runtime=loop.llm_runtime())
-
-        # Simulate restart: clear in-memory state
-        loop.auto_compact._summaries.clear()
-        loop.sessions.invalidate("cli:test")
-
-        # prepare_session should recover summary from metadata
-        reloaded = loop.sessions.get_or_create("cli:test")
-        assert len(reloaded.messages) == 13
-        assert reloaded.get_history(max_messages=12) == []
-        _, summary = loop.auto_compact.prepare_session(reloaded, "cli:test")
-
-        assert summary is not None
-        assert summary["text"] == "User said hello."
-        # _last_summary persists in metadata for restart survival.
-        assert "_last_summary" in reloaded.metadata
-        await loop.aclose()
-
-    @pytest.mark.asyncio
-    async def test_metadata_persists_for_restart(self, tmp_path):
-        """_last_summary stays in metadata so it survives process restarts."""
-        loop = _make_loop(tmp_path, session_ttl_minutes=15)
-        session = loop.sessions.get_or_create("cli:test")
-        _add_turns(session, 6, prefix="hello")
-        session.updated_at = datetime.now() - timedelta(minutes=20)
-        loop.sessions.save(session)
-
-        loop.consolidator.compact_idle_session = _make_fake_compact(loop)
-
-        await loop.auto_compact._archive("cli:test", runtime=loop.llm_runtime())
-
-        # Clear in-memory to force metadata path
-        loop.auto_compact._summaries.clear()
-        loop.sessions.invalidate("cli:test")
-        reloaded = loop.sessions.get_or_create("cli:test")
-
-        # Every call returns the summary from metadata (no _consumed_keys gate)
-        _, summary = loop.auto_compact.prepare_session(reloaded, "cli:test")
-        assert summary is not None
-        _, summary2 = loop.auto_compact.prepare_session(reloaded, "cli:test")
-        assert summary2 is not None
-        assert summary2["text"] == "Summary."
-        # _last_summary persists in metadata for restart survival.
-        assert "_last_summary" in reloaded.metadata
-        await loop.aclose()
-
-    @pytest.mark.asyncio
-    async def test_metadata_cleanup_on_inmemory_path(self, tmp_path):
-        """In-memory _summaries path should also clean up _last_summary from metadata."""
-        loop = _make_loop(tmp_path, session_ttl_minutes=15)
-        session = loop.sessions.get_or_create("cli:test")
-        _add_turns(session, 6, prefix="hello")
-        session.updated_at = datetime.now() - timedelta(minutes=20)
-        loop.sessions.save(session)
-
-        loop.consolidator.compact_idle_session = _make_fake_compact(loop)
-
-        await loop.auto_compact._archive("cli:test", runtime=loop.llm_runtime())
-
-        # Both _summaries and metadata have the summary
-        assert "cli:test" in loop.auto_compact._summaries
-        loop.sessions.invalidate("cli:test")
-        reloaded = loop.sessions.get_or_create("cli:test")
-        assert "_last_summary" in reloaded.metadata
-
-        # In-memory path is taken (no restart)
-        _, summary = loop.auto_compact.prepare_session(reloaded, "cli:test")
-        assert summary is not None
-        # _last_summary persists in metadata for restart survival.
-        assert "_last_summary" in reloaded.metadata
-        await loop.aclose()
-
-    @pytest.mark.asyncio
     async def test_new_summary_overrides_old(self, tmp_path):
-        """A fresh archive writes a new summary that replaces the old one."""
+        """A fresh archive replaces the metadata summary used for cumulative context."""
         loop = _make_loop(tmp_path, session_ttl_minutes=15)
         session = loop.sessions.get_or_create("cli:test")
         _add_turns(session, 6, prefix="hello")
@@ -1184,14 +1096,7 @@ class TestSummaryPersistence:
             loop, summary="First summary.",
         )
         await loop.auto_compact._archive("cli:test", runtime=loop.llm_runtime())
-
-        # Consume the first summary via hot path
-        _, summary1 = loop.auto_compact.prepare_session(
-            loop.sessions.get_or_create("cli:test"), "cli:test"
-        )
-        assert summary1 is not None
-        assert summary1["text"] == "First summary."
-        assert "cli:test" not in loop.auto_compact._summaries  # popped by hot path
+        assert session.metadata["_last_summary"]["text"] == "First summary."
 
         # Add new messages and archive again (simulating a later turn)
         _add_turns(session, 4, prefix="world")
@@ -1203,14 +1108,10 @@ class TestSummaryPersistence:
         )
         await loop.auto_compact._archive("cli:test", runtime=loop.llm_runtime())
 
-        # The second archive writes a new summary
-        assert "cli:test" in loop.auto_compact._summaries
-
-        # prepare_session must return the new summary
         reloaded = loop.sessions.get_or_create("cli:test")
-        _, summary2 = loop.auto_compact.prepare_session(reloaded, "cli:test")
-        assert summary2 is not None
-        assert summary2["text"] == "Second summary."
+        assert reloaded.metadata["_last_summary"]["text"] == "Second summary."
+        _, summary = loop.auto_compact.prepare_session(reloaded, "cli:test")
+        assert summary is None
         await loop.aclose()
 
     @pytest.mark.asyncio
@@ -1239,4 +1140,85 @@ class TestSummaryPersistence:
         # After /new, metadata should no longer contain _last_summary
         fresh = loop.sessions.get_or_create("cli:test")
         assert "_last_summary" not in fresh.metadata
+        await loop.aclose()
+
+
+    @pytest.mark.asyncio
+    async def test_summary_not_reinjected_after_restart(self, tmp_path):
+        """A process restart must not resurrect the summary into later prompts."""
+        loop = _make_loop(tmp_path, session_ttl_minutes=15)
+        session = loop.sessions.get_or_create("cli:test")
+        _add_turns(session, 6, prefix="hello")
+        session.updated_at = datetime.now() - timedelta(minutes=20)
+        loop.sessions.save(session)
+
+        loop.consolidator.compact_idle_session = _make_fake_compact(
+            loop, summary="User said hello.",
+        )
+        await loop.auto_compact._archive("cli:test", runtime=loop.llm_runtime())
+        loop.sessions.invalidate("cli:test")
+
+        reloaded = loop.sessions.get_or_create("cli:test")
+        assert reloaded.get_history(max_messages=len(reloaded.messages)) == []
+
+        _, summary = loop.auto_compact.prepare_session(reloaded, "cli:test")
+
+        assert summary is None
+        # Metadata keeps the summary as the base for cumulative archiving.
+        assert reloaded.metadata["_last_summary"]["text"] == "User said hello."
+        await loop.aclose()
+
+
+class TestAutoCompactThreshold:
+    """Idle compaction is a size-gated backup, not a routine."""
+
+    @staticmethod
+    async def _idle_tick_archive_count(loop) -> int:
+        _fake_compact = _make_fake_compact(loop)
+        loop.consolidator.compact_idle_session = _fake_compact
+        loop.auto_compact.check_expired(loop.schedule_background, loop.runtime_for_session)
+        await _drain_background_tasks(loop)
+        return _fake_compact.state["count"]
+
+    @pytest.mark.asyncio
+    async def test_under_threshold_is_skipped(self, tmp_path):
+        """An ordinary idle session stays untouched."""
+        loop = _make_loop(tmp_path, session_ttl_minutes=15)
+        loop.provider.estimate_prompt_tokens.return_value = (1_000, "test")
+        session = loop.sessions.get_or_create("cli:test")
+        _add_turns(session, 6, prefix="old")
+        session.updated_at = datetime.now() - timedelta(minutes=20)
+        loop.sessions.save(session)
+
+        assert await self._idle_tick_archive_count(loop) == 0
+        assert len(loop.sessions.get_or_create("cli:test").messages) == 12
+        await loop.aclose()
+
+    @pytest.mark.asyncio
+    async def test_over_threshold_is_archived(self, tmp_path):
+        """A heavy idle session still gets the overflow backup."""
+        loop = _make_loop(tmp_path, session_ttl_minutes=15)
+        loop.provider.estimate_prompt_tokens.return_value = (70_000, "test")
+        session = loop.sessions.get_or_create("cli:test")
+        _add_turns(session, 6, prefix="old")
+        session.updated_at = datetime.now() - timedelta(minutes=20)
+        loop.sessions.save(session)
+
+        assert await self._idle_tick_archive_count(loop) == 1
+        assert len(loop.sessions.get_or_create("cli:test").messages) == 13
+        await loop.aclose()
+
+    @pytest.mark.asyncio
+    async def test_estimator_failure_is_skipped(self, tmp_path):
+        """A broken estimator must not spend a model call on compaction."""
+        loop = _make_loop(tmp_path, session_ttl_minutes=15)
+        loop.consolidator.estimate_session_prompt_tokens = MagicMock(
+            side_effect=RuntimeError("no tokenizer"),
+        )
+        session = loop.sessions.get_or_create("cli:test")
+        _add_turns(session, 6, prefix="old")
+        session.updated_at = datetime.now() - timedelta(minutes=20)
+        loop.sessions.save(session)
+
+        assert await self._idle_tick_archive_count(loop) == 0
         await loop.aclose()

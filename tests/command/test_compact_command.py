@@ -117,7 +117,6 @@ async def test_compacted_session_waits_for_new_input_without_continuation(
         await loop.auto_compact._archive(key, runtime=loop.llm_runtime())
 
     loop.sessions.invalidate(key)
-    loop.auto_compact._summaries.clear()
     reloaded = loop.sessions.get_or_create(key)
     assert reloaded.metadata["_last_summary"]["text"] == summary
     assert reloaded.last_archived == 2
@@ -131,10 +130,10 @@ async def test_compacted_session_waits_for_new_input_without_continuation(
     assert response.content == "Hello!"
     loop.provider.chat_stream_with_retry.assert_awaited_once()
     sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
-    expected_summary = reloaded.metadata["_last_summary"] if summary != "(nothing)" else None
+    # Archived summaries are compaction artifacts, never prompt material.
     assert sent[0] == {
         "role": "system",
-        "content": loop.context.build_system_prompt(channel="cli", session_summary=expected_summary),
+        "content": loop.context.build_system_prompt(channel="cli"),
     }
     assert [message["role"] for message in sent] == ["system", "user"]
     assert sent[1]["content"] == "hi"

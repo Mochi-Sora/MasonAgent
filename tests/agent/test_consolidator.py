@@ -808,7 +808,9 @@ class TestCompactIdleSession:
             sent = mock_provider.chat_stream_with_retry.call_args.kwargs
             assert sent["provider_context"].conversation_state is None
             contents = [message.get("content", "") for message in sent["messages"]]
-            assert "Archived conversation summary." in contents[0]
+            # The archived summary is a compaction artifact, not prompt material.
+            assert "Archived conversation summary." not in contents[0]
+            assert "[Archived Context Summary]" not in contents[0]
             assert "question-0" not in contents
             assert contents[1:-1] == []
             assert "Next question" in contents[-1]
