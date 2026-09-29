@@ -68,21 +68,21 @@ class AutoCompact:
 
     def _over_window_fraction(self, session: Session, runtime: LLMRuntime) -> bool:
         """Return whether the session's next prompt is heavy enough to compact."""
-        window = int(getattr(runtime, "context_window_tokens", 0) or 0)
-        if window <= 0:
-            return False
-        threshold = max(1, int(window * AUTO_COMPACT_WINDOW_FRACTION))
         try:
+            window = int(getattr(runtime, "context_window_tokens", 0) or 0)
+            if window <= 0:
+                return False
+            threshold = max(1, int(window * AUTO_COMPACT_WINDOW_FRACTION))
             estimated, _source = self.consolidator.estimate_session_prompt_tokens(
                 session,
                 runtime=runtime,
             )
+            return int(estimated) >= threshold
         except Exception:
             # An unmeasurable session must not block the idle scan; it simply
             # never qualifies for the backup compaction.
             logger.exception("Auto-compact: size estimate failed for {}", session.key)
             return False
-        return estimated >= threshold
 
     def check_expired(
         self,
