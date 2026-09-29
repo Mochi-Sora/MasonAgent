@@ -28,6 +28,10 @@ fail() {
 install_failure_hint() {
   printf '%s\n' "Error: could not install nanobot from $install_source." >&2
   printf '%s\n' "If pip mentioned externally-managed-environment, use uv, pipx, or a virtual environment instead of system pip." >&2
+  printf '%s\n' "If the managed venv has no pip (common on Debian/Ubuntu), install the venv package first:" >&2
+  printf '  %s\n' "sudo apt install python3-venv" >&2
+  printf '%s\n' "Or install uv, which needs no system pip:" >&2
+  printf '  %s\n' "curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
   printf '%s\n' "You can also run manually:" >&2
   printf '  %s\n' "uv tool install --force --upgrade --editable $repo_root" >&2
   printf '  %s\n' "$python_bin -m venv ~/.nanobot/venv" >&2
@@ -161,7 +165,15 @@ ensure_pip() {
   fi
 
   info "pip was not found for $target_python. Trying ensurepip..."
-  "$target_python" -m ensurepip --upgrade >/dev/null 2>&1
+  "$target_python" -m ensurepip --upgrade >/dev/null 2>&1 || true
+  if "$target_python" -m pip --version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  info "ensurepip could not bootstrap pip for $target_python."
+  info "On Debian/Ubuntu systems, install the venv package and rerun this installer:"
+  info "  sudo apt install python3-venv"
+  return 1
 }
 
 run_nanobot() {

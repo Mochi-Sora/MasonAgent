@@ -211,8 +211,11 @@ function Ensure-Pip {
 
     Write-Info "pip was not found for $Command. Trying ensurepip..."
     & $Command -m ensurepip --upgrade *> $null
+    try {
+        & $Command -m pip --version *> $null
+    } catch {}
     if ($LASTEXITCODE -ne 0) {
-        Fail "pip is not available. Install pip for $Command, then rerun this command."
+        Fail "ensurepip could not provide pip for $Command. Repair that Python installation (on Windows, reinstall Python with pip enabled), then rerun this command."
     }
 }
 
