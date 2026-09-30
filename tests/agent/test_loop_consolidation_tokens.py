@@ -33,6 +33,7 @@ def _make_loop(
         workspace=tmp_path,
         model="test-model",
         context_window_tokens=context_window_tokens,
+        session_replay="tail",
     )
     loop.tools.get_definitions = MagicMock(return_value=[])
     loop.consolidator._SAFETY_BUFFER = 0

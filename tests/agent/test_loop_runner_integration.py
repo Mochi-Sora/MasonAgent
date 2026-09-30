@@ -163,7 +163,13 @@ async def test_goal_command_can_implement_plan_from_prior_discussion(tmp_path):
         ),
         LLMResponse(content="done", tool_calls=[], usage=None),
     ])
-    loop = AgentLoop(bus=MessageBus(), provider=provider, workspace=tmp_path, model="test-model")
+    loop = AgentLoop(
+        bus=MessageBus(),
+        provider=provider,
+        workspace=tmp_path,
+        model="test-model",
+        session_replay="tail",
+    )
     session = loop.sessions.get_or_create("cli:direct")
     session.add_message("user", "Let's agree on the migration implementation.")
     session.add_message("assistant", "Use the staged migration plan and run integration tests.")
@@ -216,7 +222,13 @@ async def test_runtime_context_is_persisted_as_next_turn_prompt_prefix(tmp_path)
         LLMResponse(content="first answer", usage=None),
         LLMResponse(content="second answer", usage=None),
     ])
-    loop = AgentLoop(bus=MessageBus(), provider=provider, workspace=tmp_path, model="test-model")
+    loop = AgentLoop(
+        bus=MessageBus(),
+        provider=provider,
+        workspace=tmp_path,
+        model="test-model",
+        session_replay="tail",
+    )
     session = loop.sessions.get_or_create("cli:direct")
     provider_calls: list[str | None] = []
 
@@ -281,7 +293,13 @@ async def test_runtime_context_provider_runs_once_across_tool_iterations(tmp_pat
         ),
         LLMResponse(content="done", usage=None),
     ])
-    loop = AgentLoop(bus=MessageBus(), provider=provider, workspace=tmp_path, model="test-model")
+    loop = AgentLoop(
+        bus=MessageBus(),
+        provider=provider,
+        workspace=tmp_path,
+        model="test-model",
+        session_replay="tail",
+    )
     provider_calls = 0
 
     async def provide_context(_request):
@@ -325,7 +343,13 @@ async def test_non_goal_direct_turn_cannot_reuse_prior_goal_command(tmp_path):
         ),
         LLMResponse(content="handled as a one-time task", tool_calls=[], usage=None),
     ])
-    loop = AgentLoop(bus=MessageBus(), provider=provider, workspace=tmp_path, model="test-model")
+    loop = AgentLoop(
+        bus=MessageBus(),
+        provider=provider,
+        workspace=tmp_path,
+        model="test-model",
+        session_replay="tail",
+    )
     session = loop.sessions.get_or_create("api:default")
     session.add_message("user", "/goal old completed request")
     session.add_message("assistant", "The old request is complete.")
@@ -584,7 +608,13 @@ async def test_next_turn_after_llm_error_keeps_turn_boundary(tmp_path):
         LLMResponse(content="Recovered answer", tool_calls=[], usage=None),
     ])
 
-    loop = AgentLoop(bus=MessageBus(), provider=provider, workspace=tmp_path, model="test-model")
+    loop = AgentLoop(
+        bus=MessageBus(),
+        provider=provider,
+        workspace=tmp_path,
+        model="test-model",
+        session_replay="tail",
+    )
     loop.tools.get_definitions = MagicMock(return_value=[])
 
     first = await loop._process_message(

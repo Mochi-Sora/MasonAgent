@@ -983,6 +983,7 @@ async def test_backfill_repairs_model_context_without_shifting_save_turn_boundar
         provider=provider,
         workspace=tmp_path,
         model="test-model",
+        session_replay="tail",
     )
     loop.tools.get_definitions = MagicMock(return_value=[])
 

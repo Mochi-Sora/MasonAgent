@@ -45,7 +45,7 @@ def _seed(session, turns: int) -> None:
 
 
 async def test_replay_budget_drops_old_turns_from_the_prompt(tmp_path: Path) -> None:
-    loop = _make_loop(tmp_path, replay_max=40)
+    loop = _make_loop(tmp_path, replay_max=40, replay_mode="tail")
     session = loop.sessions.get_or_create("cli:test")
     _seed(session, 20)
     loop.sessions.save(session)
@@ -67,7 +67,7 @@ async def test_replay_budget_drops_old_turns_from_the_prompt(tmp_path: Path) -> 
 
 
 async def test_zero_budget_replays_everything(tmp_path: Path) -> None:
-    loop = _make_loop(tmp_path, replay_max=0)
+    loop = _make_loop(tmp_path, replay_max=0, replay_mode="tail")
     session = loop.sessions.get_or_create("cli:test")
     _seed(session, 20)
     loop.sessions.save(session)
@@ -218,10 +218,11 @@ async def test_state_check_note_is_absent_after_update_state(tmp_path: Path) -> 
 
 
 class TestReplayModeConfig:
-    def test_default_mode_is_tail(self) -> None:
+    def test_default_mode_is_none(self) -> None:
         from nanobot.config.schema import AgentDefaults
 
-        assert AgentDefaults().session_replay == "tail"
+        # The framework remembers state and memory, not conversation history.
+        assert AgentDefaults().session_replay == "none"
 
     def test_mode_aliases_and_serialization(self) -> None:
         from nanobot.config.schema import AgentDefaults

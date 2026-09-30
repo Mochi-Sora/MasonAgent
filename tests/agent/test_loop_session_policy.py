@@ -42,6 +42,7 @@ def _loop(tmp_path, responses: list[str], **kwargs) -> AgentLoop:
         provider=provider,
         workspace=tmp_path,
         model="test-model",
+        session_replay="tail",
         cron_service=MagicMock(),
         **kwargs,
     )

@@ -51,11 +51,10 @@ memory has not kept. It is discarded at the end of the day, after consolidation 
 had a chance to promote what matters.
 
 Only the newest turns of a long conversation stay in the model's context each turn
-(the session replay budget, `agents.defaults.sessionReplayMaxTokens`, defaults to
-32,000 tokens; `agents.defaults.sessionReplay` can also be set to `none` for no
-history at all, or `full` for everything since the archive boundary). Earlier turns
-leave the prompt but are never lost — the backup is where they live, and the model
-pulls them back on demand.
+when `agents.defaults.sessionReplay` is `tail` (the token budget,
+`sessionReplayMaxTokens`, defaults to 32,000 tokens). The default is `none`: no
+conversation history at all, so state and memory are the only continuity and
+`recall_backup` is how earlier turns come back.
 
 Because the working state carries the continuity, the framework keeps the model
 honest about it: after any turn that ends without an `update_state` call, the next

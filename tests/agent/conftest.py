@@ -45,6 +45,7 @@ def make_loop(
     model: str = "test-model",
     context_window_tokens: int = 128_000,
     session_ttl_minutes: int = 0,
+    session_replay: str = "tail",
     unified_session: bool = False,
     tools_config=None,
     model_presets: dict | None = None,
@@ -55,6 +56,8 @@ def make_loop(
     """Create a real AgentLoop for testing.
 
     Args:
+        session_replay: Agent tests exercise replay semantics, so they default
+                        to "tail" here even though the product default is "none".
         patch_deps: If True, patch ContextBuilder/SessionManager/SubagentManager
                     during construction (needed when workspace has no real files).
     """
@@ -69,6 +72,7 @@ def make_loop(
         model=model,
         context_window_tokens=context_window_tokens,
         session_ttl_minutes=session_ttl_minutes,
+        session_replay=session_replay,
         unified_session=unified_session,
     )
     if tools_config is not None:

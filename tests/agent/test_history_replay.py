@@ -29,6 +29,7 @@ def _make_loop(
         model="test-model",
         context_window_tokens=context_window_tokens,
         session_replay_max_tokens=session_replay_max_tokens,
+        session_replay="tail",
     )
 
 

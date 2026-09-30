@@ -2268,13 +2268,13 @@ The deprecated `agents.defaults.failOnToolError` field is silently ignored when 
 
 ## Session Replay Budget
 
-Each turn replays only the most recent part of the conversation. Older turns leave the prompt but stay in the session file and in today's memory backup, where `recall_backup` retrieves them verbatim, so a long-running chat no longer grows the prompt without bound.
+By default a turn carries no conversation history at all: the prompt is identity, the working state, and the current message. Earlier turns stay in the session file and in today's memory backup, where `recall_backup` retrieves them verbatim, so the model remembers through state and memory rather than through a growing transcript. `tail` and `full` are available when you want history replayed.
 
 ```json
 {
   "agents": {
     "defaults": {
-      "sessionReplay": "tail",
+      "sessionReplay": "none",
       "sessionReplayMaxTokens": 32000
     }
   }
@@ -2283,7 +2283,7 @@ Each turn replays only the most recent part of the conversation. Older turns lea
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `agents.defaults.sessionReplay` | `tail` | How much of the conversation is replayed each turn. `tail` replays the newest turns within the token budget, `none` replays nothing (the working state and the memory tools are the only continuity), `full` replays everything since the archive boundary. |
+| `agents.defaults.sessionReplay` | `none` | How much of the conversation is replayed each turn. `none` replays nothing, `tail` replays the newest turns within the token budget, `full` replays everything since the archive boundary. |
 | `agents.defaults.sessionReplayMaxTokens` | `32000` | Token cap for `tail` mode, clamped to a quarter of the model's context window when that is smaller. `0` removes the cap. |
 
 The budget covers the conversation only: the system prompt, tool schemas, and the working state are accounted for separately. Trimming never deletes anything — messages stay in the session and in the backup tier.
