@@ -9,6 +9,11 @@ from pathlib import Path
 import pytest
 
 from nanobot.memory.store import MemoryDB
+from nanobot.runtime_context import (
+    RUNTIME_CONTEXT_HISTORY_META,
+    RuntimeContextBlock,
+    append_runtime_context,
+)
 
 _NOW = datetime(2026, 1, 2, 12, 0, 0)
 
@@ -163,3 +168,28 @@ def test_retrieval_stays_fast(db: MemoryDB) -> None:
     assert db.search_episodes("zzz_no_such_term_zzz") == []
     scan_seconds = time.perf_counter() - started
     assert scan_seconds < 0.5, f"fallback scan took {scan_seconds:.3f}s"
+
+
+def test_capture_keeps_conversation_text_only(db: MemoryDB) -> None:
+    """Trusted runtime context is framework metadata, not a captured turn."""
+    content, marker = append_runtime_context(
+        "what did I say about the deploy?",
+        [RuntimeContextBlock(source="memory", content="State check: update state now.")],
+    )
+    assert marker is not None
+
+    db.capture_messages(
+        "cli:1",
+        [
+            {
+                "role": "user",
+                "content": content,
+                RUNTIME_CONTEXT_HISTORY_META: marker,
+                "timestamp": "2026-01-02T10:00:00",
+            }
+        ],
+        now=_NOW,
+    )
+
+    hits = db.recent_episodes()
+    assert [hit.content for hit in hits] == ["what did I say about the deploy?"]

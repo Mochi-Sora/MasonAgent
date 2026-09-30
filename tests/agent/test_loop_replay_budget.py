@@ -12,10 +12,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 from nanobot.agent.loop import AgentLoop
 from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import LLMResponse
+from nanobot.providers.base import LLMResponse, ProviderConversationState, ToolCallRequest
 
 
-def _make_loop(tmp_path: Path, *, window: int = 128_000, replay_max: int = 0) -> AgentLoop:
+def _make_loop(
+    tmp_path: Path,
+    *,
+    window: int = 128_000,
+    replay_max: int = 0,
+    replay_mode: str | None = None,
+) -> AgentLoop:
     provider = MagicMock()
     provider.provider_name = "test"
     provider.get_default_model.return_value = "test-model"
@@ -28,6 +34,7 @@ def _make_loop(tmp_path: Path, *, window: int = 128_000, replay_max: int = 0) ->
         model="test-model",
         context_window_tokens=window,
         session_replay_max_tokens=replay_max,
+        session_replay=replay_mode,
     )
 
 
@@ -111,3 +118,123 @@ class TestReplayBudgetConfig:
         from nanobot.config.schema import AgentDefaults
 
         assert AgentDefaults(session_replay_max_tokens=0).session_replay_max_tokens == 0
+
+
+async def test_none_mode_sends_no_history(tmp_path: Path) -> None:
+    loop = _make_loop(tmp_path, replay_mode="none")
+    session = loop.sessions.get_or_create("cli:test")
+    _seed(session, 5)
+    loop.sessions.save(session)
+
+    await loop.process_direct("fresh question", session_key="cli:test")
+
+    sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
+    assert [message["role"] for message in sent] == ["system", "user"]
+    assert sent[1]["content"] == "fresh question"
+
+    # Storage and memory capture are unaffected by the replay mode.
+    reloaded = loop.sessions.get_or_create("cli:test")
+    assert len(reloaded.messages) == 12
+    assert reloaded.messages[0]["content"] == "question 0"
+    assert [hit.role for hit in loop.context.memory_db.search_episodes("question 0")] == ["user"]
+    assert [hit.role for hit in loop.context.memory_db.search_episodes("fresh question")] == ["user"]
+
+
+async def test_none_mode_does_not_stage_provider_state(tmp_path: Path) -> None:
+    loop = _make_loop(tmp_path, replay_mode="none")
+    loop.provider.can_resume_conversation_state.return_value = True
+    session = loop.sessions.get_or_create("cli:test")
+    session.provider_state = ProviderConversationState(
+        kind="openai_responses",
+        provider="openai:test",
+        model="test-model",
+        version=1,
+        payload={"items": []},
+    )
+    loop.sessions.save(session)
+
+    await loop.process_direct("fresh question", session_key="cli:test")
+
+    sent = loop.provider.chat_stream_with_retry.call_args.kwargs
+    assert sent["provider_context"].conversation_state is None
+    assert loop.sessions.get_or_create("cli:test").provider_state is None
+
+
+async def test_full_mode_replays_everything(tmp_path: Path) -> None:
+    loop = _make_loop(tmp_path, replay_max=1, replay_mode="full")
+    session = loop.sessions.get_or_create("cli:test")
+    _seed(session, 20)
+    loop.sessions.save(session)
+
+    await loop.process_direct("latest question", session_key="cli:test")
+
+    sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
+    contents = [message.get("content") for message in sent]
+    assert "question 0" in contents
+
+
+async def test_state_check_note_follows_a_turn_without_update_state(tmp_path: Path) -> None:
+    loop = _make_loop(tmp_path, replay_mode="none")
+
+    await loop.process_direct("hello", session_key="cli:test")
+
+    session = loop.sessions.get_or_create("cli:test")
+    assert session.metadata["_state_stale_turns"] == 1
+
+    await loop.process_direct("second message", session_key="cli:test")
+
+    sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
+    assert "State check" in str(sent[-1]["content"])
+    assert sent[-1]["content"].startswith("second message")
+
+
+async def test_state_check_note_is_absent_after_update_state(tmp_path: Path) -> None:
+    loop = _make_loop(tmp_path, replay_mode="none")
+    loop.provider.chat_stream_with_retry = AsyncMock(side_effect=[
+        LLMResponse(
+            content="",
+            tool_calls=[
+                ToolCallRequest(
+                    id="call-1",
+                    name="update_state",
+                    arguments={"content": "goal: ship the memory rework"},
+                )
+            ],
+        ),
+        LLMResponse(content="Noted."),
+    ])
+
+    await loop.process_direct("remember the goal", session_key="cli:test")
+
+    session = loop.sessions.get_or_create("cli:test")
+    assert session.metadata["_state_stale_turns"] == 0
+    assert loop.context.memory_state.read() == "goal: ship the memory rework"
+
+    loop.provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Sure."))
+    await loop.process_direct("next", session_key="cli:test")
+
+    sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
+    assert "State check" not in str(sent[-1]["content"])
+
+
+class TestReplayModeConfig:
+    def test_default_mode_is_tail(self) -> None:
+        from nanobot.config.schema import AgentDefaults
+
+        assert AgentDefaults().session_replay == "tail"
+
+    def test_mode_aliases_and_serialization(self) -> None:
+        from nanobot.config.schema import AgentDefaults
+
+        defaults = AgentDefaults.model_validate({"sessionReplay": "none"})
+        assert defaults.session_replay == "none"
+        data = defaults.model_dump(mode="json", by_alias=True)
+        assert data["sessionReplay"] == "none"
+
+    def test_invalid_mode_is_rejected(self) -> None:
+        import pytest
+
+        from nanobot.config.schema import AgentDefaults
+
+        with pytest.raises(Exception):
+            AgentDefaults.model_validate({"sessionReplay": "sometimes"})

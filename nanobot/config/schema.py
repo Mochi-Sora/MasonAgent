@@ -175,7 +175,12 @@ class AgentDefaults(Base):
         ge=0,
         validation_alias=AliasChoices("sessionReplayMaxTokens"),
         serialization_alias="sessionReplayMaxTokens",
-    )  # Token budget for replayed session history per turn (0 = replay everything since the archive boundary)
+    )  # Token budget for replayed session history per turn (tail mode)
+    session_replay: Literal["tail", "none", "full"] = Field(
+        default="tail",
+        validation_alias=AliasChoices("sessionReplay"),
+        serialization_alias="sessionReplay",
+    )  # tail = newest turns within the budget, none = no history, full = everything since the boundary
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
     @model_validator(mode="before")

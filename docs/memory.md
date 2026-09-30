@@ -52,8 +52,15 @@ had a chance to promote what matters.
 
 Only the newest turns of a long conversation stay in the model's context each turn
 (the session replay budget, `agents.defaults.sessionReplayMaxTokens`, defaults to
-32,000 tokens). Earlier turns leave the prompt but are never lost — the backup is
-where they live, and the model pulls them back on demand.
+32,000 tokens; `agents.defaults.sessionReplay` can also be set to `none` for no
+history at all, or `full` for everything since the archive boundary). Earlier turns
+leave the prompt but are never lost — the backup is where they live, and the model
+pulls them back on demand.
+
+Because the working state carries the continuity, the framework keeps the model
+honest about it: after any turn that ends without an `update_state` call, the next
+turn carries a short runtime note asking for that decision again. The model can still
+decide nothing needs to change; it just has to decide.
 
 ## What the Model Is Told
 

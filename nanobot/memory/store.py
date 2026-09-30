@@ -32,6 +32,7 @@ from typing import Any, cast
 
 from loguru import logger
 
+from nanobot.runtime_context import public_history_message
 from nanobot.session.history_visibility import is_hidden_history_message
 from nanobot.utils.helpers import (
     content_with_media_breadcrumbs,
@@ -506,7 +507,11 @@ class MemoryDB:
             return None
         if message.get("_command") or is_hidden_history_message(message):
             return None
-        text = strip_think(_message_content_text(message)).strip()
+        # Trusted runtime context (goal guidance, state-check notes, attachment
+        # breadcrumbs) is framework metadata, not conversation: keep it out of
+        # the backup so consolidation never promotes it.
+        public = public_history_message(message)
+        text = strip_think(_message_content_text(public)).strip()
         if not text:
             return None
         if len(text) > _EPISODE_MAX_CHARS:

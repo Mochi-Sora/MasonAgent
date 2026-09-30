@@ -2274,6 +2274,7 @@ Each turn replays only the most recent part of the conversation. Older turns lea
 {
   "agents": {
     "defaults": {
+      "sessionReplay": "tail",
       "sessionReplayMaxTokens": 32000
     }
   }
@@ -2282,9 +2283,12 @@ Each turn replays only the most recent part of the conversation. Older turns lea
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `agents.defaults.sessionReplayMaxTokens` | `32000` | Maximum tokens of session history replayed into one prompt. Clamped to a quarter of the model's context window when that is smaller. Set to `0` to replay everything since the last archive boundary. |
+| `agents.defaults.sessionReplay` | `tail` | How much of the conversation is replayed each turn. `tail` replays the newest turns within the token budget, `none` replays nothing (the working state and the memory tools are the only continuity), `full` replays everything since the archive boundary. |
+| `agents.defaults.sessionReplayMaxTokens` | `32000` | Token cap for `tail` mode, clamped to a quarter of the model's context window when that is smaller. `0` removes the cap. |
 
 The budget covers the conversation only: the system prompt, tool schemas, and the working state are accounted for separately. Trimming never deletes anything — messages stay in the session and in the backup tier.
+
+Because memory carries the continuity, the framework watches the model's state discipline: after a turn that ends without an `update_state` call, the next turn carries a short runtime note asking for that decision again. The update itself stays optional — only the decision is enforced.
 
 ## Auto Compact
 

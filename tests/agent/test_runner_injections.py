@@ -14,6 +14,7 @@ from nanobot.agent.context import TranscriptInput
 from nanobot.agent.tools.context import RequestContext
 from nanobot.config.schema import AgentDefaults
 from nanobot.providers.base import LLMResponse, ToolCallRequest
+from nanobot.runtime_context import public_history_messages
 
 _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
@@ -1454,7 +1455,10 @@ async def test_persistent_conversion_error_does_not_drop_later_session_inputs(tm
         ))
         loop.sessions.invalidate("cli:c")
         history = loop.sessions.get_or_create("cli:c").messages
-        assert [message["content"] for message in history if message["role"] == "user"] == [
+        # Runtime context (state-check notes, goal guidance) persists in the
+        # session but is framework metadata, not conversation.
+        visible = public_history_messages(history)
+        assert [message["content"] for message in visible if message["role"] == "user"] == [
             "root", "before", "after",
         ]
         assert sum(event.outcome == "failed" for event in completions) == 1

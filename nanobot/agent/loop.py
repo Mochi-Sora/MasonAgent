@@ -69,6 +69,7 @@ from nanobot.runtime_context import (
     append_runtime_context,
     resolve_runtime_context,
     runtime_context_blocks_from_metadata,
+    wrap_runtime_context_lines,
 )
 from nanobot.security.workspace_access import (
     WorkspaceScopeResolver,
@@ -122,6 +123,10 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 _SUBAGENT_PROVIDER_TASK_META = "subagent_provider_task_id"
 _SUBAGENT_TERMINAL_WAIT_SECONDS = 300.0
+# Consecutive user turns that ended without an update_state call. While this
+# is non-zero the next turn carries a short state-check note, so the model's
+# state decision is requested every turn even though the update stays optional.
+_STATE_STALE_TURNS_KEY = "_state_stale_turns"
 
 
 class TurnKind(Enum):
@@ -278,6 +283,7 @@ class AgentLoop:
         timezone: str | None = None,
         session_ttl_minutes: int = 0,
         session_replay_max_tokens: int | None = None,
+        session_replay: str | None = None,
         hooks: list[AgentHook] | None = None,
         hook_factories: list[AgentTurnHookFactory] | None = None,
         unified_session: bool = False,
@@ -333,6 +339,7 @@ class AgentLoop:
             if session_replay_max_tokens is not None
             else defaults.session_replay_max_tokens
         )
+        self._session_replay = session_replay or defaults.session_replay
         configured_presets = model_presets or {}
         self.runtime_resolver = ModelRuntimeResolver(
             LLMRuntime.capture(
@@ -526,6 +533,7 @@ class AgentLoop:
             consolidation_model_preset=defaults.memory.consolidation.model_override,
             session_ttl_minutes=defaults.session_ttl_minutes,
             session_replay_max_tokens=defaults.session_replay_max_tokens,
+            session_replay=defaults.session_replay,
             idle_compact_check_interval_seconds=defaults.idle_compact_check_interval_seconds,
             tools_config=config.tools,
             model_presets=preset_helpers.configured_model_presets(config),
@@ -2090,6 +2098,47 @@ class AgentLoop:
             return configured
         return min(configured, max(2_048, window // 4))
 
+    def _replay_history(
+        self,
+        session: Session,
+        runtime: LLMRuntime,
+        *,
+        extend_to_user: bool,
+    ) -> list[dict[str, Any]]:
+        """Session history for one prompt, honoring the configured replay mode.
+
+        ``tail`` replays the newest turns within the token budget, ``none``
+        replays nothing (the working state and the memory tiers are the only
+        continuity), and ``full`` replays everything since the archive
+        boundary.
+        """
+        mode = self._session_replay
+        if mode == "none":
+            return []
+        if mode == "full":
+            return session.get_history(extend_to_user=extend_to_user)
+        return session.get_history(
+            extend_to_user=extend_to_user,
+            max_tokens=self._replay_budget(runtime),
+        )
+
+    def _state_check_block(self, session: Session) -> RuntimeContextBlock | None:
+        """Ask for the state decision when the previous turn skipped it."""
+        if not self.context.memory_db.enabled:
+            return None
+        try:
+            stale = int(session.metadata.get(_STATE_STALE_TURNS_KEY) or 0)
+        except (TypeError, ValueError):
+            stale = 0
+        if stale <= 0:
+            return None
+        content = wrap_runtime_context_lines([
+            "State check: the previous turn did not update memory/state.md. If it produced "
+            "anything durable (a decision, preference, correction, or open question), call "
+            "update_state before you finish this turn.",
+        ])
+        return RuntimeContextBlock(source="memory", content=content)
+
     async def _build_turn(self, ctx: TurnContext) -> None:
         session = ctx.require_session()
         runtime = ctx.runtime
@@ -2106,10 +2155,7 @@ class AgentLoop:
             session = ctx.require_session()
         is_subagent = ctx.kind is TurnKind.SYSTEM and ctx.msg.sender_id == "subagent"
 
-        ctx.history = session.get_history(
-            extend_to_user=is_subagent,
-            max_tokens=self._replay_budget(runtime),
-        )
+        ctx.history = self._replay_history(session, runtime, extend_to_user=is_subagent)
         stored_state = session.provider_state
         subagent_followup_persisted = False
         if is_subagent:
@@ -2136,10 +2182,14 @@ class AgentLoop:
         ctx.request_context = self._request_context_for_turn(ctx)
         if ctx.kind is TurnKind.USER:
             ctx.runtime_context_blocks = await self._resolve_runtime_context_for_turn(ctx)
+            state_check = self._state_check_block(session)
+            if state_check is not None:
+                ctx.runtime_context_blocks.append(state_check)
         staged_provider_state = False
-        if stored_state is not None and runtime.provider.can_resume_conversation_state(
-            stored_state,
-            runtime.model,
+        if (
+            self._session_replay != "none"
+            and stored_state is not None
+            and runtime.provider.can_resume_conversation_state(stored_state, runtime.model)
         ):
             current_provider_message = self.context.build_current_message(
                 ctx.msg.content,
@@ -2267,6 +2317,7 @@ class AgentLoop:
             summary_checkpoint=None if ctx.ephemeral else ctx.summary_checkpoint,
             input_persisted_early=ctx.input_persisted_early,
             capture_start=ctx.capture_start,
+            count_state_discipline=ctx.kind is TurnKind.USER and not ctx.ephemeral,
         )
         if (
             not ctx.ephemeral
@@ -2374,6 +2425,7 @@ class AgentLoop:
         summary_checkpoint: SessionSummaryCheckpoint | None = None,
         input_persisted_early: bool = False,
         capture_start: int | None = None,
+        count_state_discipline: bool = False,
     ) -> None:
         """Commit new-turn messages and an optional summary boundary."""
         declared_tool_call_ids = {
@@ -2392,6 +2444,7 @@ class AgentLoop:
         }
         last_assistant_idx: int | None = None
         saved_followup_ids: set[str] = set()
+        state_updated = False
         checkpoint_boundary = self._validated_checkpoint_boundary(
             summary_checkpoint,
             skip=skip,
@@ -2483,16 +2536,20 @@ class AgentLoop:
                 saved_followup_ids.update(followup_id for followup_id in followup_ids if followup_id)
             if role == "assistant":
                 last_assistant_idx = len(session.messages) - 1
-                declared_tool_call_ids.update(
-                    str(tc["id"])
-                    for tc_value in cast(
-                        Iterable[object],
-                        entry.get("tool_calls") or [],
-                    )
-                    if isinstance(tc_value, dict)
-                    for tc in (cast(dict[str, Any], tc_value),)
-                    if tc.get("id")
-                )
+                for tc_value in cast(
+                    Iterable[object],
+                    entry.get("tool_calls") or [],
+                ):
+                    if not isinstance(tc_value, dict):
+                        continue
+                    tc = cast(dict[str, Any], tc_value)
+                    if tc.get("id"):
+                        declared_tool_call_ids.add(str(tc["id"]))
+                    function = cast(object, tc.get("function"))
+                    if isinstance(function, dict):
+                        function_map = cast(dict[str, Any], function)
+                        if function_map.get("name") == "update_state":
+                            state_updated = True
         if summary_checkpoint is not None and checkpoint_boundary == len(messages):
             session.commit_summary_checkpoint(summary_checkpoint.summary)
         if turn_latency_ms is not None and last_assistant_idx is not None:
@@ -2500,11 +2557,25 @@ class AgentLoop:
         if saved_followup_ids:
             acknowledge_pending_followups(session, saved_followup_ids)
         session.updated_at = datetime.now()
+        if count_state_discipline:
+            self._record_state_discipline(session, updated=state_updated)
         # Messages persisted before this save (the early user message, a
         # subagent follow-up) were never captured; start there so the backup
         # keeps the user's own words, not just the assistant replies.
         start = capture_from if capture_start is None else capture_start
         self._capture_episodes(session, max(0, min(start, len(session.messages))))
+
+    @staticmethod
+    def _record_state_discipline(session: Session, *, updated: bool) -> None:
+        """Track consecutive user turns that ended without a state update."""
+        if updated:
+            session.metadata[_STATE_STALE_TURNS_KEY] = 0
+            return
+        try:
+            stale = int(session.metadata.get(_STATE_STALE_TURNS_KEY) or 0)
+        except (TypeError, ValueError):
+            stale = 0
+        session.metadata[_STATE_STALE_TURNS_KEY] = stale + 1
 
     def _capture_episodes(self, session: Session, start: int) -> None:
         """Best-effort capture of this turn's messages into the memory backup tier."""
