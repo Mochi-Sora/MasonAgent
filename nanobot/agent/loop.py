@@ -2187,7 +2187,11 @@ class AgentLoop:
                 ctx.runtime_context_blocks.append(state_check)
         staged_provider_state = False
         if (
-            self._session_replay != "none"
+            # Provider continuation replays the provider's own accumulated items,
+            # which no local budget can bound. Resume it only in "full" mode,
+            # where the local transcript is unbounded too; otherwise the replay
+            # mode would be defeated by the provider's state.
+            self._session_replay == "full"
             and stored_state is not None
             and runtime.provider.can_resume_conversation_state(stored_state, runtime.model)
         ):

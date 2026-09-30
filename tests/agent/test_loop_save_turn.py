@@ -107,7 +107,7 @@ def _runtime_message(content, blocks: list[RuntimeContextBlock]) -> dict:
     }
 
 
-def _make_full_loop(tmp_path: Path) -> AgentLoop:
+def _make_full_loop(tmp_path: Path, *, session_replay: str = "tail") -> AgentLoop:
     provider = MagicMock()
     provider.provider_name = "test"
     provider.get_default_model.return_value = "test-model"
@@ -118,7 +118,7 @@ def _make_full_loop(tmp_path: Path) -> AgentLoop:
         provider=provider,
         workspace=tmp_path,
         model="test-model",
-        session_replay="tail",
+        session_replay=session_replay,
     )
     return loop
 
@@ -905,7 +905,7 @@ async def test_process_message_persists_user_message_before_turn_completes(tmp_p
 async def test_subagent_followup_stages_provider_state_before_turn_runs(
     tmp_path: Path,
 ) -> None:
-    loop = _make_full_loop(tmp_path)
+    loop = _make_full_loop(tmp_path, session_replay="full")
     loop._run_agent_loop = AsyncMock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
     loop.provider.can_resume_conversation_state.return_value = True
     session = loop.sessions.get_or_create("cli:subagent-crash")
@@ -934,7 +934,7 @@ async def test_subagent_followup_stages_provider_state_before_turn_runs(
 async def test_subagent_followup_state_is_durable_before_prompt_assembly(
     tmp_path: Path,
 ) -> None:
-    loop = _make_full_loop(tmp_path)
+    loop = _make_full_loop(tmp_path, session_replay="full")
     loop.provider.can_resume_conversation_state.return_value = True
     loop.context.build_system_prompt = MagicMock(  # type: ignore[method-assign]
         side_effect=RuntimeError("prompt boom"),
@@ -966,7 +966,7 @@ async def test_subagent_followup_state_is_durable_before_prompt_assembly(
 async def test_subagent_redelivery_does_not_duplicate_staged_provider_input(
     tmp_path: Path,
 ) -> None:
-    loop = _make_full_loop(tmp_path)
+    loop = _make_full_loop(tmp_path, session_replay="full")
     loop.provider.can_resume_conversation_state.return_value = True
     build_system_prompt = loop.context.build_system_prompt
     loop.context.build_system_prompt = MagicMock(  # type: ignore[method-assign]
@@ -1017,7 +1017,7 @@ async def test_subagent_redelivery_does_not_duplicate_staged_provider_input(
 async def test_subagent_followup_clears_state_before_compatibility_failure(
     tmp_path: Path,
 ) -> None:
-    loop = _make_full_loop(tmp_path)
+    loop = _make_full_loop(tmp_path, session_replay="full")
     loop.provider.can_resume_conversation_state.side_effect = RuntimeError(
         "compatibility boom"
     )

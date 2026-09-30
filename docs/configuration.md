@@ -2284,11 +2284,13 @@ By default a turn carries no conversation history at all: the prompt is identity
 | Option | Default | Description |
 |--------|---------|-------------|
 | `agents.defaults.sessionReplay` | `none` | How much of the conversation is replayed each turn. `none` replays nothing, `tail` replays the newest turns within the token budget, `full` replays everything since the archive boundary. |
-| `agents.defaults.sessionReplayMaxTokens` | `32000` | Token cap for `tail` mode, clamped to a quarter of the model's context window when that is smaller. `0` removes the cap. |
+| `agents.defaults.sessionReplayMaxTokens` | `32000` | Token cap for `tail` mode, clamped to a quarter of the model's context window when that is smaller. `0` removes the cap. Unused when `sessionReplay` is `none` or `full`. |
 
 The budget covers the conversation only: the system prompt, tool schemas, and the working state are accounted for separately. Trimming never deletes anything — messages stay in the session and in the backup tier.
 
-Because memory carries the continuity, the framework watches the model's state discipline: after a turn that ends without an `update_state` call, the next turn carries a short runtime note asking for that decision again. The update itself stays optional — only the decision is enforced.
+Provider continuation (Responses-style state) is resumed only in `full` mode: its accumulated items replay the provider's whole thread, which no local budget can bound. In `none` and `tail` mode a stale continuation is dropped, so the request carries exactly what the replay mode allows.
+
+Because memory carries the continuity, the framework watches the model's state discipline: after a turn that ends without an `update_state` call, the next turn carries a short runtime note asking for that decision again. The update itself stays optional — only the decision is enforced. The trim in `tail` mode walks newest-first and stops at the first message that does not fit, so an oversized tool result can make the effective window smaller than the configured number.
 
 ## Auto Compact
 

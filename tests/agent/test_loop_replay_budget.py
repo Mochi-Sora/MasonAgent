@@ -239,3 +239,50 @@ class TestReplayModeConfig:
 
         with pytest.raises(Exception):
             AgentDefaults.model_validate({"sessionReplay": "sometimes"})
+
+
+async def test_tail_mode_does_not_resume_provider_state(tmp_path: Path) -> None:
+    """A provider's accumulated items would replay the whole conversation.
+
+    Tail mode bounds the local transcript, so resuming provider continuation
+    would silently defeat the budget (the provider replays its own items).
+    """
+    loop = _make_loop(tmp_path, replay_mode="tail")
+    loop.provider.can_resume_conversation_state.return_value = True
+    session = loop.sessions.get_or_create("cli:test")
+    _seed(session, 5)
+    session.provider_state = ProviderConversationState(
+        kind="openai_responses",
+        provider="openai:test",
+        model="test-model",
+        version=1,
+        payload={"items": []},
+    )
+    loop.sessions.save(session)
+
+    await loop.process_direct("fresh question", session_key="cli:test")
+
+    sent = loop.provider.chat_stream_with_retry.call_args.kwargs
+    assert sent["provider_context"].conversation_state is None
+    assert loop.sessions.get_or_create("cli:test").provider_state is None
+
+
+async def test_full_mode_still_resumes_provider_state(tmp_path: Path) -> None:
+    loop = _make_loop(tmp_path, replay_mode="full")
+    loop.provider.can_resume_conversation_state.return_value = True
+    session = loop.sessions.get_or_create("cli:test")
+    _seed(session, 2)
+    state = ProviderConversationState(
+        kind="openai_responses",
+        provider="openai:test",
+        model="test-model",
+        version=1,
+        payload={"items": []},
+    )
+    session.provider_state = state
+    loop.sessions.save(session)
+
+    await loop.process_direct("fresh question", session_key="cli:test")
+
+    sent = loop.provider.chat_stream_with_retry.call_args.kwargs
+    assert sent["provider_context"].conversation_state is not None
