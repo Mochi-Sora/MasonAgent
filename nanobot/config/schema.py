@@ -170,6 +170,12 @@ class AgentDefaults(Base):
         default=60,
         ge=0,
     )  # Minimum interval in seconds between scans for idle sessions
+    session_replay_max_tokens: int = Field(
+        default=32_000,
+        ge=0,
+        validation_alias=AliasChoices("sessionReplayMaxTokens"),
+        serialization_alias="sessionReplayMaxTokens",
+    )  # Token budget for replayed session history per turn (0 = replay everything since the archive boundary)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
     @model_validator(mode="before")

@@ -2266,6 +2266,26 @@ The deprecated `agents.defaults.failOnToolError` field is silently ignored when 
 | `agents.defaults.maxConcurrentSubagents` | `4` | Maximum number of subagents that may run at the same time. Additional tasks wait for capacity. |
 
 
+## Session Replay Budget
+
+Each turn replays only the most recent part of the conversation. Older turns leave the prompt but stay in the session file and in today's memory backup, where `recall_backup` retrieves them verbatim, so a long-running chat no longer grows the prompt without bound.
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "sessionReplayMaxTokens": 32000
+    }
+  }
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `agents.defaults.sessionReplayMaxTokens` | `32000` | Maximum tokens of session history replayed into one prompt. Clamped to a quarter of the model's context window when that is smaller. Set to `0` to replay everything since the last archive boundary. |
+
+The budget covers the conversation only: the system prompt, tool schemas, and the working state are accounted for separately. Trimming never deletes anything — messages stay in the session and in the backup tier.
+
 ## Auto Compact
 
 Idle compaction is a backup, not a routine. A session that has been idle for longer than the configured threshold is summarized only when its next prompt would otherwise consume at least half of the model's context window, so it stays dormant unless a session is genuinely heavy. The original conversation remains in your saved chat history, but the messages covered by the summary are no longer replayed to the model, and the summary itself is never re-injected into later prompts: the system prompt remains identity plus the working state, while older context is recalled on demand with the memory tools.
@@ -2290,9 +2310,8 @@ Idle compaction is a backup, not a routine. A session that has been idle for lon
 
 How it works:
 1. **Idle detection**: On each idle tick (~1 s), checks whether an idle-session scan is due. By default, the full scan runs at most once per minute.
-2. **Background compaction**: The conversation so far is summarized for the next turn.
-3. **Session preservation**: The complete session history remains stored for later inspection and reuse.
-4. **Restart-safe resume**: The compacted context remains available after a process restart.
+2. **Size gate**: A session is compacted only when its next prompt would fill at least half of the model's context window.
+3. **Session preservation**: The complete session history remains stored for later inspection and reuse. Archived turns stop being replayed and can be recalled verbatim with `recall_backup`.
 
 > [!NOTE]
 > Auto compact shortens the context sent to the model without deleting the session's structured message history.

@@ -277,6 +277,7 @@ class AgentLoop:
         channels_config: ChannelsConfig | None = None,
         timezone: str | None = None,
         session_ttl_minutes: int = 0,
+        session_replay_max_tokens: int | None = None,
         hooks: list[AgentHook] | None = None,
         hook_factories: list[AgentTurnHookFactory] | None = None,
         unified_session: bool = False,
@@ -326,6 +327,11 @@ class AgentLoop:
             context_window_tokens
             if context_window_tokens is not None
             else defaults.context_window_tokens
+        )
+        self._session_replay_max_tokens = (
+            session_replay_max_tokens
+            if session_replay_max_tokens is not None
+            else defaults.session_replay_max_tokens
         )
         configured_presets = model_presets or {}
         self.runtime_resolver = ModelRuntimeResolver(
@@ -519,6 +525,7 @@ class AgentLoop:
             memory_consolidation_enabled=defaults.memory.consolidation.enabled,
             consolidation_model_preset=defaults.memory.consolidation.model_override,
             session_ttl_minutes=defaults.session_ttl_minutes,
+            session_replay_max_tokens=defaults.session_replay_max_tokens,
             idle_compact_check_interval_seconds=defaults.idle_compact_check_interval_seconds,
             tools_config=config.tools,
             model_presets=preset_helpers.configured_model_presets(config),
@@ -2065,6 +2072,24 @@ class AgentLoop:
             return True
         return False
 
+    def _replay_budget(self, runtime: LLMRuntime) -> int:
+        """Token budget for replayed session history in one prompt.
+
+        Zero means unbounded (the whole replayable session is sent). Otherwise
+        the configured budget is clamped to a quarter of the model's context
+        window so small windows keep room for the system prompt, the tool
+        schemas, and the response. Turns that fall outside the budget leave the
+        prompt but stay in the session file and in the memory backup, where
+        ``recall_backup`` can retrieve them verbatim.
+        """
+        configured = self._session_replay_max_tokens
+        if configured <= 0:
+            return 0
+        window = int(getattr(runtime, "context_window_tokens", 0) or 0)
+        if window <= 0:
+            return configured
+        return min(configured, max(2_048, window // 4))
+
     async def _build_turn(self, ctx: TurnContext) -> None:
         session = ctx.require_session()
         runtime = ctx.runtime
@@ -2081,7 +2106,10 @@ class AgentLoop:
             session = ctx.require_session()
         is_subagent = ctx.kind is TurnKind.SYSTEM and ctx.msg.sender_id == "subagent"
 
-        ctx.history = session.get_history(extend_to_user=is_subagent)
+        ctx.history = session.get_history(
+            extend_to_user=is_subagent,
+            max_tokens=self._replay_budget(runtime),
+        )
         stored_state = session.provider_state
         subagent_followup_persisted = False
         if is_subagent:

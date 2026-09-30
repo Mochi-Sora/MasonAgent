@@ -14,7 +14,11 @@ from nanobot.providers.base import LLMResponse
 from nanobot.session.manager import Session
 
 
-def _make_loop(tmp_path: Path, context_window_tokens: int = 200_000) -> AgentLoop:
+def _make_loop(
+    tmp_path: Path,
+    context_window_tokens: int = 200_000,
+    session_replay_max_tokens: int | None = None,
+) -> AgentLoop:
     provider = MagicMock()
     provider.get_default_model.return_value = "test-model"
     provider.generation.max_tokens = 4096
@@ -24,6 +28,7 @@ def _make_loop(tmp_path: Path, context_window_tokens: int = 200_000) -> AgentLoo
         workspace=tmp_path,
         model="test-model",
         context_window_tokens=context_window_tokens,
+        session_replay_max_tokens=session_replay_max_tokens,
     )
 
 
@@ -66,7 +71,7 @@ def test_explicit_message_limit_still_starts_at_user_turn() -> None:
 
 
 @pytest.mark.asyncio
-async def test_process_message_hands_complete_replay_to_runner(tmp_path: Path) -> None:
+async def test_process_message_passes_the_replay_budget_to_runner(tmp_path: Path) -> None:
     loop = _make_loop(tmp_path, context_window_tokens=32_768)
     loop.provider.chat_stream_with_retry = AsyncMock(
         return_value=LLMResponse(content="ok", tool_calls=[], usage=None)
@@ -81,7 +86,30 @@ async def test_process_message_hands_complete_replay_to_runner(tmp_path: Path) -
         )
 
     assert result is not None
-    assert get_history.call_args.kwargs == {"extend_to_user": False}
+    # min(configured 32k, max(2048, window // 4)): the surface prompt is bounded.
+    assert get_history.call_args.kwargs == {"extend_to_user": False, "max_tokens": 8_192}
+
+
+@pytest.mark.asyncio
+async def test_zero_budget_requests_complete_replay(tmp_path: Path) -> None:
+    loop = _make_loop(
+        tmp_path, context_window_tokens=32_768, session_replay_max_tokens=0,
+    )
+    loop.provider.chat_stream_with_retry = AsyncMock(
+        return_value=LLMResponse(content="ok", tool_calls=[], usage=None)
+    )
+    loop.tools.get_definitions = MagicMock(return_value=[])
+    loop.tools_config.lazy_capabilities.enabled = False
+
+    session = loop.sessions.get_or_create("cli:test")
+    with patch.object(session, "get_history", wraps=session.get_history) as get_history:
+        result = await loop._process_message(
+            InboundMessage(channel="cli", sender_id="user", chat_id="test", content="hello")
+        )
+
+    assert result is not None
+    # 0 disables the budget: everything since the archive boundary is replayed.
+    assert get_history.call_args.kwargs == {"extend_to_user": False, "max_tokens": 0}
 
 
 @pytest.mark.asyncio

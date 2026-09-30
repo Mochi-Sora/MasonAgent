@@ -50,6 +50,11 @@ It is the place to look for exact recent wording, details, or events that long-t
 memory has not kept. It is discarded at the end of the day, after consolidation has
 had a chance to promote what matters.
 
+Only the newest turns of a long conversation stay in the model's context each turn
+(the session replay budget, `agents.defaults.sessionReplayMaxTokens`, defaults to
+32,000 tokens). Earlier turns leave the prompt but are never lost — the backup is
+where they live, and the model pulls them back on demand.
+
 ## What the Model Is Told
 
 Memory only works if the agent knows it has some. The system prompt carries an
