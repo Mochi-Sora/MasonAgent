@@ -170,8 +170,18 @@ Thank you to everyone who wrote, tested and documented the foundation.
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2025-present Xubin Ren and the nanobot contributors,
-and the Mason contributors.
+Mason is released under the [GNU Affero General Public License v3.0](LICENSE) —
+Copyright (c) 2026-present Mochi-Sora and the Mason contributors.
+
+AGPL-3.0 is a strong copyleft license: if you run a modified Mason as a network service,
+you have to offer the corresponding source to the people using it (section 13 of the
+license). Running it locally, studying it, and forking it stay unrestricted.
+
+Mason is derived from the MIT-licensed [nanobot](https://github.com/HKUDS/nanobot), so the
+code inherited from upstream remains available under the MIT License and that notice is
+preserved in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Contributions are accepted
+under AGPL-3.0-or-later — see
+[CONTRIBUTING.md § Contribution License](CONTRIBUTING.md#contribution-license).
 
 ## Maintainer notes
 

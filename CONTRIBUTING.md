@@ -104,7 +104,8 @@ manifests and are installed explicitly by the setup step.
 ## Contribution License
 
 By submitting a contribution, you confirm that you have the right to submit it
-and agree that it will be licensed under the project's MIT License.
+and agree that it will be licensed under the project's
+[AGPL-3.0-or-later](LICENSE) license.
 
 ## Code Style
 
