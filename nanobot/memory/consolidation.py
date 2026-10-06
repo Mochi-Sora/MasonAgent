@@ -24,6 +24,9 @@ from loguru import logger
 
 from nanobot.llm_usage.context import llm_usage_source
 from nanobot.memory.store import (
+    CONSOLIDATION_LAST_ATTEMPT_META_KEY,
+    CONSOLIDATION_LAST_ERROR_META_KEY,
+    CONSOLIDATION_LAST_OK_META_KEY,
     EpisodeHit,
     MemoryDB,
     MemoryHit,
@@ -84,14 +87,18 @@ class MemoryConsolidator:
         self.db = db
 
     async def run(self, runtime: LLMRuntime, *, now: datetime | None = None) -> ConsolidationResult:
+        moment = now or datetime.now()
         cursor = self.db.consolidation_cursor()
         episodes = self.db.episodes_after(cursor, limit=_BATCH_EPISODES)
         if not episodes:
+            # Record the heartbeat so health shows the job is still ticking.
+            self.db.set_meta(CONSOLIDATION_LAST_ATTEMPT_META_KEY, moment.isoformat())
             return ConsolidationResult(ok=True, cursor=cursor)
         memories = self.db.list_memories(limit=_MAX_MEMORIES)
         prompt = self._build_prompt(episodes, memories)
         plan, error = await self._request_plan(runtime, prompt)
         if plan is None:
+            self._record_failure(error, moment)
             logger.warning("Memory consolidation skipped: {}", error)
             return ConsolidationResult(
                 ok=False,
@@ -103,6 +110,7 @@ class MemoryConsolidator:
         created_skills, retired_skills = self._apply_skills(plan)
         new_cursor = max(episode.id for episode in episodes)
         self.db.set_consolidation_cursor(new_cursor)
+        self._record_success(moment)
         snapshot = self._write_snapshot(
             plan,
             applied,
@@ -121,6 +129,16 @@ class MemoryConsolidator:
         )
         logger.info("Memory consolidation: {}", result.summary())
         return result
+
+    def _record_success(self, moment: datetime) -> None:
+        stamp = moment.isoformat()
+        self.db.set_meta(CONSOLIDATION_LAST_OK_META_KEY, stamp)
+        self.db.set_meta(CONSOLIDATION_LAST_ATTEMPT_META_KEY, stamp)
+        self.db.set_meta(CONSOLIDATION_LAST_ERROR_META_KEY, "")
+
+    def _record_failure(self, error: str | None, moment: datetime) -> None:
+        self.db.set_meta(CONSOLIDATION_LAST_ATTEMPT_META_KEY, moment.isoformat())
+        self.db.set_meta(CONSOLIDATION_LAST_ERROR_META_KEY, (error or "unknown")[:500])
 
     # -- prompt ---------------------------------------------------------------
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from datetime import datetime
 from pathlib import Path
@@ -193,3 +194,89 @@ def test_capture_keeps_conversation_text_only(db: MemoryDB) -> None:
 
     hits = db.recent_episodes()
     assert [hit.content for hit in hits] == ["what did I say about the deploy?"]
+
+
+# -- durability: snapshots, checkpoints, health -------------------------------
+
+
+def test_snapshot_captures_uncheckpointed_wal_and_roundtrips(db: MemoryDB) -> None:
+    """A hand copy of memory.db would miss the WAL; VACUUM INTO must not."""
+    db.capture_messages("cli:1", [_msg("user", "wal-only turn")], now=_NOW)
+    assert db._wal_bytes() > 0  # committed, not yet folded into memory.db
+
+    snapshot = db.snapshot(now=_NOW)
+    assert snapshot is not None and snapshot.exists()
+    copy = sqlite3.connect(snapshot)
+    try:
+        rows = copy.execute("SELECT role, content FROM episodes").fetchall()
+    finally:
+        copy.close()
+    assert rows == [("user", "wal-only turn")]
+    assert db.get_meta("last_snapshot_at") is not None
+
+
+def test_snapshot_prunes_to_newest(db: MemoryDB) -> None:
+    for day in range(1, 6):
+        assert db.snapshot(keep=3, now=datetime(2026, 1, day)) is not None
+    backups = db.path.parent / "backups"
+    assert sorted(path.name for path in backups.glob("memory-*.db")) == [
+        "memory-2026-01-03.db",
+        "memory-2026-01-04.db",
+        "memory-2026-01-05.db",
+    ]
+
+
+def test_checkpoint_truncates_wal(db: MemoryDB) -> None:
+    db.capture_messages("cli:1", [_msg("user", "durable")], now=_NOW)
+    assert db._wal_bytes() > 0
+    assert db.checkpoint("TRUNCATE") is True
+    assert db._wal_bytes() == 0
+    assert db.get_meta("wal_checkpoint_at") is not None
+
+
+def test_stats_reports_counts_sizes_and_pending(db: MemoryDB) -> None:
+    db.capture_messages("cli:1", [_msg("user", "recent turn")], now=_NOW)
+    db.insert_memory("durable fact", now=_NOW)
+
+    stats = db.stats()
+    assert stats["enabled"] is True
+    assert stats["episodes"] == 1
+    assert stats["memories"] == 1
+    assert stats["edges"] == 0
+    assert stats["pending_episodes"] == 1
+    assert stats["consolidation_cursor"] == 0
+    assert stats["consolidation_last_ok_at"] is None
+    assert isinstance(stats["db_bytes"], int) and stats["db_bytes"] > 0
+    assert isinstance(stats["wal_bytes"], int) and stats["wal_bytes"] >= 0
+
+    db.set_consolidation_cursor(1)
+    assert db.stats()["pending_episodes"] == 0
+    assert db.stats()["consolidation_cursor"] == 1
+
+
+def test_store_files_are_not_world_readable(db: MemoryDB) -> None:
+    db.counts()  # force connect/create
+    assert db.path.stat().st_mode & 0o777 == 0o600
+    assert db.path.parent.stat().st_mode & 0o777 == 0o700
+
+
+def test_snapshot_and_checkpoint_are_inert_when_disabled(tmp_path: Path) -> None:
+    store = MemoryDB(tmp_path / "memory.db", enabled=False)
+    assert store.snapshot() is None
+    assert store.checkpoint("TRUNCATE") is False
+    assert store.stats() == {
+        "enabled": False,
+        "episodes": 0,
+        "memories": 0,
+        "edges": 0,
+        "pending_episodes": 0,
+        "consolidation_cursor": 0,
+        "consolidation_last_attempt_at": None,
+        "consolidation_last_ok_at": None,
+        "consolidation_last_error": None,
+        "db_bytes": 0,
+        "wal_bytes": 0,
+        "last_checkpoint": None,
+        "last_snapshot": None,
+    }
+    store.close()

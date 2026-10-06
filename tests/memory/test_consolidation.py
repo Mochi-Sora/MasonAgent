@@ -271,3 +271,33 @@ async def test_user_authored_skills_are_never_touched(
     assert result.skills == ()
     assert result.retired_skills == ()
     assert user_skill.read_text(encoding="utf-8").endswith("Mine.\n")
+
+
+async def test_success_records_health_metadata(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    _seed_episodes(db)
+    mock_provider.chat_stream_with_retry.return_value = _plan_response({})
+
+    await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
+
+    stats = db.stats()
+    assert stats["consolidation_last_ok_at"] == _NOW.isoformat()
+    assert stats["consolidation_last_attempt_at"] == _NOW.isoformat()
+    assert stats["consolidation_last_error"] == ""
+
+
+async def test_failure_records_error_and_keeps_cursor(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    _seed_episodes(db)
+    mock_provider.chat_stream_with_retry.side_effect = RuntimeError("api down")
+
+    await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
+
+    stats = db.stats()
+    assert stats["consolidation_last_ok_at"] is None
+    assert stats["consolidation_last_attempt_at"] == _NOW.isoformat()
+    assert isinstance(stats["consolidation_last_error"], str)
+    assert "model call failed" in stats["consolidation_last_error"]
+    assert stats["consolidation_cursor"] == 0

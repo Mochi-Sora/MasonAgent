@@ -24,7 +24,7 @@ import re
 import sqlite3
 import threading
 from collections.abc import Generator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +46,22 @@ _EPISODE_MAX_CHARS = 8_000
 _TRUNCATION_SUFFIX_CHARS = len("\n... (truncated)")
 _MAX_FTS_TOKENS = 24
 _TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+
+# Durability tuning: keep the WAL bounded without waiting on SQLite's default
+# 1000-page trigger, warn when it still grows, and snapshot into a subdirectory.
+_WAL_AUTOCHECKPOINT_PAGES = 256
+_WAL_WARN_BYTES = 8 * 1024 * 1024
+_SNAPSHOT_DIR = "backups"
+_DEFAULT_SNAPSHOT_KEEP = 7
+_WAL_CHECKPOINT_META_KEY = "wal_checkpoint_at"
+_SNAPSHOT_META_KEY = "last_snapshot_at"
+_CHECKPOINT_MODES = ("PASSIVE", "FULL", "RESTART", "TRUNCATE")
+
+# Consolidation freshness, written by nanobot/memory/consolidation.py and read
+# back by MemoryDB.stats() for the gateway health payload.
+CONSOLIDATION_LAST_OK_META_KEY = "consolidation_last_ok_at"
+CONSOLIDATION_LAST_ATTEMPT_META_KEY = "consolidation_last_attempt_at"
+CONSOLIDATION_LAST_ERROR_META_KEY = "consolidation_last_error"
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -415,6 +431,7 @@ class MemoryDB:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout = 5000")
         connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute(f"PRAGMA wal_autocheckpoint = {_WAL_AUTOCHECKPOINT_PAGES}")
         connection.execute("PRAGMA synchronous = FULL")
         connection.execute("PRAGMA temp_store = MEMORY")
         connection.execute("PRAGMA cache_size = -8000")
@@ -436,14 +453,133 @@ class MemoryDB:
         )
         self._connection = connection
         self._connection_pid = pid
+        self._restrict_permissions()
         return connection
 
     def close(self) -> None:
         with self._lock:
             if self._connection is not None:
+                # A clean shutdown leaves one tidy file instead of a warm WAL.
+                with suppress(sqlite3.Error):
+                    self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self._connection.close()
                 self._connection = None
                 self._connection_pid = None
+
+    # -- durability ------------------------------------------------------------
+
+    def _sidecar(self, suffix: str) -> Path:
+        return Path(f"{self.path}{suffix}")
+
+    def _file_bytes(self, path: Path) -> int:
+        try:
+            return path.stat().st_size
+        except OSError:
+            return 0
+
+    def _wal_bytes(self) -> int:
+        return self._file_bytes(self._sidecar("-wal"))
+
+    def _restrict_permissions(self) -> None:
+        """Best-effort lock-down of the store and its WAL sidecars."""
+        with suppress(OSError):
+            self.path.parent.chmod(0o700)
+        for candidate in (self.path, self._sidecar("-wal"), self._sidecar("-shm")):
+            if candidate.exists():
+                with suppress(OSError):
+                    candidate.chmod(0o600)
+
+    def checkpoint(self, mode: str = "PASSIVE") -> bool:
+        """Fold the WAL back into ``memory.db``.
+
+        ``mode`` is any SQLite checkpoint mode; ``TRUNCATE`` also shrinks the
+        WAL to zero when no other reader blocks it. Returns False when the store
+        is disabled or the checkpoint could not complete (a busy reader).
+        """
+        if not self.enabled:
+            return False
+        normalized = mode.upper()
+        if normalized not in _CHECKPOINT_MODES:
+            normalized = "PASSIVE"
+        wal_bytes = self._wal_bytes()
+        with self._lock:
+            connection = self._connect()
+            # Stamp the attempt first so the checkpoint itself flushes the row;
+            # TRUNCATE then leaves a zero-length WAL behind.
+            connection.execute(
+                "INSERT INTO meta(key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (_WAL_CHECKPOINT_META_KEY, datetime.now().isoformat()),
+            )
+            try:
+                row = connection.execute(f"PRAGMA wal_checkpoint({normalized})").fetchone()
+            except sqlite3.Error:
+                return False
+        busy = row is not None and _int(cast(object, row[0])) != 0
+        if wal_bytes >= _WAL_WARN_BYTES:
+            logger.warning(
+                "Memory WAL at {} reached {} bytes before checkpoint ({}); "
+                "snapshots and the daily rollover keep it bounded.",
+                self.path,
+                wal_bytes,
+                normalized,
+            )
+        return not busy
+
+    def snapshot(
+        self,
+        dest: Path | None = None,
+        *,
+        keep: int = _DEFAULT_SNAPSHOT_KEEP,
+        now: datetime | None = None,
+    ) -> Path | None:
+        """Write a consistent single-file copy of the database.
+
+        ``VACUUM INTO`` captures committed WAL frames too, so unlike copying
+        ``memory.db`` by hand the copy is never missing recent writes. Older
+        snapshots beyond *keep* are pruned. Returns the snapshot path, or None
+        when the store is disabled or the copy failed.
+        """
+        if not self.enabled:
+            return None
+        moment = now or datetime.now()
+        directory = self.path.parent / _SNAPSHOT_DIR
+        target = dest or directory / f"memory-{moment.strftime('%Y-%m-%d')}.db"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            connection = self._connect()
+            with suppress(OSError):
+                target.unlink()
+            try:
+                connection.execute("VACUUM INTO ?", (str(target),))
+            except sqlite3.Error:
+                logger.exception("Memory snapshot failed at {}", target)
+                return None
+            connection.execute(
+                "INSERT INTO meta(key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (_SNAPSHOT_META_KEY, moment.isoformat()),
+            )
+        with suppress(OSError):
+            target.chmod(0o600)
+        self._prune_snapshots(directory, keep=max(1, int(keep)))
+        logger.info("Memory snapshot written to {}", target)
+        return target
+
+    @staticmethod
+    def _prune_snapshots(directory: Path, *, keep: int) -> None:
+        try:
+            # Names are ISO dates (``memory-YYYY-MM-DD.db``), so a reverse
+            # lexicographic sort is chronological and tie-free.
+            candidates = sorted(
+                (path.name for path in directory.glob("memory-*.db") if path.is_file()),
+                reverse=True,
+            )
+        except OSError:
+            return
+        for stale in candidates[keep:]:
+            with suppress(OSError):
+                (directory / stale).unlink()
 
     @contextmanager
     def _write(self) -> Generator[sqlite3.Connection]:
@@ -1066,6 +1202,55 @@ class MemoryDB:
         if removed:
             logger.info("Memory rollover: dropped {} backup episodes before {}", removed, today)
         return removed
+
+    def stats(self) -> dict[str, object]:
+        """Operational health for the store: counts, sizes, and freshness."""
+        if not self.enabled:
+            return {
+                "enabled": False,
+                "episodes": 0,
+                "memories": 0,
+                "edges": 0,
+                "pending_episodes": 0,
+                "consolidation_cursor": 0,
+                "consolidation_last_attempt_at": None,
+                "consolidation_last_ok_at": None,
+                "consolidation_last_error": None,
+                "db_bytes": 0,
+                "wal_bytes": 0,
+                "last_checkpoint": None,
+                "last_snapshot": None,
+            }
+        cursor = self.consolidation_cursor()
+        with self._lock:
+            connection = self._connect()
+
+            def scalar(sql: str, *params: object) -> int:
+                row = connection.execute(sql, params).fetchone()
+                return _int(cast(object, row[0])) if row is not None else 0
+
+            counts = {
+                "episodes": scalar("SELECT COUNT(*) FROM episodes"),
+                "memories": scalar("SELECT COUNT(*) FROM memories"),
+                "edges": scalar("SELECT COUNT(*) FROM edges"),
+                "pending_episodes": scalar(
+                    "SELECT COUNT(*) FROM episodes WHERE id > ?", cursor,
+                ),
+            }
+        return {
+            "enabled": True,
+            **counts,
+            "consolidation_cursor": cursor,
+            "consolidation_last_attempt_at": self.get_meta(
+                CONSOLIDATION_LAST_ATTEMPT_META_KEY,
+            ),
+            "consolidation_last_ok_at": self.get_meta(CONSOLIDATION_LAST_OK_META_KEY),
+            "consolidation_last_error": self.get_meta(CONSOLIDATION_LAST_ERROR_META_KEY),
+            "db_bytes": self._file_bytes(self.path),
+            "wal_bytes": self._wal_bytes(),
+            "last_checkpoint": self.get_meta(_WAL_CHECKPOINT_META_KEY),
+            "last_snapshot": self.get_meta(_SNAPSHOT_META_KEY),
+        }
 
     def counts(self) -> dict[str, int]:
         """Row counts per tier, for status output and tests."""

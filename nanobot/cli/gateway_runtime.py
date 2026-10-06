@@ -260,6 +260,21 @@ def _gateway_readiness_payload() -> tuple[bool, dict[str, object]]:
     return True, {"status": "ok", "process": "alive", "ready": True}
 
 
+def _gateway_memory_stats(agent: object) -> dict[str, object] | None:
+    """Memory health for the /health payload; never raises."""
+    context = getattr(agent, "context", None)
+    db = getattr(context, "memory_db", None)
+    stats = getattr(db, "stats", None)
+    if stats is None:
+        return None
+    try:
+        result = stats()
+    except Exception:
+        logger.exception("Memory health unavailable")
+        return None
+    return cast(dict[str, object], result) if isinstance(result, dict) else None
+
+
 async def _close_gateway_runtime(
     agent: AgentLoop,
     mcp_provider: MCPProvider,
@@ -485,6 +500,9 @@ def _run_gateway(
             result = await consolidator.run(runtime)
             if not result.ok:
                 logger.warning("Memory consolidation: {}", result.summary())
+            else:
+                # Fold the WAL back so it cannot grow across many 2h passes.
+                agent.context.memory_db.checkpoint("TRUNCATE")
         except Exception:
             logger.exception("Memory consolidation failed")
 
@@ -508,6 +526,8 @@ def _run_gateway(
                     memory_db,
                     agent.context.memory_state,
                     consolidation_enabled=memory_consolidation_enabled,
+                    snapshot_enabled=memory_cfg.snapshot_enabled,
+                    snapshot_keep=memory_cfg.snapshot_keep,
                 )
             return None
 
@@ -656,6 +676,9 @@ def _run_gateway(
 
                     if method == "GET" and path == "/health":
                         ready, payload = _gateway_readiness_payload()
+                        memory = _gateway_memory_stats(agent)
+                        if memory is not None:
+                            payload["memory"] = memory
                         body = _json.dumps(payload)
                         status = "200 OK" if ready else "503 Service Unavailable"
                         content_type = "application/json"

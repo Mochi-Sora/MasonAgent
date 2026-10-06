@@ -10,14 +10,18 @@ block the stop.
 import asyncio
 import time
 from contextlib import suppress
+from pathlib import Path
+from types import SimpleNamespace
 
 from nanobot.agent.hook import AgentRunHookContext
 from nanobot.agent.tools.mcp import MCPProvider
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.cli.gateway_runtime import (
     _close_gateway_runtime,
+    _gateway_memory_stats,
     _MCPReadinessHook,
 )
+from nanobot.memory.store import MemoryDB
 
 
 class _FakeAgent:
@@ -240,3 +244,26 @@ async def test_cancelled_runtime_tasks_gather_does_not_raise() -> None:
     assert runtime_tasks.done()  # the cancelled gather was awaited without raising
     assert agent.close_calls == 1
     assert provider.close_calls == 1
+
+
+def test_gateway_memory_stats_folds_memory_health_into_payload(tmp_path: Path) -> None:
+    db = MemoryDB(tmp_path / "memory" / "memory.db")
+    try:
+        agent = SimpleNamespace(context=SimpleNamespace(memory_db=db))
+        stats = _gateway_memory_stats(agent)
+    finally:
+        db.close()
+
+    assert stats is not None
+    assert stats["enabled"] is True
+    assert stats["episodes"] == 0
+    assert "wal_bytes" in stats
+    assert "consolidation_last_ok_at" in stats
+
+
+def test_gateway_memory_stats_is_none_without_a_store() -> None:
+    assert _gateway_memory_stats(object()) is None
+    assert (
+        _gateway_memory_stats(SimpleNamespace(context=SimpleNamespace(memory_db=None)))
+        is None
+    )

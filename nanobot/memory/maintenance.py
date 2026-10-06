@@ -28,22 +28,32 @@ def maybe_rollover(
     memory_state: MemoryState,
     *,
     consolidation_enabled: bool = True,
+    snapshot_enabled: bool = True,
+    snapshot_keep: int = 7,
     now: datetime | None = None,
 ) -> bool:
     """Run the daily rollover at most once per day; returns True when it ran.
 
     With consolidation enabled the purge stops at the consolidation cursor, so
     backup the job has not considered yet survives until it has. With it
-disabled the backup tier is strictly day-scoped.
+    disabled the backup tier is strictly day-scoped.
+
+    When *snapshot_enabled*, a consistent copy of the database is written
+    *before* the purge, so the outgoing day is never lost even though the
+    backup tier is day-scoped.
     """
     if not memory_db.enabled:
         return False
     today = current_day(now)
     if memory_db.get_meta(ROLLOVER_META_KEY) == today:
         return False
+    if snapshot_enabled:
+        if memory_db.snapshot(keep=snapshot_keep, now=now) is None:
+            logger.warning("Memory snapshot failed; rollover continues without a backup copy")
     purge_through = memory_db.consolidation_cursor() if consolidation_enabled else None
     removed = memory_db.rollover(today, up_to_id=purge_through)
     memory_state.clear()
     memory_db.set_meta(ROLLOVER_META_KEY, today)
+    memory_db.checkpoint("TRUNCATE")
     logger.info("Memory rollover for {}: {} backup episodes discarded", today, removed)
     return True

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -54,4 +55,41 @@ def test_disabled_store_never_rolls_over(tmp_path: Path) -> None:
     state.write("keep me")
     assert maybe_rollover(db, state, now=datetime(2026, 1, 2, 12, 0)) is False
     assert state.read() == "keep me"
+    db.close()
+
+
+def test_rollover_snapshots_before_purge(tmp_path: Path) -> None:
+    """The daily purge is destructive, so the snapshot must run first."""
+    db = MemoryDB(tmp_path / "memory" / "memory.db")
+    state = MemoryState(tmp_path)
+    db.capture_messages(
+        "cli:1",
+        [{"role": "user", "content": "outgoing day", "timestamp": "2026-01-01T10:00:00"}],
+    )
+    db.set_consolidation_cursor(1)  # make the episode eligible for the purge
+
+    assert maybe_rollover(db, state, now=datetime(2026, 1, 2, 0, 1)) is True
+    assert db.counts()["episodes"] == 0
+
+    snapshot = tmp_path / "memory" / "backups" / "memory-2026-01-02.db"
+    assert snapshot.exists()
+    copy = sqlite3.connect(snapshot)
+    try:
+        rows = copy.execute("SELECT content FROM episodes").fetchall()
+    finally:
+        copy.close()
+    assert rows == [("outgoing day",)]
+    db.close()
+
+
+def test_rollover_can_skip_snapshot(tmp_path: Path) -> None:
+    db = MemoryDB(tmp_path / "memory" / "memory.db")
+    state = MemoryState(tmp_path)
+    db.capture_messages(
+        "cli:1", [{"role": "user", "content": "today", "timestamp": "2026-01-02T09:00:00"}],
+    )
+    assert maybe_rollover(
+        db, state, snapshot_enabled=False, now=datetime(2026, 1, 2, 12, 0),
+    ) is True
+    assert not (tmp_path / "memory" / "backups").exists()
     db.close()

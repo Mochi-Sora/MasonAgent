@@ -33,3 +33,42 @@ def test_write_creates_parent_directory(tmp_path: Path) -> None:
     state = MemoryState(tmp_path / "nested")
     state.write("hello")
     assert (tmp_path / "nested" / "memory" / "state.md").is_file()
+
+
+def test_history_archives_outgoing_state_newest_first(tmp_path: Path) -> None:
+    state = MemoryState(tmp_path)
+    state.write("first")
+    state.write("second")
+    state.write("third")
+
+    history = state.history_path.read_text(encoding="utf-8")
+    # Newest archived version is on top; the live state is never duplicated.
+    assert history.index("second") < history.index("first")
+    assert "third" not in history
+
+
+def test_history_is_bounded(tmp_path: Path) -> None:
+    state = MemoryState(tmp_path, history_versions=2)
+    for index in range(5):
+        state.write(f"version {index}")
+
+    history = state.history_path.read_text(encoding="utf-8")
+    assert "version 3" in history
+    assert "version 2" in history
+    assert "version 1" not in history
+    assert "version 0" not in history
+
+
+def test_history_is_disabled_at_zero_versions(tmp_path: Path) -> None:
+    state = MemoryState(tmp_path, history_versions=0)
+    state.write("first")
+    state.write("second")
+    assert not state.history_path.exists()
+
+
+def test_clear_archives_the_outgoing_state(tmp_path: Path) -> None:
+    state = MemoryState(tmp_path)
+    state.write("daily context")
+    state.clear()
+    assert state.read() == ""
+    assert "daily context" in state.history_path.read_text(encoding="utf-8")

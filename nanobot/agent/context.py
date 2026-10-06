@@ -106,6 +106,8 @@ class ContextBuilder:
         memory_enabled: bool = True,
         memory_state_max_chars: int = DEFAULT_STATE_MAX_CHARS,
         memory_consolidation_enabled: bool = True,
+        memory_snapshot_enabled: bool = True,
+        memory_snapshot_keep: int = 7,
         lazy_capabilities: bool = True,
     ):
         self.workspace = workspace
@@ -115,6 +117,8 @@ class ContextBuilder:
         self.memory_state = MemoryState(workspace, max_chars=memory_state_max_chars)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
         self._consolidation_enabled = memory_consolidation_enabled
+        self._snapshot_enabled = memory_snapshot_enabled
+        self._snapshot_keep = memory_snapshot_keep
         self._lazy_capabilities = lazy_capabilities
         if memory_enabled:
             self._maintain_memory()
@@ -128,6 +132,8 @@ class ContextBuilder:
                     self.memory_db,
                     self.memory_state,
                     consolidation_enabled=self._consolidation_enabled,
+                    snapshot_enabled=self._snapshot_enabled,
+                    snapshot_keep=self._snapshot_keep,
                 )
         except Exception:
             logger.exception("Memory maintenance failed")

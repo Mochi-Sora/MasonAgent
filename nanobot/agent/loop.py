@@ -291,6 +291,8 @@ class AgentLoop:
         memory_enabled: bool = True,
         memory_state_max_chars: int = DEFAULT_STATE_MAX_CHARS,
         memory_consolidation_enabled: bool = True,
+        memory_snapshot_enabled: bool = True,
+        memory_snapshot_keep: int = 7,
         consolidation_model_preset: str | None = None,
         tools_config: ToolsConfig | None = None,
         image_generation_provider_config: ProviderConfig | None = None,
@@ -392,6 +394,8 @@ class AgentLoop:
             memory_enabled=memory_enabled,
             memory_state_max_chars=memory_state_max_chars,
             memory_consolidation_enabled=memory_consolidation_enabled,
+            memory_snapshot_enabled=memory_snapshot_enabled,
+            memory_snapshot_keep=memory_snapshot_keep,
             lazy_capabilities=_tc.lazy_capabilities.enabled,
         )
         self.sessions = session_manager or SessionManager(workspace)
@@ -530,6 +534,8 @@ class AgentLoop:
             memory_enabled=defaults.memory.enabled,
             memory_state_max_chars=defaults.memory.state_max_chars,
             memory_consolidation_enabled=defaults.memory.consolidation.enabled,
+            memory_snapshot_enabled=defaults.memory.snapshot_enabled,
+            memory_snapshot_keep=defaults.memory.snapshot_keep,
             consolidation_model_preset=defaults.memory.consolidation.model_override,
             session_ttl_minutes=defaults.session_ttl_minutes,
             session_replay_max_tokens=defaults.session_replay_max_tokens,
