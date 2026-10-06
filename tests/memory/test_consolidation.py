@@ -334,3 +334,56 @@ async def test_prompt_reads_workspace_state_by_default(
 
     prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
     assert "workspace state marker" in prompt
+
+
+def test_preview_keeps_head_and_tail() -> None:
+    from nanobot.memory.consolidation import _preview
+
+    text = "START" + "x" * 1_000 + "END"
+    out = _preview(text, 100)
+    assert out.startswith("START")
+    assert out.endswith("END")
+    assert len(out) <= 100
+    assert "…" in out
+    assert _preview("short", 100) == "short"
+    assert _preview("anything", 0) == ""
+
+
+async def test_long_turn_is_judged_on_more_than_its_opening(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    body = "AUDIT_START " + "detail " * 1_000 + "AUDIT_END"
+    db.capture_messages(
+        "cli:1",
+        [{"role": "user", "content": body, "timestamp": "2026-01-02T09:00:00"}],
+        now=_NOW,
+    )
+    mock_provider.chat_stream_with_retry.return_value = _plan_response({})
+
+    await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
+
+    prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
+    section = prompt.split("## New backup turns", 1)[1].split("## Current working state", 1)[0]
+    # The old 500-char preview dropped the conclusion; head+tail must keep both.
+    assert "AUDIT_START" in section
+    assert "AUDIT_END" in section
+    assert len(section) > 500
+
+
+async def test_full_batch_does_not_starve_long_term_memory(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    _seed_episodes(db, count=40)
+    for index in range(60):
+        db.insert_memory(f"durable fact {index}", now=_NOW)
+    mock_provider.chat_stream_with_retry.return_value = _plan_response({})
+
+    await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
+
+    prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
+    # Every turn in the batch is represented (the old shared budget broke out
+    # and silently dropped the tail of the batch).
+    assert "#1 [" in prompt
+    assert "#40" in prompt
+    # The long-term list the curator needs for de-duplication still fits.
+    assert "durable fact 59" in prompt

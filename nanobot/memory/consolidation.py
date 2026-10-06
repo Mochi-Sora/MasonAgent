@@ -45,12 +45,25 @@ _CONSOLIDATION_PROMPT = render_template("agent/consolidation.md", strip=True)
 
 _BATCH_EPISODES = 40
 _MAX_MEMORIES = 150
-_EPISODE_PREVIEW_CHARS = 500
+# Per-section character budgets. Each section gets its own so a long backup batch
+# can never starve the long-term memory list the curator needs for de-duplication
+# (or vice versa). Worst case is ~100 KB (~25k tokens): a background job on a
+# large-context model, not a per-turn cost.
+_EPISODE_BUDGET = 44_000
+_MEMORY_BUDGET = 44_000
+_STATE_BUDGET = 12_000
+# One turn's share of the episode budget. A small batch shows up to 6 KB, so a
+# multi-KB report is judged on its body rather than its first few hundred
+# characters; a busy batch shrinks the share fairly so every turn is still shown.
+_EPISODE_PREVIEW_CHARS = 6_000
+_EPISODE_MIN_PREVIEW_CHARS = 800
 _MEMORY_PREVIEW_CHARS = 240
-_PROMPT_CHAR_BUDGET = 60_000
 _STATE_PREVIEW_CHARS = 2_500
 _STATE_VERSION_PREVIEW_CHARS = 1_000
 _MAX_STATE_VERSIONS = 5
+# When a turn must be shortened, keep both ends so a report's conclusion survives.
+_PREVIEW_ELISION = "\n…\n"
+_PREVIEW_HEAD_RATIO = 0.6
 _SKILL_BODY_MAX_CHARS = 1_200
 _SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
 _GENERATED_MARKER = "<!-- generated-by: memory-consolidation -->"
@@ -164,47 +177,56 @@ class MemoryConsolidator:
         state_text: str = "",
         state_versions: Sequence[StateVersion] = (),
     ) -> str:
-        budget = _PROMPT_CHAR_BUDGET
-        lines = ["## New backup turns"]
-        for episode in episodes:
-            content = truncate_text(episode.content, _EPISODE_PREVIEW_CHARS)
-            entry = f"#{episode.id} [{episode.ts}] {episode.role}: {content}"
-            if len(entry) > budget:
-                break
-            budget -= len(entry)
-            lines.append(entry)
-
-        lines.extend(["", "## Current working state"])
-        if state_text:
-            entry = truncate_text(state_text, _STATE_PREVIEW_CHARS)
-            budget -= len(entry)
-            lines.append(entry)
-        else:
-            lines.append("(empty)")
-
-        lines.extend(["", "## Recent working states (newest first)"])
-        if state_versions:
-            for version in state_versions:
-                content = truncate_text(version.content, _STATE_VERSION_PREVIEW_CHARS)
-                entry = f"- [{version.recorded_at}] {content}"
-                if len(entry) > budget:
-                    break
-                budget -= len(entry)
-                lines.append(entry)
-        else:
-            lines.append("(none)")
-
-        lines.extend(["", "## Current long-term memory"])
-        if not memories:
-            lines.append("(empty)")
-        for memory in memories:
-            text = truncate_text(memory.text, _MEMORY_PREVIEW_CHARS)
-            entry = f"#{memory.id} [{memory.kind}] {text}"
-            if len(entry) > budget:
-                break
-            budget -= len(entry)
-            lines.append(entry)
+        lines = ["## New backup turns", *self._episode_lines(episodes)]
+        lines += ["", "## Current working state", *self._state_lines(state_text)]
+        lines += [
+            "",
+            "## Recent working states (newest first)",
+            *self._state_version_lines(state_versions),
+        ]
+        lines += ["", "## Current long-term memory", *self._memory_lines(memories)]
         return "\n".join(lines)
+
+    def _episode_lines(self, episodes: Sequence[EpisodeHit]) -> list[str]:
+        if not episodes:
+            return ["(none)"]
+        allowance = min(
+            _EPISODE_PREVIEW_CHARS,
+            max(_EPISODE_MIN_PREVIEW_CHARS, _EPISODE_BUDGET // len(episodes)),
+        )
+        return [
+            f"#{episode.id} [{episode.ts}] {episode.role}: "
+            f"{_preview(episode.content, allowance)}"
+            for episode in episodes
+        ]
+
+    def _state_lines(self, state_text: str) -> list[str]:
+        if not state_text:
+            return ["(empty)"]
+        return [truncate_text(state_text, _STATE_PREVIEW_CHARS)]
+
+    def _state_version_lines(self, state_versions: Sequence[StateVersion]) -> list[str]:
+        if not state_versions:
+            return ["(none)"]
+        budget = _STATE_BUDGET
+        lines: list[str] = []
+        for version in state_versions:
+            content = truncate_text(version.content, _STATE_VERSION_PREVIEW_CHARS)
+            entry = f"- [{version.recorded_at}] {content}"
+            if len(entry) > budget:
+                break
+            budget -= len(entry)
+            lines.append(entry)
+        return lines or ["(none)"]
+
+    def _memory_lines(self, memories: Sequence[MemoryHit]) -> list[str]:
+        if not memories:
+            return ["(empty)"]
+        allowance = max(120, min(_MEMORY_PREVIEW_CHARS, _MEMORY_BUDGET // len(memories)))
+        return [
+            f"#{memory.id} [{memory.kind}] {truncate_text(memory.text, allowance)}"
+            for memory in memories
+        ]
 
     async def _request_plan(
         self,
@@ -298,6 +320,26 @@ class MemoryConsolidator:
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_lines(path, lines)
         return str(path)
+
+
+def _preview(text: str, limit: int) -> str:
+    """Shorten *text* to about *limit* chars, keeping both ends.
+
+    A plain head-truncation loses the conclusion of a long report, which is
+    often the part worth promoting; keeping head and tail preserves the setup
+    and the result.
+    """
+    if limit <= 0:
+        return ""
+    if len(text) <= limit:
+        return text
+    marker = _PREVIEW_ELISION
+    if limit <= len(marker) + 2:
+        return text[:limit]
+    usable = limit - len(marker)
+    head = int(usable * _PREVIEW_HEAD_RATIO)
+    tail = usable - head
+    return text[:head].rstrip() + marker + text[-tail:].lstrip()
 
 
 def parse_plan(text: str) -> Mapping[str, object] | None:
