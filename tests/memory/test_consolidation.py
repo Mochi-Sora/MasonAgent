@@ -11,6 +11,7 @@ import pytest
 
 from nanobot.agent.skills import SkillsLoader
 from nanobot.memory.consolidation import MemoryConsolidator
+from nanobot.memory.state import MemoryState
 from nanobot.memory.store import MemoryDB
 from nanobot.providers.base import GenerationSettings, LLMResponse
 from nanobot.utils.llm_runtime import LLMRuntime
@@ -301,3 +302,35 @@ async def test_failure_records_error_and_keeps_cursor(
     assert isinstance(stats["consolidation_last_error"], str)
     assert "model call failed" in stats["consolidation_last_error"]
     assert stats["consolidation_cursor"] == 0
+
+
+async def test_prompt_includes_working_state_and_recent_versions(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    state = MemoryState(tmp_path)
+    state.write("goal A: audit the store")
+    state.write("goal B: ship the rework")  # archives goal A
+    _seed_episodes(db)
+    mock_provider.chat_stream_with_retry.return_value = _plan_response({})
+
+    await MemoryConsolidator(tmp_path, db, state=state).run(runtime, now=_NOW)
+
+    prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
+    assert "## Current working state" in prompt
+    assert "goal B: ship the rework" in prompt
+    assert "## Recent working states" in prompt
+    assert "goal A: audit the store" in prompt
+
+
+async def test_prompt_reads_workspace_state_by_default(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    (tmp_path / "memory").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "memory" / "state.md").write_text("workspace state marker", encoding="utf-8")
+    _seed_episodes(db)
+    mock_provider.chat_stream_with_retry.return_value = _plan_response({})
+
+    await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
+
+    prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
+    assert "workspace state marker" in prompt

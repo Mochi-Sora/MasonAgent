@@ -108,6 +108,7 @@ class ContextBuilder:
         memory_consolidation_enabled: bool = True,
         memory_snapshot_enabled: bool = True,
         memory_snapshot_keep: int = 7,
+        memory_backup_retention_days: int = 1,
         lazy_capabilities: bool = True,
     ):
         self.workspace = workspace
@@ -119,6 +120,7 @@ class ContextBuilder:
         self._consolidation_enabled = memory_consolidation_enabled
         self._snapshot_enabled = memory_snapshot_enabled
         self._snapshot_keep = memory_snapshot_keep
+        self._retention_days = max(1, int(memory_backup_retention_days))
         self._lazy_capabilities = lazy_capabilities
         if memory_enabled:
             self._maintain_memory()
@@ -134,6 +136,7 @@ class ContextBuilder:
                     consolidation_enabled=self._consolidation_enabled,
                     snapshot_enabled=self._snapshot_enabled,
                     snapshot_keep=self._snapshot_keep,
+                    retention_days=self._retention_days,
                 )
         except Exception:
             logger.exception("Memory maintenance failed")

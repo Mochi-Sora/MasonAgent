@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.memory.store import MemoryDB
+from nanobot.memory.store import MemoryDB, retention_cutoff
 from nanobot.runtime_context import (
     RUNTIME_CONTEXT_HISTORY_META,
     RuntimeContextBlock,
@@ -89,6 +89,24 @@ def test_rollover_drops_previous_days_only(db: MemoryDB) -> None:
     assert db.rollover("2026-01-02") == 1
     assert db.counts() == {"episodes": 1, "memories": 1, "edges": 0}
     assert db.search_episodes("yesterday") == []
+
+
+def test_rollover_retention_window_keeps_trailing_days(db: MemoryDB) -> None:
+    db.capture_messages("cli:1", [_msg("user", "day one", "2026-01-01T09:00:00")], now=_NOW)
+    db.capture_messages("cli:1", [_msg("user", "day two", "2026-01-02T09:00:00")], now=_NOW)
+    db.capture_messages("cli:1", [_msg("user", "day three", "2026-01-03T09:00:00")], now=_NOW)
+
+    assert db.rollover("2026-01-03", retain_days=2) == 1
+    remaining = sorted(hit.content for hit in db.recent_episodes(limit=10))
+    assert remaining == ["day three", "day two"]
+
+
+def test_retention_cutoff_counts_days_including_today() -> None:
+    assert retention_cutoff("2026-01-03", 1) == "2026-01-03"
+    assert retention_cutoff("2026-01-03", 2) == "2026-01-02"
+    assert retention_cutoff("2026-01-03", 3) == "2026-01-01"
+    assert retention_cutoff("2026-01-01", 2) == "2025-12-31"
+    assert retention_cutoff("not-a-date", 2) == "not-a-date"
 
 
 def test_memory_tier_search_link_and_dedupe(db: MemoryDB) -> None:

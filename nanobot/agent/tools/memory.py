@@ -139,7 +139,7 @@ class RecallMemoryTool(Tool):
     )
 )
 class RecallBackupTool(Tool):
-    """Search today's verbatim turn-by-turn backup."""
+    """Search the recent verbatim turn-by-turn backup."""
 
     def __init__(self, db: MemoryDB):
         self._db = db
@@ -162,9 +162,10 @@ class RecallBackupTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Search today's full backup of your conversations: every turn, captured "
-            "verbatim. Use it for exact recent wording, details, or events that long-term "
-            "memory has not kept. The backup is discarded at the end of the day."
+            "Search your recent backup of conversations: every turn from the last few "
+            "days, captured verbatim. Use it for exact recent wording, details, or "
+            "events that long-term memory has not kept. Older days are discarded over "
+            "time."
         )
 
     async def execute(
@@ -177,12 +178,12 @@ class RecallBackupTool(Tool):
         if query.strip():
             hits = self._db.search_episodes(query, session_key=session, limit=limit)
             if not hits:
-                return "Nothing in today's backup matches that."
+                return "Nothing in the recent backup matches that."
             header = f"Backup matches for {query!r} ({len(hits)}):"
         else:
             hits = self._db.recent_episodes(session_key=session, limit=limit)
             if not hits:
-                return "Today's backup is empty."
+                return "The recent backup is empty."
             header = f"Latest backup turns ({len(hits)}):"
         lines = [header]
         for hit in hits:

@@ -72,3 +72,23 @@ def test_clear_archives_the_outgoing_state(tmp_path: Path) -> None:
     state.clear()
     assert state.read() == ""
     assert "daily context" in state.history_path.read_text(encoding="utf-8")
+
+
+def test_versions_parses_archived_states_newest_first(tmp_path: Path) -> None:
+    state = MemoryState(tmp_path)
+    state.write("first")
+    state.write("second")
+    state.write("third")
+
+    versions = state.versions()
+    assert [version.content for version in versions] == ["second", "first"]
+    assert all(version.recorded_at for version in versions)
+
+
+def test_versions_respects_limit_and_empty(tmp_path: Path) -> None:
+    state = MemoryState(tmp_path)
+    for index in range(6):
+        state.write(f"version {index}")
+
+    assert [v.content for v in state.versions(limit=2)] == ["version 4", "version 3"]
+    assert state.versions(limit=0) == []

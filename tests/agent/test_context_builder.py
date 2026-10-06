@@ -337,7 +337,7 @@ class TestBuildSystemPrompt:
         assert str(tmp_path.resolve()) not in result
         assert "Agent profile: SOUL.md and USER.md" in result
         assert "Working state: memory/state.md" in result
-        assert "Long-term memory + today's backup: memory/memory.db" in result
+        assert "Long-term memory + recent backup: memory/memory.db" in result
         assert "Custom skills: skills/{skill-name}/SKILL.md" in result
 
     def test_selected_project_identity_keeps_agent_data_in_agent_workspace(self, tmp_path):

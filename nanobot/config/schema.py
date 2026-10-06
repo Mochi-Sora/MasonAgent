@@ -86,6 +86,7 @@ class MemoryConfig(Base):
     state_max_chars: int = Field(default=2048, ge=256, le=16384)
     snapshot_enabled: bool = True  # Daily consistent copy of memory.db before rollover
     snapshot_keep: int = Field(default=7, ge=1, le=365)  # Snapshots retained
+    backup_retention_days: int = Field(default=2, ge=1, le=30)  # Verbatim backup days kept
     consolidation: MemoryConsolidationConfig = Field(
         default_factory=MemoryConsolidationConfig,
     )

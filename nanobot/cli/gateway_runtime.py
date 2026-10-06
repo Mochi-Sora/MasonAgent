@@ -495,7 +495,11 @@ def _run_gateway(
         from nanobot.memory.consolidation import MemoryConsolidator
 
         runtime = agent.consolidation_runtime() or agent.llm_runtime()
-        consolidator = MemoryConsolidator(agent.context.workspace, agent.context.memory_db)
+        consolidator = MemoryConsolidator(
+            agent.context.workspace,
+            agent.context.memory_db,
+            state=agent.context.memory_state,
+        )
         try:
             result = await consolidator.run(runtime)
             if not result.ok:
@@ -528,6 +532,7 @@ def _run_gateway(
                     consolidation_enabled=memory_consolidation_enabled,
                     snapshot_enabled=memory_cfg.snapshot_enabled,
                     snapshot_keep=memory_cfg.snapshot_keep,
+                    retention_days=memory_cfg.backup_retention_days,
                 )
             return None
 

@@ -197,9 +197,9 @@ async def test_recall_backup_searches_and_filters_session(db: MemoryDB) -> None:
 
 async def test_recall_backup_distinguishes_no_match_from_empty(db: MemoryDB) -> None:
     tool = RecallBackupTool(db)
-    assert await tool.execute() == "Today's backup is empty."
+    assert await tool.execute() == "The recent backup is empty."
     db.capture_messages("cli:1", [_msg("user", "something", _iso("2026-01-02"))])
-    assert await tool.execute(query="zzz_absent") == "Nothing in today's backup matches that."
+    assert await tool.execute(query="zzz_absent") == "Nothing in the recent backup matches that."
 
 
 async def test_recall_backup_skips_tool_payloads(db: MemoryDB) -> None:

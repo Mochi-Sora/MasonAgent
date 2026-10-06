@@ -23,6 +23,7 @@ import json_repair
 from loguru import logger
 
 from nanobot.llm_usage.context import llm_usage_source
+from nanobot.memory.state import MemoryState, StateVersion
 from nanobot.memory.store import (
     CONSOLIDATION_LAST_ATTEMPT_META_KEY,
     CONSOLIDATION_LAST_ERROR_META_KEY,
@@ -47,6 +48,9 @@ _MAX_MEMORIES = 150
 _EPISODE_PREVIEW_CHARS = 500
 _MEMORY_PREVIEW_CHARS = 240
 _PROMPT_CHAR_BUDGET = 60_000
+_STATE_PREVIEW_CHARS = 2_500
+_STATE_VERSION_PREVIEW_CHARS = 1_000
+_MAX_STATE_VERSIONS = 5
 _SKILL_BODY_MAX_CHARS = 1_200
 _SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
 _GENERATED_MARKER = "<!-- generated-by: memory-consolidation -->"
@@ -82,9 +86,18 @@ class ConsolidationResult:
 class MemoryConsolidator:
     """Runs one consolidation pass; independent of AgentLoop for testability."""
 
-    def __init__(self, workspace: Path, db: MemoryDB) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        db: MemoryDB,
+        *,
+        state: MemoryState | None = None,
+    ) -> None:
         self.workspace = workspace
         self.db = db
+        # The working state is the model's own distillation of what mattered;
+        # consolidation mines it alongside the raw turns.
+        self.state = state or MemoryState(workspace)
 
     async def run(self, runtime: LLMRuntime, *, now: datetime | None = None) -> ConsolidationResult:
         moment = now or datetime.now()
@@ -95,7 +108,9 @@ class MemoryConsolidator:
             self.db.set_meta(CONSOLIDATION_LAST_ATTEMPT_META_KEY, moment.isoformat())
             return ConsolidationResult(ok=True, cursor=cursor)
         memories = self.db.list_memories(limit=_MAX_MEMORIES)
-        prompt = self._build_prompt(episodes, memories)
+        state_text = self.state.read()
+        state_versions = self.state.versions(limit=_MAX_STATE_VERSIONS)
+        prompt = self._build_prompt(episodes, memories, state_text, state_versions)
         plan, error = await self._request_plan(runtime, prompt)
         if plan is None:
             self._record_failure(error, moment)
@@ -146,6 +161,8 @@ class MemoryConsolidator:
         self,
         episodes: Sequence[EpisodeHit],
         memories: Sequence[MemoryHit],
+        state_text: str = "",
+        state_versions: Sequence[StateVersion] = (),
     ) -> str:
         budget = _PROMPT_CHAR_BUDGET
         lines = ["## New backup turns"]
@@ -156,6 +173,27 @@ class MemoryConsolidator:
                 break
             budget -= len(entry)
             lines.append(entry)
+
+        lines.extend(["", "## Current working state"])
+        if state_text:
+            entry = truncate_text(state_text, _STATE_PREVIEW_CHARS)
+            budget -= len(entry)
+            lines.append(entry)
+        else:
+            lines.append("(empty)")
+
+        lines.extend(["", "## Recent working states (newest first)"])
+        if state_versions:
+            for version in state_versions:
+                content = truncate_text(version.content, _STATE_VERSION_PREVIEW_CHARS)
+                entry = f"- [{version.recorded_at}] {content}"
+                if len(entry) > budget:
+                    break
+                budget -= len(entry)
+                lines.append(entry)
+        else:
+            lines.append("(none)")
+
         lines.extend(["", "## Current long-term memory"])
         if not memories:
             lines.append("(empty)")

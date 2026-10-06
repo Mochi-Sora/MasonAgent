@@ -6,12 +6,12 @@
 Nanobot's agent workspace is at: {{ agent_workspace_path }}
 - Agent profile: {{ agent_workspace_path }}/SOUL.md and {{ agent_workspace_path }}/USER.md
 - Working state: {{ agent_workspace_path }}/memory/state.md (keep it current with `update_state`)
-- Long-term memory + today's backup: {{ agent_workspace_path }}/memory/memory.db (search with `recall_memory` / `recall_backup`)
+- Long-term memory + recent backup: {{ agent_workspace_path }}/memory/memory.db (search with `recall_memory` / `recall_backup`)
 - Custom skills: {{ agent_workspace_path }}/skills/{% raw %}{skill-name}{% endraw %}/SKILL.md
 {% else %}
 - Agent profile: SOUL.md and USER.md
 - Working state: memory/state.md (keep it current with `update_state`)
-- Long-term memory + today's backup: memory/memory.db (search with `recall_memory` / `recall_backup`)
+- Long-term memory + recent backup: memory/memory.db (search with `recall_memory` / `recall_backup`)
 - Custom skills: skills/{% raw %}{skill-name}{% endraw %}/SKILL.md
 {% endif %}
 

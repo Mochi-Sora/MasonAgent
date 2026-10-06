@@ -4,7 +4,8 @@ One database file (``<workspace>/memory/memory.db``) holds two tiers:
 
 * ``episodes`` — the deterministic backup tier. Every persisted turn is captured
   verbatim (minus tool payloads), indexed with FTS5, and recallable on demand.
-  It is day-scoped: :meth:`MemoryDB.rollover` drops everything before today.
+  :meth:`MemoryDB.rollover` bounds it to a trailing retention window (today plus
+  a few days), oldest days first.
 * ``memories`` + ``edges`` — the curated long-term graph. Only the consolidation
   job writes it; ``edges`` records provenance links back to episodes.
 
@@ -26,7 +27,7 @@ import threading
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -234,6 +235,20 @@ def _timestamp_day(ts: str, fallback: str) -> str:
     if len(candidate) == 10 and candidate[4] == "-" and candidate[7] == "-":
         return candidate
     return fallback
+
+
+def retention_cutoff(today: str, retain_days: int) -> str:
+    """Return the oldest day to keep given a retention window in days.
+
+    ``retain_days=1`` keeps only *today* (the old day-scoped behavior); higher
+    values keep that many trailing days including today.
+    """
+    days = max(1, int(retain_days))
+    try:
+        anchor = datetime.strptime(today, "%Y-%m-%d")
+    except ValueError:
+        return today
+    return (anchor - timedelta(days=days - 1)).strftime("%Y-%m-%d")
 
 
 def _message_content_text(message: Mapping[str, Any]) -> str:
@@ -1182,17 +1197,26 @@ class MemoryDB:
 
     # -- retention and stats ---------------------------------------------------
 
-    def rollover(self, today: str, *, up_to_id: int | None = None) -> int:
-        """Drop backup episodes recorded before *today*; returns the rows removed.
+    def rollover(
+        self,
+        today: str,
+        *,
+        up_to_id: int | None = None,
+        retain_days: int = 1,
+    ) -> int:
+        """Drop backup episodes older than the retention window; returns the rows removed.
 
-        When *up_to_id* is given, only episodes with ``id <= up_to_id`` are
-        discarded, so the rollover never throws away backup that consolidation
-        has not considered yet. The curated long-term tier is never touched.
+        *retain_days* is the number of trailing days to keep including *today*;
+        ``1`` is the strict day-scoped behavior. When *up_to_id* is given, the
+        delete is also bounded by ``id <= up_to_id``, so the rollover never
+        throws away backup that consolidation has not considered yet. The
+        curated long-term tier is never touched.
         """
         if not self.enabled:
             return 0
+        cutoff = retention_cutoff(today, retain_days)
         sql = "DELETE FROM episodes WHERE day < ?"
-        params: list[object] = [today]
+        params: list[object] = [cutoff]
         if up_to_id is not None:
             sql += " AND id <= ?"
             params.append(max(0, int(up_to_id)))
@@ -1200,7 +1224,7 @@ class MemoryDB:
             cursor = connection.execute(sql, params)
             removed = max(0, cursor.rowcount)
         if removed:
-            logger.info("Memory rollover: dropped {} backup episodes before {}", removed, today)
+            logger.info("Memory rollover: dropped {} backup episodes before {}", removed, cutoff)
         return removed
 
     def stats(self) -> dict[str, object]:

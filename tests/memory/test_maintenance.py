@@ -93,3 +93,33 @@ def test_rollover_can_skip_snapshot(tmp_path: Path) -> None:
     ) is True
     assert not (tmp_path / "memory" / "backups").exists()
     db.close()
+
+
+def test_retention_window_keeps_yesterday_recallable(tmp_path: Path) -> None:
+    """A question the day after must still reach yesterday's verbatim turns."""
+    db = MemoryDB(tmp_path / "memory" / "memory.db")
+    state = MemoryState(tmp_path)
+    db.capture_messages(
+        "cli:1",
+        [{"role": "user", "content": "late night decision", "timestamp": "2026-01-02T23:50:00"}],
+    )
+    db.set_consolidation_cursor(1)  # eligible for purging under day-scoped retention
+
+    assert maybe_rollover(db, state, retention_days=2, now=datetime(2026, 1, 3, 0, 1)) is True
+
+    assert db.search_episodes("late night") != []  # still reachable via recall_backup
+    db.close()
+
+
+def test_retention_window_eventually_discards_old_days(tmp_path: Path) -> None:
+    db = MemoryDB(tmp_path / "memory" / "memory.db")
+    state = MemoryState(tmp_path)
+    db.capture_messages(
+        "cli:1",
+        [{"role": "user", "content": "ancient turn", "timestamp": "2026-01-01T09:00:00"}],
+    )
+    db.set_consolidation_cursor(1)
+
+    assert maybe_rollover(db, state, retention_days=2, now=datetime(2026, 1, 3, 0, 1)) is True
+    assert db.counts()["episodes"] == 0
+    db.close()

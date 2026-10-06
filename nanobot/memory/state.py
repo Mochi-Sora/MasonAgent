@@ -13,6 +13,7 @@ though only the current state ever reaches the prompt.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -23,6 +24,14 @@ from nanobot.utils.helpers import atomic_write_lines
 DEFAULT_STATE_MAX_CHARS = 2048
 DEFAULT_STATE_HISTORY_VERSIONS = 20
 _STATE_HISTORY_FILENAME = "state_history.md"
+
+
+@dataclass(frozen=True, slots=True)
+class StateVersion:
+    """One archived working-state snapshot."""
+
+    recorded_at: str
+    content: str
 
 
 class MemoryState:
@@ -46,6 +55,33 @@ class MemoryState:
             return self.path.read_text(encoding="utf-8").strip()
         except OSError:
             return ""
+
+    def versions(self, *, limit: int = DEFAULT_STATE_HISTORY_VERSIONS) -> list[StateVersion]:
+        """Return archived states, newest first, bounded by *limit*.
+
+        Consolidation reads these so a day's distilled highlights survive the
+        midnight clear even when the live state is already empty.
+        """
+        if limit <= 0:
+            return []
+        try:
+            text = self.history_path.read_text(encoding="utf-8")
+        except OSError:
+            return []
+        versions: list[StateVersion] = []
+        recorded_at = ""
+        current: list[str] | None = None
+        for line in text.splitlines():
+            if line.startswith("## "):
+                if current is not None:
+                    versions.append(StateVersion(recorded_at, "\n".join(current).strip()))
+                recorded_at = line[3:].strip()
+                current = []
+            elif current is not None:
+                current.append(line)
+        if current is not None:
+            versions.append(StateVersion(recorded_at, "\n".join(current).strip()))
+        return [version for version in versions if version.content][:limit]
 
     def write(self, content: str) -> tuple[str, bool]:
         """Replace the state; returns ``(stored_text, truncated)``."""
@@ -77,30 +113,12 @@ class MemoryState:
         if self.history_versions <= 0:
             return
         stamp = datetime.now().isoformat(timespec="seconds")
-        blocks = self._history_blocks()
-        blocks.insert(0, f"## {stamp}\n\n{previous}")
-        kept = blocks[: self.history_versions]
+        versions = self.versions(limit=self.history_versions - 1)
+        versions.insert(0, StateVersion(stamp, previous))
+        document = "\n\n".join(
+            f"## {version.recorded_at}\n\n{version.content}" for version in versions
+        )
         try:
-            atomic_write_lines(
-                self.history_path,
-                "\n\n".join(kept).splitlines(),
-                fsync=False,
-            )
+            atomic_write_lines(self.history_path, document.splitlines(), fsync=False)
         except OSError:
             logger.exception("Could not archive working state to {}", self.history_path)
-
-    def _history_blocks(self) -> list[str]:
-        """Return existing archived states, newest first."""
-        try:
-            text = self.history_path.read_text(encoding="utf-8")
-        except OSError:
-            return []
-        blocks: list[list[str]] = []
-        current: list[str] | None = None
-        for line in text.splitlines():
-            if line.startswith("## "):
-                current = [line]
-                blocks.append(current)
-            elif current is not None:
-                current.append(line)
-        return ["\n".join(block).rstrip() for block in blocks if block]
