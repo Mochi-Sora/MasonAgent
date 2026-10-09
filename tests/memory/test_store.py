@@ -146,6 +146,37 @@ def test_meta_roundtrip(db: MemoryDB) -> None:
     assert db.get_meta("key") == "other"
 
 
+def test_record_uses_increments_and_timestamps(db: MemoryDB) -> None:
+    first = db.insert_memory("user prefers dark mode", now=_NOW)
+    second = db.insert_memory("user is based in Berlin", now=_NOW)
+    assert first is not None and second is not None
+    later = datetime(2026, 1, 2, 13, 0, 0)
+
+    assert db.record_uses([first, second], now=later) == 2
+
+    hits = {hit.id: hit for hit in db.search_memories("user")}
+    assert hits[first].uses == 1
+    assert hits[first].last_used_at == later.isoformat()
+    # Repeated serving keeps counting.
+    db.record_uses([first], now=later)
+    assert db.search_memories("dark mode")[0].uses == 2
+
+
+def test_record_uses_ignores_unknown_and_empty_ids(db: MemoryDB) -> None:
+    assert db.record_uses([]) == 0
+    assert db.record_uses([999]) == 0
+    assert db.counts()["memories"] == 0
+
+
+def test_list_memories_carries_usage(db: MemoryDB) -> None:
+    memory_id = db.insert_memory("durable fact")
+    assert memory_id is not None
+    db.record_uses([memory_id], now=_NOW)
+    hit = next(entry for entry in db.list_memories() if entry.id == memory_id)
+    assert hit.uses == 1
+    assert hit.last_used_at == _NOW.isoformat()
+
+
 def test_disabled_store_is_inert(tmp_path: Path) -> None:
     path = tmp_path / "memory.db"
     store = MemoryDB(path, enabled=False)
@@ -264,6 +295,8 @@ def test_stats_reports_counts_sizes_and_pending(db: MemoryDB) -> None:
     assert stats["pending_episodes"] == 1
     assert stats["consolidation_cursor"] == 0
     assert stats["consolidation_last_ok_at"] is None
+    assert stats["memory_uses_total"] == 0
+    assert stats["memories_never_used"] == 1
     assert isinstance(stats["db_bytes"], int) and stats["db_bytes"] > 0
     assert isinstance(stats["wal_bytes"], int) and stats["wal_bytes"] >= 0
 
@@ -288,6 +321,8 @@ def test_snapshot_and_checkpoint_are_inert_when_disabled(tmp_path: Path) -> None
         "memories": 0,
         "edges": 0,
         "pending_episodes": 0,
+        "memory_uses_total": 0,
+        "memories_never_used": 0,
         "consolidation_cursor": 0,
         "consolidation_last_attempt_at": None,
         "consolidation_last_ok_at": None,
@@ -297,4 +332,5 @@ def test_snapshot_and_checkpoint_are_inert_when_disabled(tmp_path: Path) -> None
         "last_checkpoint": None,
         "last_snapshot": None,
     }
+    assert store.record_uses([1, 2]) == 0
     store.close()

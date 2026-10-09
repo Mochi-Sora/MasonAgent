@@ -224,7 +224,8 @@ class MemoryConsolidator:
             return ["(empty)"]
         allowance = max(120, min(_MEMORY_PREVIEW_CHARS, _MEMORY_BUDGET // len(memories)))
         return [
-            f"#{memory.id} [{memory.kind}] {truncate_text(memory.text, allowance)}"
+            f"#{memory.id} [{memory.kind}] uses={memory.uses} "
+            f"{truncate_text(memory.text, allowance)}"
             for memory in memories
         ]
 

@@ -168,6 +168,8 @@ class MemoryHit:
     status: str
     confidence: float
     pinned: bool
+    uses: int = 0
+    last_used_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +209,19 @@ def _row_int(row: sqlite3.Row, key: str) -> int:
 
 def _row_float(row: sqlite3.Row, key: str) -> float:
     return _float(cast(object, row[key]))
+
+
+def _memory_hit(row: sqlite3.Row) -> MemoryHit:
+    return MemoryHit(
+        id=_row_int(row, "id"),
+        text=_row_text(row, "text"),
+        kind=_row_text(row, "kind"),
+        status=_row_text(row, "status"),
+        confidence=_row_float(row, "confidence"),
+        pinned=_row_int(row, "pinned") == 1,
+        uses=_row_int(row, "uses"),
+        last_used_at=_row_text(row, "last_used_at") or None,
+    )
 
 
 def _fetch_int(cursor: sqlite3.Cursor, default: int = 0) -> int:
@@ -908,21 +923,12 @@ class MemoryDB:
         placeholders = ", ".join("?" for _ in statuses)
         with self._lock:
             rows = self._connect().execute(
-                "SELECT id, text, kind, status, confidence, pinned FROM memories"
+                "SELECT id, text, kind, status, confidence, pinned, uses, last_used_at"
+                " FROM memories"
                 f" WHERE status IN ({placeholders}) ORDER BY id ASC LIMIT {bounded}",
                 tuple(statuses),
             ).fetchall()
-        return [
-            MemoryHit(
-                id=_row_int(row, "id"),
-                text=_row_text(row, "text"),
-                kind=_row_text(row, "kind"),
-                status=_row_text(row, "status"),
-                confidence=_row_float(row, "confidence"),
-                pinned=_row_int(row, "pinned") == 1,
-            )
-            for row in rows
-        ]
+        return [_memory_hit(row) for row in rows]
 
     # -- long-term tier --------------------------------------------------------
 
@@ -956,6 +962,33 @@ class MemoryDB:
                 moment=moment,
             )
 
+    def record_uses(
+        self,
+        memory_ids: Sequence[int],
+        *,
+        now: datetime | None = None,
+    ) -> int:
+        """Record that these memories were served by a recall; returns rows touched.
+
+        A hit is only a proxy — the model may still ignore what it is shown — but
+        it is the only signal that lets consolidation learn which entries earn
+        their keep and which never get used.
+        """
+        if not self.enabled:
+            return 0
+        ids = sorted({int(memory_id) for memory_id in memory_ids if int(memory_id) > 0})
+        if not ids:
+            return 0
+        moment = (now or datetime.now()).isoformat()
+        placeholders = ", ".join("?" for _ in ids)
+        with self._write() as connection:
+            cursor = connection.execute(
+                "UPDATE memories SET uses = uses + 1, last_used_at = ?"
+                f" WHERE id IN ({placeholders})",
+                (moment, *ids),
+            )
+            return max(0, cursor.rowcount)
+
     def search_memories(
         self,
         query: str,
@@ -982,17 +1015,7 @@ class MemoryDB:
                 rows = self._search_memories_like(
                     connection, cleaned, statuses, placeholders, bounded,
                 )
-        return [
-            MemoryHit(
-                id=_row_int(row, "id"),
-                text=_row_text(row, "text"),
-                kind=_row_text(row, "kind"),
-                status=_row_text(row, "status"),
-                confidence=_row_float(row, "confidence"),
-                pinned=_row_int(row, "pinned") == 1,
-            )
-            for row in rows
-        ]
+        return [_memory_hit(row) for row in rows]
 
     def _search_memories_fts(
         self,
@@ -1005,7 +1028,8 @@ class MemoryDB:
         if not self._fts_enabled:
             return None
         sql = (
-            "SELECT m.id, m.text, m.kind, m.status, m.confidence, m.pinned"
+            "SELECT m.id, m.text, m.kind, m.status, m.confidence, m.pinned,"
+            " m.uses, m.last_used_at"
             " FROM memories_fts f JOIN memories m ON m.id = f.rowid"
             f" WHERE memories_fts MATCH ? AND m.status IN ({placeholders})"
             f" ORDER BY bm25(memories_fts), m.id DESC LIMIT {limit}"
@@ -1031,7 +1055,8 @@ class MemoryDB:
         limit: int,
     ) -> list[sqlite3.Row]:
         sql = (
-            "SELECT id, text, kind, status, confidence, pinned FROM memories"
+            "SELECT id, text, kind, status, confidence, pinned, uses, last_used_at"
+            " FROM memories"
             f" WHERE text LIKE ? ESCAPE '\\' AND status IN ({placeholders})"
             f" ORDER BY id DESC LIMIT {limit}"
         )
@@ -1236,6 +1261,8 @@ class MemoryDB:
                 "memories": 0,
                 "edges": 0,
                 "pending_episodes": 0,
+                "memory_uses_total": 0,
+                "memories_never_used": 0,
                 "consolidation_cursor": 0,
                 "consolidation_last_attempt_at": None,
                 "consolidation_last_ok_at": None,
@@ -1259,6 +1286,11 @@ class MemoryDB:
                 "edges": scalar("SELECT COUNT(*) FROM edges"),
                 "pending_episodes": scalar(
                     "SELECT COUNT(*) FROM episodes WHERE id > ?", cursor,
+                ),
+                "memory_uses_total": scalar("SELECT COALESCE(SUM(uses), 0) FROM memories"),
+                "memories_never_used": scalar(
+                    "SELECT COUNT(*) FROM memories"
+                    " WHERE uses = 0 AND status IN ('active', 'candidate')"
                 ),
             }
         return {

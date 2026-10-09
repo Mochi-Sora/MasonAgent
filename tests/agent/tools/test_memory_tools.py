@@ -136,6 +136,17 @@ async def test_recall_memory_no_matches(db: MemoryDB) -> None:
     assert result == "No matching long-term memories."
 
 
+async def test_recall_memory_records_usage(db: MemoryDB) -> None:
+    memory_id = db.insert_memory("user prefers dark mode", now=_NOW)
+    assert memory_id is not None
+
+    await RecallMemoryTool(db).execute(query="dark mode")
+
+    hit = next(entry for entry in db.list_memories() if entry.id == memory_id)
+    assert hit.uses == 1
+    assert hit.last_used_at is not None
+
+
 async def test_recall_memory_includes_candidates(db: MemoryDB) -> None:
     db.insert_memory("tentative fact about tea", status="candidate", now=_NOW)
     result = await RecallMemoryTool(db).execute(query="tea")

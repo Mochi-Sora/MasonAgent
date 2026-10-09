@@ -17,3 +17,7 @@ Use this file for project-specific preferences, recurring workflow conventions, 
 `HEARTBEAT.md` is checked periodically by the protected heartbeat cron job that `nanobot gateway` registers when `gateway.heartbeat.enabled` is true. Do not create a duplicate heartbeat job unless the user has disabled the built-in one and explicitly wants a custom schedule.
 
 When the user asks for a recurring/periodic heartbeat task, or for a periodic background check that should only notify on actionable changes, update `HEARTBEAT.md` instead of creating a one-time reminder. Use the built-in `cron` tool for explicit reminders, scheduled tasks that should report every run, or custom schedules that should not be part of the heartbeat task list.
+
+## Dates
+
+`DATES.md` holds dated commitments and deadlines, one per line, ISO date first (`- 2026-10-05 — physics test`). Record an entry when the user names a date, and answer anything that depends on timing by looking them up with the `search_dates` capability (find it with `find_capabilities` when it is not loaded). Memory curates toward timeless facts, so dates do not belong there — use `DATES.md` or a `cron` reminder instead.

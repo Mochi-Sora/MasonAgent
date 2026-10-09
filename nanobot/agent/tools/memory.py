@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from loguru import logger
+
 from nanobot.agent.tools.base import Tool, ToolResult, tool_parameters
 from nanobot.agent.tools.schema import IntegerSchema, StringSchema, tool_parameters_schema
 from nanobot.utils.helpers import truncate_text
@@ -115,6 +117,11 @@ class RecallMemoryTool(Tool):
         hits = self._db.search_memories(query, limit=limit)
         if not hits:
             return "No matching long-term memories."
+        try:
+            self._db.record_uses([hit.id for hit in hits])
+        except Exception:
+            # Usage tracking must never break a recall.
+            logger.exception("Could not record memory usage")
         lines = [f"Long-term memory matches for {query!r} ({len(hits)}):"]
         for hit in hits:
             flags = ", pinned" if hit.pinned else ""
