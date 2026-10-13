@@ -12,6 +12,7 @@ from mason.channels.plugin import ChannelPlugin, load_channel_package
 from mason.channels.registry import channel_default_enabled, discover_plugins
 
 EXPECTED_CHANNELS = {
+    "desktop",
     "dingtalk",
     "discord",
     "email",
