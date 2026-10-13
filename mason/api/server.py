@@ -437,7 +437,14 @@ async def handle_models(request: web.Request) -> web.Response:
 
 
 async def handle_health(request: web.Request) -> web.Response:
-    """GET /health"""
+    """GET /health — liveness only.
+
+    Deliberately minimal (``{"status": "ok"}``) so OpenAI-compatible clients can
+    probe the API without parsing anything extra. The gateway's own health
+    server returns the richer payload that MasonDesk and the CLI display
+    (``status`` / ``process`` / ``ready`` / ``memory``); see
+    ``mason/cli/gateway_runtime.py``.
+    """
     return web.json_response({"status": "ok"})
 
 

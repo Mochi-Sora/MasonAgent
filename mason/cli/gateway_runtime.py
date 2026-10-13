@@ -623,6 +623,7 @@ def _run_gateway(
         bus,
         session_manager=session_manager,
         cron_service=cron,
+        memory_stats=lambda: _gateway_memory_stats(agent),
         local_trigger_store=trigger_store,
         config_path=Path(config_path),
     )

@@ -71,6 +71,18 @@ class BaseChannel(ABC):
         """
         return True
 
+    def attach_services(self, **services: Any) -> None:
+        """Receive read-only framework services from the channel manager.
+
+        The manager passes 'session_manager', 'cron_service' and
+        'memory_stats' to every channel that overrides this hook, letting a
+        transport answer read-only queries (for example the desktop channel's
+        sessions/cron/memory frames) without reaching into the agent.  The
+        default implementation ignores them; channels must treat the services
+        as read-only and must not cache them past 'stop()'.
+        """
+        return
+
     @abstractmethod
     async def start(self) -> None:
         """
@@ -142,11 +154,21 @@ class BaseChannel(ABC):
         Override in subclasses to enable streaming. Implementations should
         raise on delivery failure so the channel manager can retry.
 
-        Stateful implementations should key buffers by ``stream_id`` rather
-        than only by ``chat_id`` when it is provided.
+        **Buffering contract:** key accumulated text by ``chat_id`` (the
+        session), not by ``stream_id``. Producers do not reliably populate
+        ``stream_id`` — reasoning deltas never carry one and several progress
+        paths omit it — while the framework guarantees at most one active turn
+        per session. ``stream_id`` is advisory; do not require it.
 
-        ``merge_next`` marks a resumable provider boundary whose next text
-        segment belongs to the same user-visible message.
+        ``resuming`` / ``merge_next`` describe a resumable provider boundary:
+
+        * ``resuming=False`` — a normal end. Flush the buffered text as one
+          message.
+        * ``resuming=True, merge_next=True`` — the same user-visible message
+          continues in a later segment. Keep the buffer and keep appending.
+        * ``resuming=True, merge_next=False`` — the segment will be regenerated
+          by a recovery retry. Discard the buffer so the text is not rendered
+          twice.
         """
         pass
 

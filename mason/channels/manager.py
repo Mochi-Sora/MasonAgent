@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 import inspect
 from collections import OrderedDict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -78,6 +78,12 @@ class ChannelManager:
     - Route outbound messages
     """
 
+    # Optional read-only services.  Class-level defaults keep managers that are
+    # assembled without __init__ (a supported test seam) harmless.
+    _session_manager: "SessionManager | None" = None
+    _cron_service: "CronService | None" = None
+    _memory_stats: "Callable[[], dict[str, object] | None] | None" = None
+
     def __init__(
         self,
         config: Config,
@@ -85,6 +91,7 @@ class ChannelManager:
         *,
         session_manager: "SessionManager | None" = None,
         cron_service: CronService | None = None,
+        memory_stats: Callable[[], dict[str, object] | None] | None = None,
         local_trigger_store: LocalTriggerStore | None = None,
         config_path: Path | None = None,
     ):
@@ -97,6 +104,7 @@ class ChannelManager:
         self.bus = bus
         self._session_manager = session_manager
         self._cron_service = cron_service
+        self._memory_stats = memory_stats
         self._local_trigger_store = local_trigger_store
         self.channels: dict[str, BaseChannel] = {}
         self._channel_owners: dict[str, str] = {}
@@ -159,6 +167,11 @@ class ChannelManager:
         )
         channel.show_reasoning = self._resolve_bool_override(
             section, "show_reasoning", self.config.channels.show_reasoning,
+        )
+        channel.attach_services(
+            session_manager=self._session_manager,
+            cron_service=self._cron_service,
+            memory_stats=self._memory_stats,
         )
         return channel
 
