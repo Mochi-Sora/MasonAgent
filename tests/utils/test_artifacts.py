@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.config.loader import set_config_path
-from nanobot.utils.artifacts import (
+from mason.config.loader import set_config_path
+from mason.utils.artifacts import (
     ArtifactError,
     decode_image_data_url,
     store_generated_image_artifact,

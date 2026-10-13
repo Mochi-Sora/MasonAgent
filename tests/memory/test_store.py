@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.memory.store import MemoryDB, retention_cutoff
-from nanobot.runtime_context import (
+from mason.memory.store import MemoryDB, retention_cutoff
+from mason.runtime_context import (
     RUNTIME_CONTEXT_HISTORY_META,
     RuntimeContextBlock,
     append_runtime_context,

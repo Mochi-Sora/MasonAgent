@@ -6,26 +6,26 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent.session_helpers import run_session
-from nanobot.agent.automation_turns import AutomationTurnError
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.context import current_request_context
-from nanobot.agent.tools.cron import CronTool
-from nanobot.bus.events import InboundMessage, OutboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.cron.service import CronService
-from nanobot.cron.session_turns import CRON_DEFER_UNTIL_IDLE_META, CRON_TRIGGER_META
-from nanobot.providers.base import GenerationSettings, LLMResponse, ToolCallRequest
-from nanobot.runtime_context import public_history_messages
-from nanobot.session.automation_turns import AUTOMATION_HISTORY_META
-from nanobot.session.goal_state import GOAL_STATE_KEY
-from nanobot.session.manager import SessionManager
-from nanobot.session.recovery import (
+from mason.agent.automation_turns import AutomationTurnError
+from mason.agent.loop import AgentLoop
+from mason.agent.tools.context import current_request_context
+from mason.agent.tools.cron import CronTool
+from mason.bus.events import InboundMessage, OutboundMessage
+from mason.bus.queue import MessageBus
+from mason.cron.service import CronService
+from mason.cron.session_turns import CRON_DEFER_UNTIL_IDLE_META, CRON_TRIGGER_META
+from mason.providers.base import GenerationSettings, LLMResponse, ToolCallRequest
+from mason.runtime_context import public_history_messages
+from mason.session.automation_turns import AUTOMATION_HISTORY_META
+from mason.session.goal_state import GOAL_STATE_KEY
+from mason.session.manager import SessionManager
+from mason.session.recovery import (
     PENDING_FOLLOWUPS_KEY,
     RecoveryCoordinator,
     pending_followups,
     record_pending_followup,
 )
-from nanobot.triggers.local_session_turns import LOCAL_TRIGGER_META
+from mason.triggers.local_session_turns import LOCAL_TRIGGER_META
 
 
 @pytest.fixture

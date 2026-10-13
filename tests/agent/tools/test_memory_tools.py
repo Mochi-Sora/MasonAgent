@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.agent.tools.context import ToolContext
-from nanobot.agent.tools.memory import RecallBackupTool, RecallMemoryTool, UpdateStateTool
-from nanobot.config.schema import ToolsConfig
-from nanobot.memory.state import MemoryState
-from nanobot.memory.store import MemoryDB
+from mason.agent.tools.context import ToolContext
+from mason.agent.tools.memory import RecallBackupTool, RecallMemoryTool, UpdateStateTool
+from mason.config.schema import ToolsConfig
+from mason.memory.state import MemoryState
+from mason.memory.store import MemoryDB
 
 _NOW = datetime(2026, 1, 2, 12, 0, 0)
 _TOOL_NAMES = {

@@ -7,10 +7,10 @@ import json
 import httpx
 import pytest
 
-from nanobot.config.schema import Config, ProvidersConfig
-from nanobot.providers.base import ProviderCallContext
-from nanobot.providers.openai_compat_provider import OpenAICompatProvider
-from nanobot.providers.registry import PROVIDERS, find_by_name
+from mason.config.schema import Config, ProvidersConfig
+from mason.providers.base import ProviderCallContext
+from mason.providers.openai_compat_provider import OpenAICompatProvider
+from mason.providers.registry import PROVIDERS, find_by_name
 
 
 def test_opencode_config_fields_exist() -> None:
@@ -184,7 +184,7 @@ async def test_opencode_wire_affinity(monkeypatch, api_type, stream, configured_
     """Exercise SDK header encoding/merging through the public provider entrypoints."""
     from openai import AsyncOpenAI
 
-    from nanobot.providers import openai_compat_provider
+    from mason.providers import openai_compat_provider
 
     requests: list[httpx.Request] = []
     rejected: list[httpx.Request] = []

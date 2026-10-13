@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from nanobot.api.runtime import ApiRuntime, ApiStartOptions, api_runtime_paths
+from mason.api.runtime import ApiRuntime, ApiStartOptions, api_runtime_paths
 
 
 class FakeProcess:
@@ -44,7 +44,7 @@ def test_api_runtime_builds_detached_serve_command(tmp_path: Path, monkeypatch) 
     assert calls == [[
         "/python",
         "-m",
-        "nanobot",
+        "mason",
         "serve",
         "--host",
         "0.0.0.0",

@@ -6,17 +6,17 @@ from unittest.mock import patch
 
 import pytest
 
-from nanobot.agent.tools.context import RequestContext, request_context
-from nanobot.agent.tools.session_messages import (
+from mason.agent.tools.context import RequestContext, request_context
+from mason.agent.tools.session_messages import (
     ListSessionsTool,
     SendSessionMessageTool,
     SessionMessageError,
 )
-from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import ToolsConfig
-from nanobot.session.manager import SessionManager
-from nanobot.session.session_handles import SessionHandle, SessionHandleResolver
-from nanobot.session.session_messages import (
+from mason.bus.queue import MessageBus
+from mason.config.schema import ToolsConfig
+from mason.session.manager import SessionManager
+from mason.session.session_handles import SessionHandle, SessionHandleResolver
+from mason.session.session_messages import (
     SESSION_MESSAGE_METADATA_KEY,
     session_message_envelope,
 )
@@ -306,7 +306,7 @@ async def test_reply_timeout_observes_background_delivery_failure(
         raise RuntimeError("queue unavailable")
 
     bus.publish_inbound = fail_publish
-    with patch("nanobot.agent.tools.session_messages.logger") as logger:
+    with patch("mason.agent.tools.session_messages.logger") as logger:
         scheduler.calls[0][1].fire()
         await asyncio.sleep(0)
         await asyncio.sleep(0)

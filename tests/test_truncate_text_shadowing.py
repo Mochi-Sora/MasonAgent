@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 
 def test_sanitize_persisted_blocks_preserves_tool_text() -> None:
-    from nanobot.agent.loop import AgentLoop
+    from mason.agent.loop import AgentLoop
 
     dummy = SimpleNamespace()
     content = [{"type": "text", "text": "0123456789"}]

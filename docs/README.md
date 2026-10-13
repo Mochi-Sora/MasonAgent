@@ -1,4 +1,4 @@
-# nanobot Documentation
+# mason Documentation
 
 Use these docs to get a working agent first, then open a task guide only when you need the next capability. Source-level design and extension details are kept in the contributor section.
 
@@ -9,17 +9,17 @@ Repository docs follow the current source tree. Upstream nanobot's published doc
 | Your situation | Read this | You are done when... |
 |---|---|---|
 | Terminals, Python, or API keys are new to you | [Beginner walkthrough](./start-without-technical-background.md) | The terminal can send `Hello!` and receive a reply |
-| You are comfortable running commands | [Install and Quick Start](./quick-start.md) | `nanobot status` is healthy and the CLI can get one reply |
+| You are comfortable running commands | [Install and Quick Start](./quick-start.md) | `mason status` is healthy and the CLI can get one reply |
 | Something already failed | [Troubleshooting](./troubleshooting.md) | You have isolated the problem to install, config, model, gateway, channel, or tool access |
 
 The recommended first-run path is:
 
-1. Install nanobot.
+1. Install mason.
 2. Let the installer open the setup wizard on a fresh local desktop.
 3. Configure a provider and model in the wizard.
-4. Send `Hello!` with `nanobot agent -m "Hello!"` before configuring anything else.
+4. Send `Hello!` with `mason agent -m "Hello!"` before configuring anything else.
 
-Most people do not need to edit JSON for the first run. `nanobot onboard --wizard` handles the initial provider, model, and channel settings. SSH, headless, and existing-config installs can run the same wizard at any time. After setup, edit `~/.nanobot/config.json` for models, built-in capabilities, channel settings, and MCP integrations, and use `nanobot plugins list` to see optional channel packages.
+Most people do not need to edit JSON for the first run. `mason onboard --wizard` handles the initial provider, model, and channel settings. SSH, headless, and existing-config installs can run the same wizard at any time. After setup, edit `~/.mason/config.json` for models, built-in capabilities, channel settings, and MCP integrations, and use `mason plugins list` to see optional channel packages.
 
 ## Add One Capability
 
@@ -36,14 +36,14 @@ Pick the row that matches what you want to accomplish next:
 | Generate images | [Image Generation](./image-generation.md) |
 | Schedule work or create a local trigger | [Automations](./automations.md) |
 | Understand and manage long-term memory | [Memory](./memory.md) |
-| Run nanobot continuously | [Deployment](./deployment.md) |
+| Run mason continuously | [Deployment](./deployment.md) |
 | Run separate bots or workspaces | [Multiple Instances](./multiple-instances.md) |
-| Call nanobot from Python | [Python SDK](./python-sdk.md) |
+| Call mason from Python | [Python SDK](./python-sdk.md) |
 | Expose an OpenAI-compatible endpoint | [OpenAI-Compatible API](./openai-api.md) |
 
 For shorter, outcome-focused walkthroughs, browse the [task guide index](./guides/README.md).
 
-## Operate nanobot
+## Operate mason
 
 | Need | Read |
 |---|---|
@@ -67,11 +67,11 @@ Use reference pages to look up an exact option after you know what you are tryin
 | OpenAI-compatible HTTP routes and payloads | [OpenAI-Compatible API](./openai-api.md) |
 | Runtime self-inspection and tuning | [My Tool](./my-tool.md) |
 
-Configuration examples are usually snippets to merge into `~/.nanobot/config.json`, not complete replacement files. The docs use camelCase because nanobot writes config that way. Keep real API keys, bot tokens, and passwords out of issues and public logs.
+Configuration examples are usually snippets to merge into `~/.mason/config.json`, not complete replacement files. The docs use camelCase because mason writes config that way. Keep real API keys, bot tokens, and passwords out of issues and public logs.
 
 ## Extend or Contribute
 
-These pages explain implementation and extension points. You do not need them to install or operate nanobot.
+These pages explain implementation and extension points. You do not need them to install or operate mason.
 
 | Goal | Read |
 |---|---|
@@ -79,4 +79,4 @@ These pages explain implementation and extension points. You do not need them to
 | Set up a development environment | [Development](./development.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Add a channel package | [Channel Package Guide](./channel-package-guide.md) |
 
-If a command or screen no longer matches these docs, please [open an issue](https://github.com/Mochi-Sora/MasonAgent/issues) with your nanobot version, operating system, and the page that needs correction.
+If a command or screen no longer matches these docs, please [open an issue](https://github.com/Mochi-Sora/MasonAgent/issues) with your mason version, operating system, and the page that needs correction.

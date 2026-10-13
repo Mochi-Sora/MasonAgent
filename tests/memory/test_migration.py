@@ -6,16 +6,16 @@ import json
 import shutil
 from pathlib import Path
 
-from nanobot.memory.migration import import_legacy
-from nanobot.memory.store import MemoryDB
-from nanobot.utils.helpers import load_bundled_template
+from mason.memory.migration import import_legacy
+from mason.memory.store import MemoryDB
+from mason.utils.helpers import load_bundled_template
 
 
 def _write_legacy(workspace: Path) -> Path:
     memory_dir = workspace / "memory"
     memory_dir.mkdir(parents=True, exist_ok=True)
     (memory_dir / "MEMORY.md").write_text(
-        "# Facts\n\nThe user likes dark mode.\n\n# Projects\n\nnanobot rewrite.\n",
+        "# Facts\n\nThe user likes dark mode.\n\n# Projects\n\nmason rewrite.\n",
         encoding="utf-8",
     )
     (memory_dir / "history.jsonl").write_text(

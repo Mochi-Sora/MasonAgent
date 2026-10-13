@@ -5,19 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from nanobot.agent.skills import SkillsLoader
-from nanobot.agent.tools.base import Tool
-from nanobot.agent.tools.capability_gate import (
+from mason.agent.skills import SkillsLoader
+from mason.agent.tools.base import Tool
+from mason.agent.tools.capability_gate import (
     FIND_CAPABILITIES_TOOL_NAME,
     CapabilityGate,
     bind_capability_gate,
     current_capability_gate,
     reset_capability_gate,
 )
-from nanobot.agent.tools.capability_search import FindCapabilitiesTool, score_need
-from nanobot.agent.tools.context import ToolContext
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.config.schema import LazyCapabilitiesConfig, ToolsConfig
+from mason.agent.tools.capability_search import FindCapabilitiesTool, score_need
+from mason.agent.tools.context import ToolContext
+from mason.agent.tools.registry import ToolRegistry
+from mason.config.schema import LazyCapabilitiesConfig, ToolsConfig
 
 
 class _FakeTool(Tool):
@@ -330,9 +330,9 @@ def test_gate_catalog_marks_unavailable_skills(tmp_path: Path) -> None:
         "name: needs-cli\n"
         "description: Ship with the missing binary.\n"
         "metadata:\n"
-        "  nanobot:\n"
+        "  mason:\n"
         "    requires:\n"
-        "      bins: [nanobot-missing-binary]\n"
+        "      bins: [mason-missing-binary]\n"
         "---\n\nBody.\n",
         encoding="utf-8",
     )
@@ -341,7 +341,7 @@ def test_gate_catalog_marks_unavailable_skills(tmp_path: Path) -> None:
     catalog = gate.catalog()
 
     assert "`needs-cli`" in catalog
-    assert "unavailable: CLI: nanobot-missing-binary" in catalog
+    assert "unavailable: CLI: mason-missing-binary" in catalog
 
 
 def test_skills_loader_details_include_description_and_availability(tmp_path: Path) -> None:

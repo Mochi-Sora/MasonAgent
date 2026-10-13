@@ -10,7 +10,7 @@ from unittest.mock import call, patch
 
 import pytest
 
-from nanobot.session.manager import SessionManager
+from mason.session.manager import SessionManager
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -66,12 +66,12 @@ class TestSaveFsync:
         directory_fd = 987654
         with (
             manager.locked_session_files(),
-            patch("nanobot.utils.helpers.os.open", return_value=directory_fd) as open_dir,
+            patch("mason.utils.helpers.os.open", return_value=directory_fd) as open_dir,
             patch(
-                "nanobot.utils.helpers.os.fsync",
+                "mason.utils.helpers.os.fsync",
                 side_effect=[None, OSError(errno.EINVAL, "Invalid argument")],
             ),
-            patch("nanobot.utils.helpers.os.close") as close_dir,
+            patch("mason.utils.helpers.os.close") as close_dir,
         ):
             manager.save(session, fsync=True)
 
@@ -87,12 +87,12 @@ class TestSaveFsync:
         directory_fd = 987654
         with (
             manager.locked_session_files(),
-            patch("nanobot.utils.helpers.os.open", return_value=directory_fd),
+            patch("mason.utils.helpers.os.open", return_value=directory_fd),
             patch(
-                "nanobot.utils.helpers.os.fsync",
+                "mason.utils.helpers.os.fsync",
                 side_effect=[None, OSError(errno.EIO, "I/O error")],
             ),
-            patch("nanobot.utils.helpers.os.close") as close_dir,
+            patch("mason.utils.helpers.os.close") as close_dir,
             pytest.raises(OSError, match="I/O error"),
         ):
             manager.save(session, fsync=True)

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from nanobot.llm_usage.context import llm_usage_source
-from nanobot.llm_usage.models import LLMCallRecord
-from nanobot.providers.base import LLMProvider, LLMResponse, LLMUsage
-from nanobot.providers.fallback_provider import FallbackProvider
+from mason.llm_usage.context import llm_usage_source
+from mason.llm_usage.models import LLMCallRecord
+from mason.providers.base import LLMProvider, LLMResponse, LLMUsage
+from mason.providers.fallback_provider import FallbackProvider
 
 
 class _SequenceProvider(LLMProvider):
@@ -148,7 +148,7 @@ async def test_stream_observer_records_physical_attempt_timing(monkeypatch) -> N
         ]
     )
     monkeypatch.setattr(
-        "nanobot.providers.base.time.monotonic_ns",
+        "mason.providers.base.time.monotonic_ns",
         lambda: next(monotonic_values),
     )
 

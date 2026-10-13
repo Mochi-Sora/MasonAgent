@@ -4,15 +4,15 @@ from dataclasses import replace
 
 import pytest
 
-from nanobot.cron.service import CronService
-from nanobot.cron.types import CronJob, CronSchedule
+from mason.cron.service import CronService
+from mason.cron.types import CronJob, CronSchedule
 
 
 @pytest.mark.parametrize("kind", ["every", "cron", "at"])
 @pytest.mark.parametrize("resend_schedule", [False, True])
 async def test_metadata_edit_preserves_due_occurrence(tmp_path, monkeypatch, kind, resend_schedule):
     now = 1_900_000_000_000
-    monkeypatch.setattr("nanobot.cron.service._now_ms", lambda: now)
+    monkeypatch.setattr("mason.cron.service._now_ms", lambda: now)
     schedules = {
         "every": CronSchedule(kind="every", every_ms=60_000),
         "cron": CronSchedule(kind="cron", expr="* * * * *", tz="UTC"),

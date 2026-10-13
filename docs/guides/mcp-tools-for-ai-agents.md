@@ -1,25 +1,25 @@
-# How to Add MCP Tools to an AI Agent with nanobot
+# How to Add MCP Tools to an AI Agent with mason
 
-nanobot can connect MCP servers and expose their tools to the agent alongside
+mason can connect MCP servers and expose their tools to the agent alongside
 built-in file, shell, web, cron, image generation, and subagent tools.
 
 ## What you will build
 
-- a working nanobot agent
+- a working mason agent
 - one MCP server configured in `config.json`
 - a restricted set of tools available to the model
 
 ## When to use this
 
 Use MCP when a tool already exists as an MCP server, when another application
-publishes an MCP adapter, or when you want a clean boundary between nanobot and
+publishes an MCP adapter, or when you want a clean boundary between mason and
 external tool logic.
 
 ## Install
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 Install the MCP server's own runtime separately. For example, many local MCP
@@ -27,7 +27,7 @@ servers use `npx` or `uvx`.
 
 ## Minimal working example
 
-Add a stdio MCP server to `~/.nanobot/config.json`:
+Add a stdio MCP server to `~/.mason/config.json`:
 
 ```json
 {
@@ -43,14 +43,14 @@ Add a stdio MCP server to `~/.nanobot/config.json`:
 }
 ```
 
-Restart nanobot, then ask a question that needs the MCP tool.
+Restart mason, then ask a question that needs the MCP tool.
 
 ## Production notes
 
 - Use `enabledTools` to expose only the tools the agent actually needs.
 - Set `toolTimeout` for slow MCP servers.
 - Prefer stdio MCP for local tools and HTTP MCP for trusted remote services.
-- Keep MCP server install/update steps outside nanobot config when possible.
+- Keep MCP server install/update steps outside mason config when possible.
 
 ## Security notes
 
@@ -62,12 +62,12 @@ Restart nanobot, then ask a question that needs the MCP tool.
 
 ## Troubleshooting
 
-- Start `nanobot gateway --verbose` and check MCP startup logs.
-- Confirm the MCP command works by itself before debugging nanobot.
+- Start `mason gateway --verbose` and check MCP startup logs.
+- Confirm the MCP command works by itself before debugging mason.
 - If an HTTP MCP server is blocked, review the SSRF whitelist and use a narrow
   host CIDR.
 
-## Related nanobot docs
+## Related mason docs
 
 - [Configure MCP tools](./configure-mcp-tools.md)
 - [Configuration: MCP](../configuration.md#mcp-model-context-protocol)

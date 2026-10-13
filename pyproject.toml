@@ -1,5 +1,5 @@
 [project]
-name = "nanobot-ai"
+name = "mason"
 version = "0.3.5"
 description = "A lightweight personal AI assistant framework"
 readme = { file = "README.md", content-type = "text/markdown" }
@@ -109,11 +109,11 @@ dev = [
 ]
 
 [project.scripts]
-nanobot = "nanobot.cli.entry:main"
+mason = "mason.cli.entry:main"
 
 # Third-party tool plugins register here.  Built-in tools are discovered
 # automatically via pkgutil scanning in ToolLoader.discover().
-# [project.entry-points."nanobot.tools"]
+# [project.entry-points."mason.tools"]
 # my_plugin = "my_package.plugins:MyTool"
 
 [build-system]
@@ -125,28 +125,28 @@ allow-direct-references = true
 
 [tool.hatch.build]
 include = [
-    "nanobot/**/*.py",
-    "nanobot/templates/**/*.md",
-    "nanobot/skills/**/*.md",
-    "nanobot/skills/**/*.sh",
+    "mason/**/*.py",
+    "mason/templates/**/*.md",
+    "mason/skills/**/*.md",
+    "mason/skills/**/*.sh",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["nanobot"]
-exclude = ["nanobot/channels/*/tests/**"]
+packages = ["mason"]
+exclude = ["mason/channels/*/tests/**"]
 
 [tool.hatch.build.targets.wheel.sources]
-"nanobot" = "nanobot"
+"mason" = "mason"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "nanobot/",
+    "mason/",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "pyproject.toml",
 ]
-exclude = ["nanobot/channels/*/tests/**"]
+exclude = ["mason/channels/*/tests/**"]
 
 # Type checking is configured in pyrightconfig.json: Pyright prefers it over
 # pyproject.toml, and unlike [tool.basedpyright] it is read by every
@@ -164,11 +164,11 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests", "nanobot/channels"]
+testpaths = ["tests", "mason/channels"]
 pythonpath = ["tests"]
 
 [tool.coverage.run]
-source = ["nanobot"]
+source = ["mason"]
 omit = ["tests/*", "**/tests/*"]
 
 [tool.coverage.report]

@@ -6,9 +6,9 @@ from unittest.mock import patch
 
 import pytest
 
-from nanobot.agent.tools import file_state
-from nanobot.agent.tools.filesystem import ReadFileTool, WriteFileTool
-from nanobot.utils.document import (
+from mason.agent.tools import file_state
+from mason.agent.tools.filesystem import ReadFileTool, WriteFileTool
+from mason.utils.document import (
     DocumentExtractionError,
     DocumentLineSource,
     LocatedDocumentLine,
@@ -383,7 +383,7 @@ class TestReadOfficeDocuments:
     @pytest.mark.asyncio
     async def test_docx_returns_extracted_text(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             return_value=_document_source("Title\n\nParagraph 1"),
         ):
             f = tmp_path / "test.docx"
@@ -396,7 +396,7 @@ class TestReadOfficeDocuments:
     @pytest.mark.asyncio
     async def test_xlsx_returns_extracted_text(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             return_value=_document_source("--- Sheet: Sheet1 ---\nName\tAge\nAlice\t30"),
         ):
             f = tmp_path / "test.xlsx"
@@ -409,7 +409,7 @@ class TestReadOfficeDocuments:
     async def test_office_documents_support_extracted_line_ranges(self, tool, tmp_path):
         extracted = "--- Sheet: Sheet1 ---\nName\tAge\nAlice\t30\nBob\t25"
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             return_value=_document_source(extracted),
         ):
             f = tmp_path / "test.xlsx"
@@ -429,7 +429,7 @@ class TestReadOfficeDocuments:
     ):
         from openpyxl import Workbook
 
-        from nanobot.utils import document as document_utils
+        from mason.utils import document as document_utils
 
         workbook_path = tmp_path / "long.xlsx"
         workbook = Workbook()
@@ -453,7 +453,7 @@ class TestReadOfficeDocuments:
     @pytest.mark.asyncio
     async def test_pptx_returns_extracted_text(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             return_value=_document_source(
                 "--- Slide 1 ---\nWelcome\n--- Slide 2 ---\nContent"
             ),
@@ -467,7 +467,7 @@ class TestReadOfficeDocuments:
     @pytest.mark.asyncio
     async def test_docx_missing_library(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             side_effect=DocumentExtractionError("python-docx not installed"),
         ):
             f = tmp_path / "test.docx"
@@ -479,7 +479,7 @@ class TestReadOfficeDocuments:
     @pytest.mark.asyncio
     async def test_docx_corrupt_file(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             side_effect=DocumentExtractionError("failed to extract DOCX: bad zip"),
         ):
             f = tmp_path / "test.docx"
@@ -490,7 +490,7 @@ class TestReadOfficeDocuments:
 
     @pytest.mark.asyncio
     async def test_unsupported_extension(self, tool, tmp_path):
-        with patch("nanobot.utils.document.open_document_line_source", return_value=None):
+        with patch("mason.utils.document.open_document_line_source", return_value=None):
             f = tmp_path / "test.docx"
             f.write_bytes(b"PK")
             result = await tool.execute(path=str(f))
@@ -500,7 +500,7 @@ class TestReadOfficeDocuments:
     @pytest.mark.asyncio
     async def test_empty_document_returns_descriptive_message(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             return_value=_document_source(""),
         ):
             f = tmp_path / "empty.docx"
@@ -518,7 +518,7 @@ class TestOfficeDocTruncation:
     @pytest.mark.asyncio
     async def test_large_document_truncated(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             return_value=_document_source("x" * 200_000),
         ):
             f = tmp_path / "large.docx"
@@ -530,7 +530,7 @@ class TestOfficeDocTruncation:
     @pytest.mark.asyncio
     async def test_small_document_not_truncated(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             return_value=_document_source("Hello world"),
         ):
             f = tmp_path / "small.docx"
@@ -542,7 +542,7 @@ class TestOfficeDocTruncation:
     @pytest.mark.asyncio
     async def test_error_response_not_truncated(self, tool, tmp_path):
         with patch(
-            "nanobot.utils.document.open_document_line_source",
+            "mason.utils.document.open_document_line_source",
             side_effect=DocumentExtractionError(
                 "failed to extract DOCX: something went wrong"
             ),

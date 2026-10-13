@@ -6,9 +6,9 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from nanobot.memory.maintenance import maybe_rollover
-from nanobot.memory.state import MemoryState
-from nanobot.memory.store import MemoryDB
+from mason.memory.maintenance import maybe_rollover
+from mason.memory.state import MemoryState
+from mason.memory.store import MemoryDB
 
 
 def test_rollover_clears_state_and_keeps_unconsolidated_backup(tmp_path: Path) -> None:

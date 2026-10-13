@@ -1,7 +1,7 @@
 """Reproduction test for HKUDS/nanobot#4302.
 
 This test starts a real FastMCP streamable-http server in a child process,
-lets its idle timeout kill the session, and then exercises nanobot's MCP
+lets its idle timeout kill the session, and then exercises mason's MCP
 reconnect path.  The bug being reproduced is a gateway crash caused by
 improper cleanup of the old ``streamable_http_client`` async generator during
 reconnect / shutdown.
@@ -19,11 +19,11 @@ import time
 import httpx
 import pytest
 
-from nanobot.agent.tools import mcp as mcp_module
-from nanobot.agent.tools.mcp import MCPProvider, MCPToolWrapper
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.config.schema import MCPServerConfig
-from nanobot.security import network as security_network
+from mason.agent.tools import mcp as mcp_module
+from mason.agent.tools.mcp import MCPProvider, MCPToolWrapper
+from mason.agent.tools.registry import ToolRegistry
+from mason.config.schema import MCPServerConfig
+from mason.security import network as security_network
 
 # Leave enough headroom for reconnect handshakes on slower CI hosts; each test
 # still waits beyond this deadline explicitly before exercising recovery.
@@ -132,7 +132,7 @@ def _make_provider(*, mcp_servers: dict) -> tuple[MCPProvider, ToolRegistry]:
 
 @pytest.fixture(autouse=True)
 def allow_loopback_mcp_urls(monkeypatch: pytest.MonkeyPatch):
-    """The repro server runs on 127.0.0.1; allow nanobot to talk to it."""
+    """The repro server runs on 127.0.0.1; allow mason to talk to it."""
     class TestPinnedDNSAsyncTransport(security_network.PinnedDNSAsyncTransport):
         _resolver_lock = asyncio.Lock()
 

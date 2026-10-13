@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent.session_helpers import run_session
-from nanobot.agent.context import TranscriptInput
-from nanobot.agent.hooks import create_file_edit_activity_hook
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.filesystem import WriteFileTool
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.outbound_events import (
+from mason.agent.context import TranscriptInput
+from mason.agent.hooks import create_file_edit_activity_hook
+from mason.agent.loop import AgentLoop
+from mason.agent.tools.filesystem import WriteFileTool
+from mason.bus.events import InboundMessage
+from mason.bus.outbound_events import (
     GoalStatusEvent,
     ProgressEvent,
     StreamDeltaEvent,
@@ -20,9 +20,9 @@ from nanobot.bus.outbound_events import (
     StreamEndEvent,
     TurnEndEvent,
 )
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import LLMResponse, ToolCallRequest
-from nanobot.utils.progress_events import output_events
+from mason.bus.queue import MessageBus
+from mason.providers.base import LLMResponse, ToolCallRequest
+from mason.utils.progress_events import output_events
 
 
 def _make_loop(tmp_path: Path) -> AgentLoop:
@@ -206,7 +206,7 @@ class TestToolEventProgress:
             pass
 
         monkeypatch.setattr(
-            "nanobot.agent.hooks.file_edit_activity.prepare_file_edit_trackers",
+            "mason.agent.hooks.file_edit_activity.prepare_file_edit_trackers",
             prepare_file_edit_trackers,
         )
 

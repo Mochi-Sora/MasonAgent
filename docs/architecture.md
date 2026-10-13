@@ -1,6 +1,6 @@
 # Architecture
 
-This page maps nanobot's runtime behavior to source files. Use it when you are debugging internals, reviewing a PR, adding a provider/channel/tool, or trying to understand where a user-visible behavior comes from.
+This page maps mason's runtime behavior to source files. Use it when you are debugging internals, reviewing a PR, adding a provider/channel/tool, or trying to understand where a user-visible behavior comes from.
 
 For the product-level mental model, read [`concepts.md`](./concepts.md) first.
 
@@ -26,12 +26,12 @@ Main files:
 
 | Area | Files |
 |---|---|
-| Message events and queue | `nanobot/bus/events.py`, `nanobot/bus/queue.py` |
-| Turn orchestration | `nanobot/agent/loop.py` |
-| Provider/tool conversation loop | `nanobot/agent/runner.py` |
-| Context construction | `nanobot/agent/context.py` |
-| Session storage and compaction | `nanobot/session/manager.py`, `nanobot/agent/memory.py` |
-| Long-term memory, working state, consolidation | `nanobot/memory/store.py`, `nanobot/memory/state.py`, `nanobot/memory/consolidation.py` |
+| Message events and queue | `mason/bus/events.py`, `mason/bus/queue.py` |
+| Turn orchestration | `mason/agent/loop.py` |
+| Provider/tool conversation loop | `mason/agent/runner.py` |
+| Context construction | `mason/agent/context.py` |
+| Session storage and compaction | `mason/session/manager.py`, `mason/agent/memory.py` |
+| Long-term memory, working state, consolidation | `mason/memory/store.py`, `mason/memory/state.py`, `mason/memory/consolidation.py` |
 
 ## Agent Loop vs Agent Runner
 
@@ -62,7 +62,7 @@ Keep this split in mind when debugging. If a problem is about channel routing, s
 
 ## Providers
 
-Provider metadata is centralized in `nanobot/providers/registry.py`. Configuration fields live in `nanobot/config/schema.py`.
+Provider metadata is centralized in `mason/providers/registry.py`. Configuration fields live in `mason/config/schema.py`.
 
 Provider selection uses:
 
@@ -72,7 +72,7 @@ Provider selection uses:
 - local provider fallback when `apiBase` is configured;
 - gateway fallback for providers that can route many model families.
 
-Provider implementations live in `nanobot/providers/`. Most hosted providers use the OpenAI-compatible implementation, while Anthropic, Azure OpenAI, AWS Bedrock, OpenAI Codex, and GitHub Copilot have specialized paths.
+Provider implementations live in `mason/providers/`. Most hosted providers use the OpenAI-compatible implementation, while Anthropic, Azure OpenAI, AWS Bedrock, OpenAI Codex, and GitHub Copilot have specialized paths.
 
 Useful docs:
 
@@ -87,15 +87,15 @@ Main files:
 
 | Area | Files |
 |---|---|
-| Base channel contract | `nanobot/channels/base.py` |
-| Channel packages | `nanobot/channels/<channel>/` |
-| Discovery and lifecycle | `nanobot/channels/manager.py` |
+| Base channel contract | `mason/channels/base.py` |
+| Channel packages | `mason/channels/<channel>/` |
+| Discovery and lifecycle | `mason/channels/manager.py` |
 
-Channels are discovered by scanning self-contained packages under `nanobot/channels/`. Add a channel by contributing one package that follows [`channel-package-guide.md`](./channel-package-guide.md).
+Channels are discovered by scanning self-contained packages under `mason/channels/`. Add a channel by contributing one package that follows [`channel-package-guide.md`](./channel-package-guide.md).
 
 ## Gateway
 
-`nanobot gateway` starts:
+`mason gateway` starts:
 
 - enabled chat channels;
 - workspace-scoped cron service;
@@ -104,23 +104,23 @@ Channels are discovered by scanning self-contained packages under `nanobot/chann
 
 ## Tools
 
-Tools are discovered from `nanobot/agent/tools/` and plugin entry points.
+Tools are discovered from `mason/agent/tools/` and plugin entry points.
 
 Important files:
 
 | Tool area | Files |
 |---|---|
-| Tool base and schema | `nanobot/agent/tools/base.py`, `nanobot/agent/tools/schema.py` |
-| Discovery | `nanobot/agent/tools/registry.py` |
-| Shell execution | `nanobot/agent/tools/shell.py` |
-| Filesystem tools | `nanobot/agent/tools/filesystem.py` |
-| Web search/fetch | `nanobot/agent/tools/web.py` |
-| MCP tools | `nanobot/agent/tools/mcp.py` |
-| Cron | `nanobot/agent/tools/cron.py`, `nanobot/cron/` |
-| Image generation | `nanobot/agent/tools/image_generation.py` |
-| Runtime self-inspection | `nanobot/agent/tools/self.py` |
-| Capability discovery | `nanobot/agent/tools/capability_gate.py`, `nanobot/agent/tools/capability_search.py` |
-| Memory tools | `nanobot/agent/tools/memory.py` |
+| Tool base and schema | `mason/agent/tools/base.py`, `mason/agent/tools/schema.py` |
+| Discovery | `mason/agent/tools/registry.py` |
+| Shell execution | `mason/agent/tools/shell.py` |
+| Filesystem tools | `mason/agent/tools/filesystem.py` |
+| Web search/fetch | `mason/agent/tools/web.py` |
+| MCP tools | `mason/agent/tools/mcp.py` |
+| Cron | `mason/agent/tools/cron.py`, `mason/cron/` |
+| Image generation | `mason/agent/tools/image_generation.py` |
+| Runtime self-inspection | `mason/agent/tools/self.py` |
+| Capability discovery | `mason/agent/tools/capability_gate.py`, `mason/agent/tools/capability_search.py` |
+| Memory tools | `mason/agent/tools/memory.py` |
 
 Tool behavior is part of the model contract. Keep user-visible tool names, schemas, and error messages stable unless a change is intentional.
 
@@ -128,15 +128,15 @@ With `tools.lazyCapabilities.enabled` (the default), only `find_capabilities`, `
 
 ## Config and Paths
 
-The config schema lives in `nanobot/config/schema.py`. Loading and saving live in `nanobot/config/loader.py`. Runtime path helpers live in `nanobot/config/paths.py`.
+The config schema lives in `mason/config/schema.py`. Loading and saving live in `mason/config/loader.py`. Runtime path helpers live in `mason/config/paths.py`.
 
 Defaults:
 
 | Path | Default |
 |---|---|
-| Config | `~/.nanobot/config.json` |
-| Workspace | `~/.nanobot/workspace/` |
-| Sessions | `<config-dir>/sessions/<workspace-id>/*.jsonl` (default: `~/.nanobot/sessions/...`) |
+| Config | `~/.mason/config.json` |
+| Workspace | `~/.mason/workspace/` |
+| Sessions | `<config-dir>/sessions/<workspace-id>/*.jsonl` (default: `~/.mason/sessions/...`) |
 | Memory | `<workspace>/memory/` |
 | Cron store | `<workspace>/cron/jobs.json` |
 | Media and log runtime data | config directory subdirectories such as `media/` and `logs/` |
@@ -172,9 +172,9 @@ Session history is the near-term conversation replay. Memory is the longer-term 
 | Long-term memory | Curated memories and links in `<workspace>/memory/memory.db` (searched with `recall_memory`) |
 | Backup episodes | Today's verbatim turns in the same database (searched with `recall_backup`), discarded at the daily rollover |
 | Archived summaries | `<workspace>/memory/history.jsonl`, written by session compaction |
-| Bootstrap identity files | `<workspace>/SOUL.md`, `<workspace>/USER.md`, templates under `nanobot/templates/` |
+| Bootstrap identity files | `<workspace>/SOUL.md`, `<workspace>/USER.md`, templates under `mason/templates/` |
 
-Consolidation is implemented in `nanobot/memory/consolidation.py`; the daily rollover and legacy import live in `nanobot/memory/maintenance.py` and `nanobot/memory/migration.py`. Consolidation runs as a cron system job (default every 2 hours) and once more before `memory_rollover` at 00:00, which discards the previous day's backup and clears the working state in place. Only consolidation writes long-term memory, and the model never edits it directly. The SQLite memory subsystem does not support Windows.
+Consolidation is implemented in `mason/memory/consolidation.py`; the daily rollover and legacy import live in `mason/memory/maintenance.py` and `mason/memory/migration.py`. Consolidation runs as a cron system job (default every 2 hours) and once more before `memory_rollover` at 00:00, which discards the previous day's backup and clears the working state in place. Only consolidation writes long-term memory, and the model never edits it directly. The SQLite memory subsystem does not support Windows.
 
 ## Security Boundaries
 
@@ -182,11 +182,11 @@ Security-sensitive code paths include:
 
 | Boundary | Files |
 |---|---|
-| Workspace scope | `nanobot/security/workspace_access.py`, `nanobot/security/workspace_policy.py` |
-| Shell sandboxing | `nanobot/agent/tools/shell.py` |
-| SSRF/network checks | `nanobot/security/network.py`, `nanobot/agent/tools/web.py` |
-| PTH guard and CLI startup security | `nanobot/security/` and CLI entrypoints |
-| Channel access control | channel config in `nanobot/channels/*.py` |
+| Workspace scope | `mason/security/workspace_access.py`, `mason/security/workspace_policy.py` |
+| Shell sandboxing | `mason/agent/tools/shell.py` |
+| SSRF/network checks | `mason/security/network.py`, `mason/agent/tools/web.py` |
+| PTH guard and CLI startup security | `mason/security/` and CLI entrypoints |
+| Channel access control | channel config in `mason/channels/*.py` |
 
 When changing tools, channels, file access, workspace behavior, or network fetching, treat security as part of the functional behavior and update docs if the user-facing boundary changes.
 
@@ -199,7 +199,7 @@ When changing tools, channels, file access, workspace behavior, or network fetch
 | Tool | Implement a tool under `agent/tools/` or expose a plugin entry point |
 | Agent Plugin | Add a v1 package under `<workspace>/plugins/` |
 | MCP | Add `tools.mcpServers` config or bundle the server in an Agent Plugin |
-| Skill | Add workspace skills under `<workspace>/skills/`, bundle them in an Agent Plugin, or add built-in skills under `nanobot/skills/` |
+| Skill | Add workspace skills under `<workspace>/skills/`, bundle them in an Agent Plugin, or add built-in skills under `mason/skills/` |
 | CLI App | Add it to the CLI Apps catalog; the installer owns its executable lifecycle and writes a skills-only Agent Plugin |
 
 Prefer existing registry/discovery patterns over ad hoc wiring.
@@ -210,15 +210,15 @@ Common checks:
 
 ```bash
 pytest tests/test_openai_api.py::test_function -v
-ruff check nanobot/
+ruff check mason/
 ```
 
 Choose tests based on the changed surface:
 
 | Change | Minimum useful verification |
 |---|---|
-| Provider behavior | Provider unit tests or a mocked API path; `nanobot agent -m "Hello!"` with safe config when possible |
-| Channel behavior | Channel tests plus `nanobot gateway` startup path |
+| Provider behavior | Provider unit tests or a mocked API path; `mason agent -m "Hello!"` with safe config when possible |
+| Channel behavior | Channel tests plus `mason gateway` startup path |
 | Tool behavior | Tool unit tests and an agent-run path when schema or model-facing behavior changes |
 | Docs | Link checks, command accuracy against CLI/schema, and `git diff --check` |
 

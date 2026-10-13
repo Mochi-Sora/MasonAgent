@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from nanobot.bus.events import OutboundMessage
-from nanobot.bus.outbound_events import (
+from mason.bus.events import OutboundMessage
+from mason.bus.outbound_events import (
     ContextCompactionEvent,
     ProgressEvent,
     StreamDeltaEvent,

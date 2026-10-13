@@ -2,10 +2,10 @@ import asyncio
 
 import pytest
 
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.outbound_events import ProgressEvent
-from nanobot.bus.queue import MessageBus
-from nanobot.bus.runtime_events import (
+from mason.bus.events import InboundMessage
+from mason.bus.outbound_events import ProgressEvent
+from mason.bus.queue import MessageBus
+from mason.bus.runtime_events import (
     RuntimeEventContext,
     RuntimeEventPublisher,
     RuntimeModelChanged,
@@ -15,7 +15,7 @@ from nanobot.bus.runtime_events import (
     TurnRunStatusChanged,
     TurnRuntimeAdmitted,
 )
-from nanobot.providers.base import LLMUsage
+from mason.providers.base import LLMUsage
 
 
 async def test_local_state_subscriber_does_not_block_routed_delivery():

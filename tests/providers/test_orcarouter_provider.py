@@ -2,10 +2,10 @@
 
 from unittest.mock import patch
 
-from nanobot.config.schema import Config, ProvidersConfig
-from nanobot.providers.factory import make_provider
-from nanobot.providers.openai_compat_provider import OpenAICompatProvider
-from nanobot.providers.registry import PROVIDERS, find_by_name
+from mason.config.schema import Config, ProvidersConfig
+from mason.providers.factory import make_provider
+from mason.providers.openai_compat_provider import OpenAICompatProvider
+from mason.providers.registry import PROVIDERS, find_by_name
 
 
 def test_orcarouter_config_field_exists() -> None:
@@ -91,7 +91,7 @@ def test_legacy_custom_provider_named_orcarouter_keeps_prefix_stripping() -> Non
         },
     })
 
-    with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
+    with patch("mason.providers.openai_compat_provider.AsyncOpenAI"):
         provider = make_provider(config)
 
     assert isinstance(provider, OpenAICompatProvider)
@@ -110,7 +110,7 @@ def test_legacy_custom_provider_named_orcarouter_keeps_prefix_stripping() -> Non
 
 def test_orcarouter_preserves_model_api_id() -> None:
     spec = find_by_name("orcarouter")
-    with patch("nanobot.providers.openai_compat_provider.AsyncOpenAI"):
+    with patch("mason.providers.openai_compat_provider.AsyncOpenAI"):
         provider = OpenAICompatProvider(
             api_key="sk-orca-test-key",
             default_model="anthropic/claude-sonnet-4.6",

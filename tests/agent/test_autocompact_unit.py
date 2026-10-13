@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.autocompact import AutoCompact
-from nanobot.events import NO_EVENTS, ContextCompactionEvent, EventSink
-from nanobot.session.manager import Session, SessionManager
+from mason.agent.autocompact import AutoCompact
+from mason.events import NO_EVENTS, ContextCompactionEvent, EventSink
+from mason.session.manager import Session, SessionManager
 
 
 def _runtime(_session: Session | None = None):

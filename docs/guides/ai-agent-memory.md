@@ -1,6 +1,6 @@
-# How AI Agent Memory Works in nanobot
+# How AI Agent Memory Works in mason
 
-This guide explains how to use nanobot's long-term AI agent memory: session
+This guide explains how to use mason's long-term AI agent memory: session
 history, compacted conversation summaries, the working state, SQLite long-term
 memory, and the verbatim backup that consolidation promotes from.
 
@@ -15,14 +15,14 @@ memory, and the verbatim backup that consolidation promotes from.
 
 Use memory when an agent should remember stable preferences, project facts,
 decisions, and recurring context across sessions. Do not use memory as a dumping
-ground for every raw transcript; nanobot separates short-term messages from
+ground for every raw transcript; mason separates short-term messages from
 curated durable knowledge.
 
 ## Install
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 ## Minimal working example
@@ -45,7 +45,7 @@ What do I prefer for release notes?
 
 The agent searches long-term memory with `recall_memory` (and can fall back to
 `recall_backup` for exact recent wording) before answering. Memory lives in the
-active workspace, usually under `~/.nanobot/workspace/`.
+active workspace, usually under `~/.mason/workspace/`.
 
 ## Production notes
 
@@ -74,9 +74,9 @@ active workspace, usually under `~/.nanobot/workspace/`.
   what is promoted from the backup.
 - If a new session lacks context, confirm it uses the same workspace.
 
-## Related nanobot docs
+## Related mason docs
 
-- [AI Agent Memory in nanobot](../memory.md)
+- [AI Agent Memory in mason](../memory.md)
 - [Concepts](../concepts.md)
 - [Configuration](../configuration.md#auto-compact)
 - [Chat Commands](../chat-commands.md)

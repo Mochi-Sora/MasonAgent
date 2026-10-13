@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent.runner_helpers import make_run_spec
-from nanobot.config.schema import AgentDefaults
-from nanobot.providers.base import LLMProvider, LLMResponse
+from mason.config.schema import AgentDefaults
+from mason.providers.base import LLMProvider, LLMResponse
 
 _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
@@ -25,7 +25,7 @@ def _continue_goal() -> str:
 @pytest.mark.asyncio
 async def test_runner_exits_normally_without_continuation_callback():
     """Without a continuation request, final text completes the run."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(
@@ -50,7 +50,7 @@ async def test_runner_exits_normally_without_continuation_callback():
 @pytest.mark.asyncio
 async def test_runner_exits_normally_when_continuation_callback_returns_none():
     """A callback returning None leaves the final response terminal."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(
@@ -82,7 +82,7 @@ async def test_runner_continues_when_callback_returns_message():
     "completed". With the fix the runner is forced to continue until
     max_iterations is hit.
     """
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(
@@ -112,7 +112,7 @@ async def test_runner_continues_when_callback_returns_message():
 @pytest.mark.asyncio
 async def test_runner_respects_max_iterations_with_continuation():
     """A continuation request after one iteration still hits max_iterations."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(
@@ -137,7 +137,7 @@ async def test_runner_respects_max_iterations_with_continuation():
 @pytest.mark.asyncio
 async def test_runner_continuation_is_governed_by_max_iterations():
     """Caller-requested continuation is governed by max_iterations."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(
@@ -165,7 +165,7 @@ async def test_runner_continuation_is_governed_by_max_iterations():
 @pytest.mark.asyncio
 async def test_runner_does_not_continue_on_error():
     """An LLM error remains terminal even when continuation is available."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(
@@ -191,7 +191,7 @@ async def test_runner_does_not_continue_on_error():
 @pytest.mark.asyncio
 async def test_runner_injects_continuation_callback_message():
     """The callback result becomes the injected user message."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(
@@ -219,7 +219,7 @@ async def test_runner_injects_continuation_callback_message():
 @pytest.mark.asyncio
 async def test_runner_resolves_continuation_callback_lazily():
     """The continuation text can depend on goal metadata created during the run."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock(spec=LLMProvider)
     provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(

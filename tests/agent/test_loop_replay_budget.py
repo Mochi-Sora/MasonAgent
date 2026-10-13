@@ -10,9 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import LLMResponse, ProviderConversationState, ToolCallRequest
+from mason.agent.loop import AgentLoop
+from mason.bus.queue import MessageBus
+from mason.providers.base import LLMResponse, ProviderConversationState, ToolCallRequest
 
 
 def _make_loop(
@@ -102,12 +102,12 @@ async def test_budget_keeps_configured_cap_on_a_large_window(tmp_path: Path) -> 
 
 class TestReplayBudgetConfig:
     def test_default_is_32k(self) -> None:
-        from nanobot.config.schema import AgentDefaults
+        from mason.config.schema import AgentDefaults
 
         assert AgentDefaults().session_replay_max_tokens == 32_000
 
     def test_alias_and_serialization(self) -> None:
-        from nanobot.config.schema import AgentDefaults
+        from mason.config.schema import AgentDefaults
 
         defaults = AgentDefaults.model_validate({"sessionReplayMaxTokens": 5_000})
         assert defaults.session_replay_max_tokens == 5_000
@@ -115,7 +115,7 @@ class TestReplayBudgetConfig:
         assert data["sessionReplayMaxTokens"] == 5_000
 
     def test_zero_disables_the_budget(self) -> None:
-        from nanobot.config.schema import AgentDefaults
+        from mason.config.schema import AgentDefaults
 
         assert AgentDefaults(session_replay_max_tokens=0).session_replay_max_tokens == 0
 
@@ -219,13 +219,13 @@ async def test_state_check_note_is_absent_after_update_state(tmp_path: Path) -> 
 
 class TestReplayModeConfig:
     def test_default_mode_is_none(self) -> None:
-        from nanobot.config.schema import AgentDefaults
+        from mason.config.schema import AgentDefaults
 
         # The framework remembers state and memory, not conversation history.
         assert AgentDefaults().session_replay == "none"
 
     def test_mode_aliases_and_serialization(self) -> None:
-        from nanobot.config.schema import AgentDefaults
+        from mason.config.schema import AgentDefaults
 
         defaults = AgentDefaults.model_validate({"sessionReplay": "none"})
         assert defaults.session_replay == "none"
@@ -235,7 +235,7 @@ class TestReplayModeConfig:
     def test_invalid_mode_is_rejected(self) -> None:
         import pytest
 
-        from nanobot.config.schema import AgentDefaults
+        from mason.config.schema import AgentDefaults
 
         with pytest.raises(Exception):
             AgentDefaults.model_validate({"sessionReplay": "sometimes"})

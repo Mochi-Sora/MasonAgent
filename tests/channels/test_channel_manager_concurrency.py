@@ -1,12 +1,12 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from nanobot.bus.events import OutboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.channels import manager as manager_module
-from nanobot.channels.base import BaseChannel
-from nanobot.channels.manager import ChannelManager
-from nanobot.config.schema import Config
+from mason.bus.events import OutboundMessage
+from mason.bus.queue import MessageBus
+from mason.channels import manager as manager_module
+from mason.channels.base import BaseChannel
+from mason.channels.manager import ChannelManager
+from mason.config.schema import Config
 
 
 def make_manager():

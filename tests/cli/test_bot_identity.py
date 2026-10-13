@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from nanobot.cli.stream import StreamRenderer, ThinkingSpinner
-from nanobot.config.schema import AgentDefaults, Config
+from mason.cli.stream import StreamRenderer, ThinkingSpinner
+from mason.config.schema import AgentDefaults, Config
 
 
 def test_bot_name_and_icon_defaults_preserve_current_branding() -> None:
-    """Default values keep the existing 'nanobot' name and cat icon."""
+    """Default values keep the existing 'mason' name and cat icon."""
     defaults = AgentDefaults()
 
-    assert defaults.bot_name == "nanobot"
+    assert defaults.bot_name == "mason"
     assert defaults.bot_icon == "🐈"
 
 

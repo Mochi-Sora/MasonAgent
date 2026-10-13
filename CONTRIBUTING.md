@@ -1,8 +1,8 @@
-# Contributing to nanobot
+# Contributing to mason
 
 Thank you for being here.
 
-nanobot is built with a simple belief: good tools should feel calm, clear, and humane.
+mason is built with a simple belief: good tools should feel calm, clear, and humane.
 We care deeply about useful features, but we also believe in achieving more with less:
 solutions should be powerful without becoming heavy, and ambitious without becoming
 needlessly complicated.
@@ -78,7 +78,7 @@ pip install -e ".[dev]"
 pytest
 
 # Lint code
-ruff check nanobot/
+ruff check mason/
 
 # Format code — optional. The existing tree predates `ruff format`,
 # so running it broadly produces large unrelated diffs.
@@ -109,7 +109,7 @@ and agree that it will be licensed under the project's
 
 ## Code Style
 
-We care about more than passing lint. We want nanobot to stay small, calm, and readable.
+We care about more than passing lint. We want mason to stay small, calm, and readable.
 
 When contributing, please aim for code that feels:
 
@@ -170,8 +170,8 @@ documentation locations are decided, so the fork stops presenting upstream's ide
 
 | Location | What it controls |
 |---|---|
-| `nanobot/agent/tools/mcp_oauth.py` (`_CLIENT_URI`, `_LOGO_URI`, `software_id`) | Identity sent to remote MCP OAuth servers during dynamic client registration |
-| `nanobot/providers/openai_compat_provider.py`, `nanobot/providers/image_generation.py` (`HTTP-Referer`) | Attribution header sent to OpenRouter-compatible gateways |
+| `mason/agent/tools/mcp_oauth.py` (`_CLIENT_URI`, `_LOGO_URI`, `software_id`) | Identity sent to remote MCP OAuth servers during dynamic client registration |
+| `mason/providers/openai_compat_provider.py`, `mason/providers/image_generation.py` (`HTTP-Referer`) | Attribution header sent to OpenRouter-compatible gateways |
 | `scripts/update_readme_contributors.py` (`REPOSITORY`, `MAINTAINERS`) | Contributor-wall sync; the rewritten README has no contributor markers yet, so the script currently has no target |
 | `pyproject.toml` (`[project.urls]`, when added) | Package metadata on PyPI |
 | Community links in `.github/ISSUE_TEMPLATE/config.yml` and `COMMUNICATION.md` | Upstream Discussions and chat groups |
@@ -183,7 +183,7 @@ these docs use the fork. Some upstream identity strings are asserted by tests
 in the same change.
 
 The installers themselves need no changes: they install the checkout they run from, or clone
-whatever URL is passed with `--git` / `NANOBOT_INSTALL_GIT`. `README.md` keeps its credit
+whatever URL is passed with `--git` / `MASON_INSTALL_GIT`. `README.md` keeps its credit
 link to upstream nanobot; that is intentional.
 
 ## Questions?
@@ -196,4 +196,4 @@ Please feel free to open an [issue](https://github.com/Mochi-Sora/MasonAgent/iss
 - [Feishu/WeChat](./COMMUNICATION.md)
 - Email: Xubin Ren (@Re-bin) — <xubinrencs@gmail.com>
 
-Thank you for spending your time and care on nanobot. We would love for more people to participate in this community, and we genuinely welcome contributions of all sizes.
+Thank you for spending your time and care on mason. We would love for more people to participate in this community, and we genuinely welcome contributions of all sizes.

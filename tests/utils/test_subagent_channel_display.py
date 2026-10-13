@@ -1,6 +1,6 @@
 """Tests for subagent announce text shaping on external channel surfaces."""
 
-from nanobot.utils.subagent_channel_display import scrub_subagent_announce_body
+from mason.utils.subagent_channel_display import scrub_subagent_announce_body
 
 
 def test_scrub_subagent_keeps_header_and_result_only() -> None:

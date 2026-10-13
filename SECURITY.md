@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in nanobot, please report it by:
+If you discover a security vulnerability in mason, please report it by:
 
 1. **DO NOT** open a public GitHub issue
 2. Create a private security advisory on GitHub or contact the repository maintainers (xubinrencs@gmail.com)
@@ -22,19 +22,19 @@ We aim to respond to security reports within 48 hours.
 
 ```bash
 # ✅ Best: Use environment variable references in config (never writes the key to disk)
-# In ~/.nanobot/config.json:
+# In ~/.mason/config.json:
 #   "apiKey": "${ANTHROPIC_API_KEY}"
 # Then supply the key at runtime via env var or Docker secret.
 
 # ✅ Good: Store in config file with restricted permissions
-chmod 600 ~/.nanobot/config.json
+chmod 600 ~/.mason/config.json
 
 # ❌ Bad: Hardcoding keys in code or committing them
 ```
 
 **Recommendations:**
 - **Prefer environment variable references** (`${VAR}`) in config — the config file stores the `${VAR}` placeholder, and the plaintext value only exists in memory at runtime. See [Configuration: Environment Variables for Secrets](https://nanobot.wiki/docs/latest/use-nanobot/configuration/#environment-variables-for-secrets) for details.
-- When plaintext keys are stored in `~/.nanobot/config.json`, set file permissions to `0600` (`chmod 600`)
+- When plaintext keys are stored in `~/.mason/config.json`, set file permissions to `0600` (`chmod 600`)
 - Consider using an OS keyring/credential manager for production deployments
 - Rotate API keys regularly
 - Use separate API keys for development and production
@@ -73,7 +73,7 @@ The `exec` tool can execute shell commands. While dangerous command patterns are
 - ✅ Review all tool usage in agent logs
 - ✅ Understand what commands the agent is running
 - ✅ Use a dedicated user account with limited privileges
-- ✅ Never run nanobot as root
+- ✅ Never run mason as root
 - ❌ Don't disable security checks
 - ❌ Don't run on systems with sensitive data without careful review
 
@@ -84,7 +84,7 @@ Set `"tools.exec.sandbox"` to wrap every shell command in an OS sandbox. Both ba
 - Workspace directory → **read-write** (agent works normally)
 - Media directory → **read-only** (can read uploaded attachments)
 - System directories (`/usr`, `/bin`, `/lib`) → **read-only** (commands still work)
-- The workspace's parent, which holds `~/.nanobot/config.json` in the default layout → **denied**, except for explicitly exposed roots
+- The workspace's parent, which holds `~/.mason/config.json` in the default layout → **denied**, except for explicitly exposed roots
 - Unlisted paths, including `~/.ssh` in the default layout → **denied**
 
 | Backend | Value | Platform | Requires |
@@ -92,7 +92,7 @@ Set `"tools.exec.sandbox"` to wrap every shell command in an OS sandbox. Both ba
 | [bubblewrap](https://github.com/containers/bubblewrap) | `"bwrap"` | Linux | `bwrap` (`apt install bubblewrap`). Pre-installed in the official Docker image. |
 | Seatbelt | `"seatbelt"` | macOS | `sandbox-exec(1)`, shipped with macOS. |
 
-**Windows has no backend**: nanobot logs a warning and runs the command unsandboxed.
+**Windows has no backend**: mason logs a warning and runs the command unsandboxed.
 
 The backends protect the workspace's parent differently. `bwrap` masks it with a tmpfs and re-exposes the workspace and allowed binds. Seatbelt has no mount namespace: it denies the parent, re-allows traversal metadata, and exposes the workspace and allowed roots. Keep configuration and credentials outside the workspace and extra binds; choosing an overly broad workspace or explicitly exposing secret-bearing paths defeats that separation.
 
@@ -114,7 +114,7 @@ Enabling the sandbox also automatically activates `restrictToWorkspace` for file
 File operations have path traversal protection, but:
 
 - ✅ Enable `restrictToWorkspace` or the bwrap sandbox to confine file access
-- ✅ Run nanobot with a dedicated user account
+- ✅ Run mason with a dedicated user account
 - ✅ Use filesystem permissions to protect sensitive directories
 - ✅ Regularly audit file operations in logs
 - ❌ Don't give unrestricted access to sensitive files
@@ -128,8 +128,8 @@ File operations have path traversal protection, but:
 - Consider using a firewall to restrict outbound connections if needed
 
 **WhatsApp:**
-- Keep the neonize session database under `~/.nanobot/whatsapp-auth` secure (mode 0700).
-- Use `nanobot channels login whatsapp --force` to remove and recreate the local session database when rotating linked devices.
+- Keep the neonize session database under `~/.mason/whatsapp-auth` secure (mode 0700).
+- Use `mason channels login whatsapp --force` to remove and recreate the local session database when rotating linked devices.
 
 ### 6. Dependency Security
 
@@ -141,13 +141,13 @@ pip install pip-audit
 pip-audit
 
 # Update to latest secure versions
-pip install --upgrade nanobot-ai
+pip install --upgrade mason
 ```
 
 **Important Notes:**
 - Keep `litellm` updated to the latest version for security fixes
 - Run `pip-audit` regularly after enabling the channels used in production; their manifest-declared dependencies are installed into the same environment
-- Subscribe to security advisories for nanobot and its dependencies
+- Subscribe to security advisories for mason and its dependencies
 
 ### 7. Production Deployment
 
@@ -157,26 +157,26 @@ For production use:
    ```bash
    # Run in a container or VM
    docker run --rm -it python:3.11
-   pip install nanobot-ai
+   pip install mason
    ```
 
 2. **Use a Dedicated User**
    ```bash
-   sudo useradd -m -s /bin/bash nanobot
-   sudo -u nanobot nanobot gateway
+   sudo useradd -m -s /bin/bash mason
+   sudo -u mason mason gateway
    ```
 
 3. **Set Proper Permissions**
    ```bash
-   chmod 700 ~/.nanobot
-   chmod 600 ~/.nanobot/config.json
-   chmod 700 ~/.nanobot/whatsapp-auth
+   chmod 700 ~/.mason
+   chmod 600 ~/.mason/config.json
+   chmod 700 ~/.mason/whatsapp-auth
    ```
 
 4. **Enable Logging**
    ```bash
    # Configure log monitoring
-   tail -f ~/.nanobot/logs/nanobot.log
+   tail -f ~/.mason/logs/mason.log
    ```
 
 5. **Use Rate Limiting**
@@ -187,7 +187,7 @@ For production use:
 6. **Regular Updates**
    ```bash
    # Check for updates weekly
-   pip install --upgrade nanobot-ai
+   pip install --upgrade mason
    ```
 
 ### 8. Development vs Production
@@ -209,7 +209,7 @@ For production use:
 
 - **Logs may contain sensitive information** - secure log files appropriately
 - **LLM providers see your prompts** - review their privacy policies
-- **Chat history is stored locally** - protect the `~/.nanobot` directory
+- **Chat history is stored locally** - protect the `~/.mason` directory
 - **API keys are in plain text** - use OS keyring for production
 
 ### 10. Incident Response
@@ -219,7 +219,7 @@ If you suspect a security breach:
 1. **Immediately revoke compromised API keys**
 2. **Review logs for unauthorized access**
    ```bash
-   grep "Access denied" ~/.nanobot/logs/nanobot.log
+   grep "Access denied" ~/.mason/logs/mason.log
    ```
 3. **Check for unexpected file modifications**
 4. **Rotate all credentials**
@@ -261,7 +261,7 @@ If you suspect a security breach:
 
 ## Security Checklist
 
-Before deploying nanobot:
+Before deploying mason:
 
 - [ ] API keys stored securely (not in code)
 - [ ] Config file permissions set to 0600

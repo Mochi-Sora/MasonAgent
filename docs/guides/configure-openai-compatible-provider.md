@@ -1,19 +1,19 @@
-# How to Configure an OpenAI-Compatible Provider in nanobot
+# How to Configure an OpenAI-Compatible Provider in mason
 
-nanobot can call OpenAI-compatible model providers by configuring an `apiBase`,
+mason can call OpenAI-compatible model providers by configuring an `apiBase`,
 optional `apiKey`, and a model preset that references that provider name.
 
 ## What you will build
 
 - a custom provider entry
 - a model preset pointing at that provider
-- one successful `nanobot agent` run
+- one successful `mason agent` run
 
 ## When to use this
 
 Use this for local or hosted services that expose OpenAI-compatible endpoints,
 including internal gateways, local model servers, and provider proxies that are
-not already named in nanobot.
+not already named in mason.
 
 ## Install
 
@@ -21,7 +21,7 @@ not already named in nanobot.
 ./scripts/install.sh  # from a checkout; runs the setup wizard
 ```
 
-Verify the endpoint responds before debugging nanobot:
+Verify the endpoint responds before debugging mason:
 
 ```bash
 curl -sS https://api.example.com/v1/models
@@ -29,7 +29,7 @@ curl -sS https://api.example.com/v1/models
 
 ## Minimal working example
 
-Merge this into `~/.nanobot/config.json`:
+Merge this into `~/.mason/config.json`:
 
 ```json
 {
@@ -59,7 +59,7 @@ Merge this into `~/.nanobot/config.json`:
 Then run:
 
 ```bash
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 ## Production notes
@@ -74,17 +74,17 @@ nanobot agent -m "Hello!"
 
 - Keep provider keys in environment variables.
 - Treat internal model gateways as sensitive network services.
-- Do not point nanobot at untrusted proxy endpoints for private workspaces.
+- Do not point mason at untrusted proxy endpoints for private workspaces.
 
 ## Troubleshooting
 
-- If `curl /models` fails, fix the provider endpoint before changing nanobot.
-- If nanobot says the model is unknown, check the model ID expected by the
+- If `curl /models` fails, fix the provider endpoint before changing mason.
+- If mason says the model is unknown, check the model ID expected by the
   provider.
 - If auth fails, confirm whether the provider wants Bearer auth and whether the
-  key is present in the environment that starts nanobot.
+  key is present in the environment that starts mason.
 
-## Related nanobot docs
+## Related mason docs
 
 - [Provider Cookbook: Custom OpenAI-Compatible Provider](../provider-cookbook.md#recipe-custom-openai-compatible-provider)
 - [Providers: Custom OpenAI-Compatible Endpoint](../providers.md#custom-openai-compatible-endpoint)

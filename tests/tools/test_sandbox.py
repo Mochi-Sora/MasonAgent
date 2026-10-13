@@ -1,11 +1,11 @@
-"""Tests for nanobot.agent.tools.sandbox."""
+"""Tests for mason.agent.tools.sandbox."""
 
 import shlex
 from pathlib import Path
 
 import pytest
 
-from nanobot.agent.tools.sandbox import _sbpl_quote, _seatbelt_is_within, wrap_command
+from mason.agent.tools.sandbox import _sbpl_quote, _seatbelt_is_within, wrap_command
 
 
 def _parse(cmd: str) -> list[str]:
@@ -140,7 +140,7 @@ class TestBwrapBackend:
         fake_media = tmp_path / "media"
         fake_media.mkdir()
         monkeypatch.setattr(
-            "nanobot.agent.tools.sandbox.get_media_dir",
+            "mason.agent.tools.sandbox.get_media_dir",
             lambda: fake_media,
         )
         ws = str(tmp_path / "project")
@@ -344,7 +344,7 @@ class TestSeatbeltBackend:
         fake_media = (tmp_path / "media").resolve()
         fake_media.mkdir()
         monkeypatch.setattr(
-            "nanobot.agent.tools.sandbox.get_media_dir",
+            "mason.agent.tools.sandbox.get_media_dir",
             lambda: fake_media,
         )
         ws = (tmp_path / "project").resolve()
@@ -396,7 +396,7 @@ class TestSeatbeltBackend:
         ws = (tmp_path / "workspace").resolve()
         ro = ws / 'tree with "quotes' / "branch" / "readonly"
         media = ro if source == "media" else tmp_path / "media"
-        monkeypatch.setattr("nanobot.agent.tools.sandbox.get_media_dir", lambda: media)
+        monkeypatch.setattr("mason.agent.tools.sandbox.get_media_dir", lambda: media)
         profile = self._profile(wrap_command(
             "seatbelt", "ls", str(ws), str(ws),
             sandbox_ro_binds=[str(ro)] if source == "bind" else [],
@@ -413,7 +413,7 @@ class TestSeatbeltBackend:
         ws = (tmp_path / "workspace").resolve()
         ro = ws / "tree" / "readonly"
         rw = {"root": ro, "parent": ro.parent, "child": ro / "cache"}[override]
-        monkeypatch.setattr("nanobot.agent.tools.sandbox.get_media_dir", lambda: ro)
+        monkeypatch.setattr("mason.agent.tools.sandbox.get_media_dir", lambda: ro)
         profile = self._profile(wrap_command(
             "seatbelt", "ls", str(ws), str(ws),
             sandbox_ro_binds=[str(ro)], sandbox_rw_binds=[str(rw)],

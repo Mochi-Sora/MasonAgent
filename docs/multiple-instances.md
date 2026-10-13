@@ -1,6 +1,6 @@
 # Multiple Instances
 
-Run multiple nanobot instances simultaneously with separate configs and runtime data. Use `--config` as the main entrypoint. Optionally pass `--workspace` during `onboard` when you want to initialize or update the saved workspace for a specific instance.
+Run multiple mason instances simultaneously with separate configs and runtime data. Use `--config` as the main entrypoint. Optionally pass `--workspace` during `onboard` when you want to initialize or update the saved workspace for a specific instance.
 
 ## Quick Start
 
@@ -10,54 +10,54 @@ If you want each instance to have its own dedicated workspace from the start, pa
 
 ```bash
 # Create separate instance configs and workspaces
-nanobot onboard --config ~/.nanobot-telegram/config.json --workspace ~/.nanobot-telegram/workspace
-nanobot onboard --config ~/.nanobot-discord/config.json --workspace ~/.nanobot-discord/workspace
-nanobot onboard --config ~/.nanobot-feishu/config.json --workspace ~/.nanobot-feishu/workspace
+mason onboard --config ~/.mason-telegram/config.json --workspace ~/.mason-telegram/workspace
+mason onboard --config ~/.mason-discord/config.json --workspace ~/.mason-discord/workspace
+mason onboard --config ~/.mason-feishu/config.json --workspace ~/.mason-feishu/workspace
 ```
 
 **Configure each instance:**
 
-Edit `~/.nanobot-telegram/config.json`, `~/.nanobot-discord/config.json`, etc. with different channel settings. The workspace you passed during `onboard` is saved into each config as that instance's default workspace.
+Edit `~/.mason-telegram/config.json`, `~/.mason-discord/config.json`, etc. with different channel settings. The workspace you passed during `onboard` is saved into each config as that instance's default workspace.
 
 **Run instances:**
 
 ```bash
 # Check one instance before starting it
-nanobot status --config ~/.nanobot-telegram/config.json
+mason status --config ~/.mason-telegram/config.json
 
 # Instance A - Telegram bot
-nanobot gateway --config ~/.nanobot-telegram/config.json
+mason gateway --config ~/.mason-telegram/config.json
 
 # Instance B - Discord bot
-nanobot gateway --config ~/.nanobot-discord/config.json
+mason gateway --config ~/.mason-discord/config.json
 
 # Instance C - Feishu bot with custom port
-nanobot gateway --config ~/.nanobot-feishu/config.json --port 18792
+mason gateway --config ~/.mason-feishu/config.json --port 18792
 ```
 
 ## Path Resolution
 
-When using `--config`, nanobot derives its runtime data directory from the config file location. The workspace still comes from `agents.defaults.workspace` unless you override it with `--workspace`.
+When using `--config`, mason derives its runtime data directory from the config file location. The workspace still comes from `agents.defaults.workspace` unless you override it with `--workspace`.
 
 To open a CLI session against one of these instances locally:
 
 ```bash
-nanobot agent -c ~/.nanobot-telegram/config.json -m "Hello from Telegram instance"
-nanobot agent -c ~/.nanobot-discord/config.json -m "Hello from Discord instance"
+mason agent -c ~/.mason-telegram/config.json -m "Hello from Telegram instance"
+mason agent -c ~/.mason-discord/config.json -m "Hello from Discord instance"
 
 # Optional one-off workspace override
-nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test
+mason agent -c ~/.mason-telegram/config.json -w /tmp/mason-telegram-test
 ```
 
-> Interactive `nanobot agent` commands with the same `--config` and explicit `--workspace` selectors share one gateway instance. Different selectors produce isolated runtime state and processes. The one-shot agent path remains a direct local execution.
+> Interactive `mason agent` commands with the same `--config` and explicit `--workspace` selectors share one gateway instance. Different selectors produce isolated runtime state and processes. The one-shot agent path remains a direct local execution.
 
 | Component | Resolved From | Example |
 |-----------|---------------|---------|
-| **Config** | `--config` path | `~/.nanobot-A/config.json` |
-| **Workspace** | `--workspace` or config | `~/.nanobot-A/workspace/` |
-| **Sessions** | config directory + workspace ID | `~/.nanobot-A/sessions/<workspace-id>/` |
-| **Cron Jobs** | workspace directory | `~/.nanobot-A/workspace/cron/` |
-| **Media / runtime state** | config directory | `~/.nanobot-A/media/` |
+| **Config** | `--config` path | `~/.mason-A/config.json` |
+| **Workspace** | `--workspace` or config | `~/.mason-A/workspace/` |
+| **Sessions** | config directory + workspace ID | `~/.mason-A/sessions/<workspace-id>/` |
+| **Cron Jobs** | workspace directory | `~/.mason-A/workspace/cron/` |
+| **Media / runtime state** | config directory | `~/.mason-A/media/` |
 
 ## How It Works
 
@@ -77,7 +77,7 @@ Example config fragment:
 {
   "agents": {
     "defaults": {
-      "workspace": "~/.nanobot-telegram/workspace"
+      "workspace": "~/.mason-telegram/workspace"
     }
   },
   "channels": {
@@ -98,9 +98,9 @@ The copied base config can keep using the same `modelPresets` and `agents.defaul
 Start separate instances:
 
 ```bash
-nanobot status --config ~/.nanobot-telegram/config.json
-nanobot gateway --config ~/.nanobot-telegram/config.json
-nanobot gateway --config ~/.nanobot-discord/config.json
+mason status --config ~/.mason-telegram/config.json
+mason gateway --config ~/.mason-telegram/config.json
+mason gateway --config ~/.mason-discord/config.json
 ```
 
 Each gateway instance also exposes a lightweight HTTP health endpoint on `gateway.host:gateway.port`. By default, the gateway binds to `127.0.0.1`, so the endpoint stays local unless you explicitly set `gateway.host` to a public or LAN-facing address.
@@ -117,7 +117,7 @@ Other paths return `404`.
 Override workspace for one-off runs when needed:
 
 ```bash
-nanobot gateway --config ~/.nanobot-telegram/config.json --workspace /tmp/nanobot-telegram-test
+mason gateway --config ~/.mason-telegram/config.json --workspace /tmp/mason-telegram-test
 ```
 
 ## Common Use Cases

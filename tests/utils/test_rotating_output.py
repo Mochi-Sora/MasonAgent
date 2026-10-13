@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from nanobot.utils.rotating_output import (
+from mason.utils.rotating_output import (
     BACKGROUND_LOG_BACKUP_COUNT_ENV,
     BACKGROUND_LOG_MAX_BYTES_ENV,
     BACKGROUND_LOG_PATH_ENV,
@@ -110,7 +110,7 @@ def test_background_output_environment_redirects_stdout_and_stderr(tmp_path: Pat
             sys.executable,
             "-c",
             (
-                "from nanobot.utils.rotating_output import "
+                "from mason.utils.rotating_output import "
                 "configure_background_output_from_env; "
                 "configure_background_output_from_env(); "
                 "print('stdout line'); "

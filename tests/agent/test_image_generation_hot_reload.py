@@ -7,16 +7,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from nanobot.agent import context as agent_context
-from nanobot.agent.tools.image_generation import (
+from mason.agent import context as agent_context
+from mason.agent.tools.image_generation import (
     ImageGenerationTool,
     reload_image_generation_tool,
     request_image_generation_reload,
 )
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.bus.queue import MessageBus
-from nanobot.config.loader import load_config, save_config
-from nanobot.config.schema import ToolsConfig
+from mason.agent.tools.registry import ToolRegistry
+from mason.bus.queue import MessageBus
+from mason.config.loader import load_config, save_config
+from mason.config.schema import ToolsConfig
 
 
 def _runtime_state(tmp_path):
@@ -33,7 +33,7 @@ async def test_image_generation_reload_replaces_and_removes_live_tool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config_path = tmp_path / "config.json"
-    monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
+    monkeypatch.setattr("mason.config.loader._current_config_path", config_path)
     config = load_config()
     config.providers.openrouter.api_key = "first-key"
     config.tools.image_generation.enabled = True
@@ -80,7 +80,7 @@ async def test_image_generation_reload_reaches_agent_runtime_control(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config_path = tmp_path / "config.json"
-    monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
+    monkeypatch.setattr("mason.config.loader._current_config_path", config_path)
     config = load_config()
     config.providers.openrouter.api_key = "image-key"
     config.tools.image_generation.enabled = True

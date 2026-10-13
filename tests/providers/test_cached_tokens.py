@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nanobot.providers.openai_compat_provider import OpenAICompatProvider
+from mason.providers.openai_compat_provider import OpenAICompatProvider
 
 
 class FakeUsage:
@@ -255,7 +255,7 @@ def test_extract_usage_priority_nested_over_top_level_dict():
 
 def test_anthropic_adds_native_cache_fields_to_logical_input():
     """Anthropic excludes cache reads/writes from its native input_tokens."""
-    from nanobot.providers.anthropic_provider import AnthropicProvider
+    from mason.providers.anthropic_provider import AnthropicProvider
 
     usage_obj = FakeUsage(
         input_tokens=800,
@@ -281,7 +281,7 @@ def test_anthropic_adds_native_cache_fields_to_logical_input():
 
 def test_anthropic_no_cache_fields():
     """Anthropic response without cache fields preserves unreported counts."""
-    from nanobot.providers.anthropic_provider import AnthropicProvider
+    from mason.providers.anthropic_provider import AnthropicProvider
 
     usage_obj = FakeUsage(input_tokens=800, output_tokens=200)
     content_block = FakeUsage(type="text", text="hello")

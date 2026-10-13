@@ -17,9 +17,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent.session_helpers import run_session
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.queue import MessageBus
-from nanobot.session.recovery import RUNTIME_CHECKPOINT_KEY
+from mason.agent.loop import AgentLoop
+from mason.bus.queue import MessageBus
+from mason.session.recovery import RUNTIME_CHECKPOINT_KEY
 
 
 def _make_provider():
@@ -36,9 +36,9 @@ def _make_loop(tmp_path: Path) -> AgentLoop:
     """Create a real AgentLoop with mocked provider — avoids patching __init__."""
     bus = MessageBus()
     provider = _make_provider()
-    with patch("nanobot.agent.loop.ContextBuilder"), \
-         patch("nanobot.agent.loop.SessionManager"), \
-         patch("nanobot.agent.loop.SubagentManager") as mock_subagent_manager:
+    with patch("mason.agent.loop.ContextBuilder"), \
+         patch("mason.agent.loop.SessionManager"), \
+         patch("mason.agent.loop.SubagentManager") as mock_subagent_manager:
         mock_subagent_manager.return_value.cancel_by_session = AsyncMock(return_value=0)
         return AgentLoop(bus=bus, provider=provider, workspace=tmp_path)
 
@@ -50,8 +50,8 @@ async def test_dispatch_cancellation_restores_checkpoint():
     unwinds, so the next turn can see the partial work.
 
     """
-    from nanobot.bus.events import InboundMessage
-    from nanobot.bus.queue import MessageBus
+    from mason.bus.events import InboundMessage
+    from mason.bus.queue import MessageBus
 
     bus = MessageBus()
     provider = MagicMock()
@@ -59,9 +59,9 @@ async def test_dispatch_cancellation_restores_checkpoint():
     workspace = MagicMock()
     workspace.__truediv__ = MagicMock(return_value=MagicMock())
 
-    with patch("nanobot.agent.loop.ContextBuilder"), \
-         patch("nanobot.agent.loop.SessionManager"), \
-         patch("nanobot.agent.loop.SubagentManager") as mock_subagent_manager:
+    with patch("mason.agent.loop.ContextBuilder"), \
+         patch("mason.agent.loop.SessionManager"), \
+         patch("mason.agent.loop.SubagentManager") as mock_subagent_manager:
         mock_subagent_manager.return_value.cancel_by_session = AsyncMock(return_value=0)
         loop = AgentLoop(bus=bus, provider=provider, workspace=workspace)
 
@@ -140,7 +140,7 @@ async def test_dispatch_cancellation_keeps_checkpoint_for_gateway_shutdown(tmp_p
 
     loop._process_message = _cancel  # type: ignore[method-assign]
 
-    from nanobot.bus.events import InboundMessage
+    from mason.bus.events import InboundMessage
 
     with pytest.raises(asyncio.CancelledError):
         await run_session(loop,

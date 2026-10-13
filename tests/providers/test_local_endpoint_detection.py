@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.providers.openai_compat_provider import (
+from mason.providers.openai_compat_provider import (
     OpenAICompatProvider,
     _is_local_endpoint,
 )

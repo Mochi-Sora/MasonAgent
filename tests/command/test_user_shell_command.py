@@ -4,12 +4,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.context import current_request_context
-from nanobot.bus.events import INBOUND_META_USER_SHELL, InboundMessage, OutboundMessage
-from nanobot.command.builtin import cmd_user_shell
-from nanobot.command.router import CommandContext
-from nanobot.session.manager import Session, SessionPolicy
+from mason.agent.loop import AgentLoop
+from mason.agent.tools.context import current_request_context
+from mason.bus.events import INBOUND_META_USER_SHELL, InboundMessage, OutboundMessage
+from mason.command.builtin import cmd_user_shell
+from mason.command.router import CommandContext
+from mason.session.manager import Session, SessionPolicy
 
 
 def _context(loop: MagicMock, *, trusted: bool, command: str = "pwd") -> CommandContext:

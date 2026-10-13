@@ -1,14 +1,14 @@
-# How to Run a Self-Hosted AI Agent with nanobot
+# How to Run a Self-Hosted AI Agent with mason
 
-This guide sets up nanobot as a self-hosted AI agent runtime on your own
+This guide sets up mason as a self-hosted AI agent runtime on your own
 machine or server. The result is a gateway process that can serve
 chat apps, automations, and API integrations.
 
 ## What you will build
 
-- a nanobot config and workspace under your control
+- a mason config and workspace under your control
 - a model provider connected through `config.json`
-- a long-running `nanobot gateway`
+- a long-running `mason gateway`
 - optional chat app and API access
 
 ## When to use this
@@ -21,7 +21,7 @@ the agent must keep running after one terminal command finishes.
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 Complete the CLI check before deploying the gateway. A deployment problem is
@@ -32,10 +32,10 @@ much easier to debug after the provider and model are known to work.
 For chat apps, automations, and trigger delivery, start the gateway:
 
 ```bash
-nanobot gateway
+mason gateway
 ```
 
-Or connect a channel in `~/.nanobot/config.json`, then keep the same gateway
+Or connect a channel in `~/.mason/config.json`, then keep the same gateway
 process running for messages.
 
 ## Production notes
@@ -60,13 +60,13 @@ process running for messages.
 
 ## Troubleshooting
 
-- Run `nanobot status` with the same `--config` and `--workspace` flags used by
+- Run `mason status` with the same `--config` and `--workspace` flags used by
   the service.
-- Run `nanobot gateway --verbose` while debugging channel startup.
+- Run `mason gateway --verbose` while debugging channel startup.
 - Check port conflicts if the gateway health endpoint or API endpoint fails to
   bind.
 
-## Related nanobot docs
+## Related mason docs
 
 - [Deployment](../deployment.md)
 - [Multiple Instances](../multiple-instances.md)

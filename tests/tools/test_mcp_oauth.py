@@ -11,7 +11,7 @@ import pytest
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull, OAuthMetadata, OAuthToken
 
-from nanobot.agent.tools.mcp_oauth import (
+from mason.agent.tools.mcp_oauth import (
     MCPAuthorizationRequiredError,
     MCPOAuthHandlers,
     MCPOAuthStorage,
@@ -20,11 +20,11 @@ from nanobot.agent.tools.mcp_oauth import (
     delete_mcp_oauth_credentials,
     mcp_oauth_has_credentials,
 )
-from nanobot.config.schema import MCPServerConfig
+from mason.config.schema import MCPServerConfig
 
 
 def _use_data_dir(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("nanobot.agent.tools.mcp_oauth.get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("mason.agent.tools.mcp_oauth.get_data_dir", lambda: tmp_path)
 
 
 def _oauth_metadata() -> OAuthMetadata:
@@ -616,7 +616,7 @@ async def test_unrecoverable_refresh_error_requires_authorization(
     _use_data_dir(tmp_path, monkeypatch)
     caplog.set_level("INFO", logger="mcp.client.auth.oauth2")
     log = MagicMock()
-    monkeypatch.setattr("nanobot.agent.tools.mcp_oauth.logger", log)
+    monkeypatch.setattr("mason.agent.tools.mcp_oauth.logger", log)
     server_url = "https://mcp.example.com/mcp"
     storage = MCPOAuthStorage("linear", server_url)
     await storage.set_oauth_metadata(_oauth_metadata())
@@ -850,7 +850,7 @@ async def test_official_mcp_sdk_completes_discovery_registration_and_token_excha
                 "/webui/public/brand/nanobot_apple_touch.png"
             )
             return httpx.Response(201, json={
-                "client_id": "nanobot-client",
+                "client_id": "mason-client",
                 "redirect_uris": ["https://agent.example/auth/mcp/callback"],
                 "token_endpoint_auth_method": "none",
             })

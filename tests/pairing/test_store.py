@@ -2,13 +2,13 @@ import json
 
 import pytest
 
-from nanobot.pairing import __all__ as pairing_all
-from nanobot.pairing import store
+from mason.pairing import __all__ as pairing_all
+from mason.pairing import store
 
 
 def test_all_exports_are_importable():
-    """Every name in __all__ must actually be importable from nanobot.pairing."""
-    import nanobot.pairing as pkg
+    """Every name in __all__ must actually be importable from mason.pairing."""
+    import mason.pairing as pkg
 
     for name in pairing_all:
         assert hasattr(pkg, name), f"{name} is in __all__ but not exported"
@@ -63,7 +63,7 @@ class TestFormatPairingReply:
 
         assert "ABCD-EFGH" in reply
         assert "/pairing approve ABCD-EFGH" in reply
-        assert "private nanobot" in reply
+        assert "private mason" in reply
         assert "approved users" not in reply
 
 

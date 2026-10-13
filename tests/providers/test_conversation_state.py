@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.providers.base import (
+from mason.providers.base import (
     LLMProvider,
     LLMResponse,
     ProviderCallContext,
     ProviderConversationState,
     ToolCallRequest,
 )
-from nanobot.providers.conversation_state import (
+from mason.providers.conversation_state import (
     ProviderConversationStateController,
     allows_conversation_message_merge,
 )
@@ -174,7 +174,7 @@ def test_controller_estimates_active_state_plus_pending_delta(monkeypatch) -> No
         return 100, "test-counter"
 
     monkeypatch.setattr(
-        "nanobot.providers.conversation_state.estimate_prompt_tokens_chain",
+        "mason.providers.conversation_state.estimate_prompt_tokens_chain",
         estimate,
     )
 

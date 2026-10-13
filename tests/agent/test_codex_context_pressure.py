@@ -7,19 +7,19 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from nanobot.agent.context_governance import (
+from mason.agent.context_governance import (
     ContextCompactionState,
     ContextGovernanceConfig,
     ContextGovernor,
     ModelRequestState,
 )
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.config.schema import ModelPresetConfig
-from nanobot.providers.base import LLMResponse, LLMUsage, ProviderCallContext
-from nanobot.providers.conversation_state import ProviderConversationStateController
-from nanobot.providers.fallback_provider import FallbackProvider
-from nanobot.providers.openai_codex_provider import OpenAICodexProvider, _CodexHTTPError
-from nanobot.providers.openai_responses import build_responses_state
+from mason.agent.tools.registry import ToolRegistry
+from mason.config.schema import ModelPresetConfig
+from mason.providers.base import LLMResponse, LLMUsage, ProviderCallContext
+from mason.providers.conversation_state import ProviderConversationStateController
+from mason.providers.fallback_provider import FallbackProvider
+from mason.providers.openai_codex_provider import OpenAICodexProvider, _CodexHTTPError
+from mason.providers.openai_responses import build_responses_state
 
 
 def _request_state(provider, *, prior_tokens=180_000, repetitions=15_000):
@@ -67,7 +67,7 @@ def transport(monkeypatch):
     bodies = []
     behavior = {"errors": [], "compacted_content": "compacted state"}
     monkeypatch.setattr(
-        "nanobot.providers.openai_codex_provider.get_codex_token",
+        "mason.providers.openai_codex_provider.get_codex_token",
         lambda **_kwargs: SimpleNamespace(account_id="acct", access="token"),
     )
 
@@ -94,7 +94,7 @@ def transport(monkeypatch):
             ),
         )
 
-    monkeypatch.setattr("nanobot.providers.openai_codex_provider._request_codex", request)
+    monkeypatch.setattr("mason.providers.openai_codex_provider._request_codex", request)
     return bodies, behavior
 
 

@@ -1,18 +1,18 @@
 #!/bin/sh
 set -eu
 
-# This installer installs a local nanobot checkout in editable mode, so the
+# This installer installs a local mason checkout in editable mode, so the
 # running command always reflects the source tree it was installed from.
-package="nanobot-ai"
+package="mason"
 # The public repository URL. It enables the piped installer
 # (curl -fsSL <url> | sh) without an explicit --git flag.
 default_git_url="https://github.com/Mochi-Sora/MasonAgent"
 dry_run="0"
-nanobot_runner=""
-nanobot_python=""
-nanobot_bin=""
+mason_runner=""
+mason_python=""
+mason_bin=""
 requested_repo=""
-requested_git="${NANOBOT_INSTALL_GIT:-}"
+requested_git="${MASON_INSTALL_GIT:-}"
 repo_root=""
 install_source=""
 
@@ -26,7 +26,7 @@ fail() {
 }
 
 install_failure_hint() {
-  printf '%s\n' "Error: could not install nanobot from $install_source." >&2
+  printf '%s\n' "Error: could not install mason from $install_source." >&2
   printf '%s\n' "If pip mentioned externally-managed-environment, use uv, pipx, or a virtual environment instead of system pip." >&2
   printf '%s\n' "If the managed venv has no pip (common on Debian/Ubuntu), install the venv package first:" >&2
   printf '  %s\n' "sudo apt install python3-venv" >&2
@@ -34,10 +34,10 @@ install_failure_hint() {
   printf '  %s\n' "curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
   printf '%s\n' "You can also run manually:" >&2
   printf '  %s\n' "uv tool install --force --upgrade --editable $repo_root" >&2
-  printf '  %s\n' "$python_bin -m venv ~/.nanobot/venv" >&2
-  printf '  %s\n' "~/.nanobot/venv/bin/python -m pip install --upgrade --editable $repo_root" >&2
+  printf '  %s\n' "$python_bin -m venv ~/.mason/venv" >&2
+  printf '  %s\n' "~/.mason/venv/bin/python -m pip install --upgrade --editable $repo_root" >&2
   printf '%s\n' "Then start setup with:" >&2
-  printf '  %s\n' "nanobot onboard --wizard" >&2
+  printf '  %s\n' "mason onboard --wizard" >&2
   exit 1
 }
 
@@ -45,23 +45,23 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [--dry-run] [--repo PATH] [--git URL]
 
-By default this installs the nanobot checkout that contains this script in
+By default this installs the mason checkout that contains this script in
 editable mode. Run it from a clone:
 
   ./scripts/install.sh
 
 Options:
   --repo PATH   Install a different local checkout in editable mode.
-  --git URL     Clone (or update) the repository into ~/.nanobot/src and
+  --git URL     Clone (or update) the repository into ~/.mason/src and
                 install from that clone. Required for piped installs.
 
 Use --dry-run to print what would happen without installing or starting setup.
 
 Environment:
-  NANOBOT_SKIP_WIZARD=1   Skip the setup wizard.
-  NANOBOT_VENV=/path      Use a different managed virtual environment.
-  NANOBOT_SRC_DIR=/path   Clone into a different directory for --git.
-  NANOBOT_INSTALL_GIT=URL Default repository for --git.
+  MASON_SKIP_WIZARD=1   Skip the setup wizard.
+  MASON_VENV=/path      Use a different managed virtual environment.
+  MASON_SRC_DIR=/path   Clone into a different directory for --git.
+  MASON_INSTALL_GIT=URL Default repository for --git.
   PYTHON=python3          Use a specific Python interpreter.
 EOF
 }
@@ -69,15 +69,15 @@ EOF
 is_checkout() {
   [ -n "$1" ] &&
     [ -f "$1/pyproject.toml" ] &&
-    [ -f "$1/nanobot/__init__.py" ] &&
-    grep -q '^name[[:space:]]*=[[:space:]]*"nanobot-ai"' "$1/pyproject.toml" 2>/dev/null
+    [ -f "$1/mason/__init__.py" ] &&
+    grep -q '^name[[:space:]]*=[[:space:]]*"mason"' "$1/pyproject.toml" 2>/dev/null
 }
 
 resolve_git_checkout() {
   git_url="$1"
-  [ -n "${HOME:-}" ] || [ -n "${NANOBOT_SRC_DIR:-}" ] ||
-    fail "Installing from a git URL needs HOME or NANOBOT_SRC_DIR to choose a clone directory"
-  src_dir="${NANOBOT_SRC_DIR:-$HOME/.nanobot/src}"
+  [ -n "${HOME:-}" ] || [ -n "${MASON_SRC_DIR:-}" ] ||
+    fail "Installing from a git URL needs HOME or MASON_SRC_DIR to choose a clone directory"
+  src_dir="${MASON_SRC_DIR:-$HOME/.mason/src}"
   if [ "$dry_run" = "1" ]; then
     info "Dry run: would clone or update $git_url in $src_dir."
   else
@@ -96,7 +96,7 @@ resolve_git_checkout() {
   repo_root="$src_dir"
   if [ "$dry_run" != "1" ] || [ -d "$repo_root" ]; then
     is_checkout "$repo_root" ||
-      fail "The repository at $repo_root does not look like a nanobot checkout."
+      fail "The repository at $repo_root does not look like a mason checkout."
   fi
 }
 
@@ -105,7 +105,7 @@ resolve_checkout() {
     [ -d "$requested_repo" ] || fail "--repo directory not found: $requested_repo"
     candidate=$(CDPATH= cd -- "$requested_repo" && pwd)
     is_checkout "$candidate" ||
-      fail "--repo $candidate is not a nanobot checkout (expected pyproject.toml with name = \"nanobot-ai\")"
+      fail "--repo $candidate is not a mason checkout (expected pyproject.toml with name = \"mason\")"
     repo_root="$candidate"
     return 0
   fi
@@ -132,7 +132,7 @@ resolve_checkout() {
     return 0
   fi
 
-  fail "No nanobot checkout found. Run this script from a clone (./scripts/install.sh), pass --repo PATH, or pass --git URL."
+  fail "No mason checkout found. Run this script from a clone (./scripts/install.sh), pass --repo PATH, or pass --git URL."
 }
 
 find_python() {
@@ -176,46 +176,46 @@ ensure_pip() {
   return 1
 }
 
-run_nanobot() {
-  case "$nanobot_runner" in
+run_mason() {
+  case "$mason_runner" in
     uv)
-      uv tool run --from "$package" nanobot "$@"
+      uv tool run --from "$package" mason "$@"
       ;;
     pipx)
-      pipx run --spec "$package" nanobot "$@"
+      pipx run --spec "$package" mason "$@"
       ;;
     direct)
-      "$nanobot_bin" "$@"
+      "$mason_bin" "$@"
       ;;
     python)
-      "$nanobot_python" -m nanobot "$@"
+      "$mason_python" -m mason "$@"
       ;;
     *)
-      fail "nanobot was installed, but no runner was configured"
+      fail "mason was installed, but no runner was configured"
       ;;
   esac
 }
 
-nanobot_try_command() {
-  case "$nanobot_runner" in
+mason_try_command() {
+  case "$mason_runner" in
     uv)
-      printf '%s\n' "uv tool run --from $package nanobot"
+      printf '%s\n' "uv tool run --from $package mason"
       ;;
     pipx)
-      printf '%s\n' "pipx run --spec $package nanobot"
+      printf '%s\n' "pipx run --spec $package mason"
       ;;
     direct)
-      printf '%s\n' "$nanobot_bin"
+      printf '%s\n' "$mason_bin"
       ;;
     python)
-      printf '%s\n' "$nanobot_python -m nanobot"
+      printf '%s\n' "$mason_python -m mason"
       ;;
   esac
 }
 
-is_fresh_nanobot_install() {
+is_fresh_mason_install() {
   [ -n "${HOME:-}" ] || return 1
-  [ ! -e "$HOME/.nanobot/config.json" ]
+  [ ! -e "$HOME/.mason/config.json" ]
 }
 
 has_browser_session() {
@@ -241,14 +241,14 @@ install_with_active_python() {
   info "Detected an active virtual environment. Installing $install_source into it..."
   ensure_pip "$python_bin" || return 1
   "$python_bin" -m pip install --upgrade --editable "$repo_root" || return 1
-  nanobot_runner="python"
-  nanobot_python="$python_bin"
+  mason_runner="python"
+  mason_python="$python_bin"
 }
 
 install_with_uv() {
   info "Installing $install_source with uv tool in editable mode..."
   uv tool install --python "$python_bin" --force --upgrade --editable "$repo_root" || return 1
-  nanobot_runner="uv"
+  mason_runner="uv"
 }
 
 install_with_pipx() {
@@ -256,41 +256,41 @@ install_with_pipx() {
   pipx install --python "$python_bin" --force --editable "$repo_root" || return 1
   pipx_bin_dir=$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || true)
   [ -n "$pipx_bin_dir" ] || pipx_bin_dir="$HOME/.local/bin"
-  if [ -x "$pipx_bin_dir/nanobot" ]; then
-    nanobot_runner="direct"
-    nanobot_bin="$pipx_bin_dir/nanobot"
+  if [ -x "$pipx_bin_dir/mason" ]; then
+    mason_runner="direct"
+    mason_bin="$pipx_bin_dir/mason"
   else
-    nanobot_runner="pipx"
+    mason_runner="pipx"
   fi
 }
 
 write_managed_wrapper() {
-  bin_dir="${NANOBOT_BIN_DIR:-$HOME/.local/bin}"
-  wrapper="$bin_dir/nanobot"
+  bin_dir="${MASON_BIN_DIR:-$HOME/.local/bin}"
+  wrapper="$bin_dir/mason"
   mkdir -p "$bin_dir" || return 0
 
-  if [ -e "$wrapper" ] && ! grep -q "Generated by nanobot installer" "$wrapper" 2>/dev/null; then
+  if [ -e "$wrapper" ] && ! grep -q "Generated by mason installer" "$wrapper" 2>/dev/null; then
     info "Not updating $wrapper because it already exists."
     return 0
   fi
 
   cat > "$wrapper" <<EOF
 #!/bin/sh
-# Generated by nanobot installer.
-exec "$nanobot_python" -m nanobot "\$@"
+# Generated by mason installer.
+exec "$mason_python" -m mason "\$@"
 EOF
   chmod +x "$wrapper" || return 0
 
-  if ! command -v nanobot >/dev/null 2>&1; then
-    info "Installed a nanobot launcher at $wrapper."
-    info "Add $bin_dir to PATH to run nanobot directly."
+  if ! command -v mason >/dev/null 2>&1; then
+    info "Installed a mason launcher at $wrapper."
+    info "Add $bin_dir to PATH to run mason directly."
   fi
 }
 
 install_with_managed_venv() {
   [ -n "${HOME:-}" ] || fail "HOME is not set; cannot create a managed virtual environment"
 
-  venv_dir="${NANOBOT_VENV:-$HOME/.nanobot/venv}"
+  venv_dir="${MASON_VENV:-$HOME/.mason/venv}"
   venv_python="$venv_dir/bin/python"
 
   if [ ! -x "$venv_python" ]; then
@@ -299,7 +299,7 @@ install_with_managed_venv() {
     "$python_bin" -m venv "$venv_dir" || return 1
   fi
 
-  "$venv_python" - <<'PY' >/dev/null 2>&1 || fail "The managed venv uses Python older than 3.11. Remove it or set NANOBOT_VENV to a new path."
+  "$venv_python" - <<'PY' >/dev/null 2>&1 || fail "The managed venv uses Python older than 3.11. Remove it or set MASON_VENV to a new path."
 import sys
 raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
 PY
@@ -308,8 +308,8 @@ PY
   ensure_pip "$venv_python" || return 1
   "$venv_python" -m pip install --upgrade --editable "$repo_root" || return 1
 
-  nanobot_runner="python"
-  nanobot_python="$venv_python"
+  mason_runner="python"
+  mason_python="$venv_python"
   write_managed_wrapper
 }
 
@@ -352,7 +352,7 @@ python_bin="${PYTHON:-}"
 
 if [ -n "$python_bin" ]; then
   command -v "$python_bin" >/dev/null 2>&1 || fail "PYTHON=$python_bin was not found"
-  "$python_bin" - <<'PY' >/dev/null 2>&1 || fail "nanobot requires Python 3.11 or newer"
+  "$python_bin" - <<'PY' >/dev/null 2>&1 || fail "mason requires Python 3.11 or newer"
 import sys
 raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
 PY
@@ -366,24 +366,24 @@ resolve_checkout
 install_source="the checkout at $repo_root"
 
 if [ "$dry_run" = "1" ]; then
-  info "Dry run: would install or upgrade nanobot from $install_source."
+  info "Dry run: would install or upgrade mason from $install_source."
   if python_is_virtual_env; then
     info "Dry run: active virtual environment detected; would run: $python_bin -m pip install --upgrade --editable $repo_root"
-    info "Dry run: would run nanobot as: $python_bin -m nanobot"
+    info "Dry run: would run mason as: $python_bin -m mason"
   elif command -v uv >/dev/null 2>&1; then
     info "Dry run: would run: uv tool install --python $python_bin --force --upgrade --editable $repo_root"
-    info "Dry run: would run nanobot as: uv tool run --from $package nanobot"
+    info "Dry run: would run mason as: uv tool run --from $package mason"
   elif command -v pipx >/dev/null 2>&1; then
     info "Dry run: would run: pipx install --python $python_bin --force --editable $repo_root"
-    info "Dry run: would run nanobot as: pipx run --spec $package nanobot"
+    info "Dry run: would run mason as: pipx run --spec $package mason"
   else
-    venv_dir="${NANOBOT_VENV:-$HOME/.nanobot/venv}"
+    venv_dir="${MASON_VENV:-$HOME/.mason/venv}"
     info "Dry run: would create or reuse a dedicated virtual environment: $venv_dir"
     info "Dry run: would run: $venv_dir/bin/python -m pip install --upgrade --editable $repo_root"
-    info "Dry run: would run nanobot as: $venv_dir/bin/python -m nanobot"
+    info "Dry run: would run mason as: $venv_dir/bin/python -m mason"
   fi
-  if [ "${NANOBOT_SKIP_WIZARD:-}" = "1" ]; then
-    info "Dry run: would skip automatic setup because NANOBOT_SKIP_WIZARD=1."
+  if [ "${MASON_SKIP_WIZARD:-}" = "1" ]; then
+    info "Dry run: would skip automatic setup because MASON_SKIP_WIZARD=1."
   else
     info "Dry run: would run the setup wizard."
   fi
@@ -418,24 +418,24 @@ else
   fi
 fi
 
-info "Installed nanobot:"
-run_nanobot --version
+info "Installed mason:"
+run_mason --version
 
-if [ "${NANOBOT_SKIP_WIZARD:-}" = "1" ]; then
-  info "Skipping automatic setup because NANOBOT_SKIP_WIZARD=1."
-  info "Run this later: $(nanobot_try_command) onboard"
+if [ "${MASON_SKIP_WIZARD:-}" = "1" ]; then
+  info "Skipping automatic setup because MASON_SKIP_WIZARD=1."
+  info "Run this later: $(mason_try_command) onboard"
   exit 0
 fi
 
 if [ -t 0 ]; then
   info "Starting setup wizard..."
-  run_nanobot onboard --wizard
+  run_mason onboard --wizard
 elif : 2>/dev/null < /dev/tty; then
   info "Starting setup wizard..."
-  run_nanobot onboard --wizard < /dev/tty
+  run_mason onboard --wizard < /dev/tty
 else
   info "Skipping setup wizard because no interactive terminal is available."
-  info "Run this later: $(nanobot_try_command) onboard --wizard"
+  info "Run this later: $(mason_try_command) onboard --wizard"
 fi
 
-info "Done. Try: $(nanobot_try_command) agent -m \"Hello!\""
+info "Done. Try: $(mason_try_command) agent -m \"Hello!\""

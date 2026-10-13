@@ -4,15 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from nanobot.agent.tools.context import RequestContext
-from nanobot.runtime_context import (
+from mason.agent.tools.context import RequestContext
+from mason.runtime_context import (
     RUNTIME_CONTEXT_HISTORY_META,
     RuntimeContextBlock,
     append_runtime_context,
     public_history_message,
     resolve_runtime_context,
 )
-from nanobot.sdk.types import snapshot_from_session
+from mason.sdk.types import snapshot_from_session
 
 
 @pytest.mark.asyncio

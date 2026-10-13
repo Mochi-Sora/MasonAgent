@@ -7,15 +7,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from agent.session_helpers import run_session
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.outbound_events import ContextCompactionEvent
-from nanobot.bus.queue import MessageBus
-from nanobot.bus.runtime_events import TurnCompleted
-from nanobot.command.builtin import cmd_stop
-from nanobot.command.router import CommandContext
-from nanobot.providers.base import GenerationSettings, LLMResponse, ProviderConversationState
-from nanobot.session.history_visibility import is_hidden_history_message
+from mason.agent.loop import AgentLoop
+from mason.bus.events import InboundMessage
+from mason.bus.outbound_events import ContextCompactionEvent
+from mason.bus.queue import MessageBus
+from mason.bus.runtime_events import TurnCompleted
+from mason.command.builtin import cmd_stop
+from mason.command.router import CommandContext
+from mason.providers.base import GenerationSettings, LLMResponse, ProviderConversationState
+from mason.session.history_visibility import is_hidden_history_message
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ async def loop(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("command", ["/compact", " /COMPACT@nanobot "])
+@pytest.mark.parametrize("command", ["/compact", " /COMPACT@mason "])
 async def test_compact_emits_one_lifecycle_and_keeps_the_session(loop, command) -> None:
     bus = loop.bus
     session = loop.sessions.get_or_create("cli:test")
@@ -189,7 +189,7 @@ async def test_empty_compact_finishes_silently_and_does_not_schedule_idle_archiv
 async def test_compact_during_active_turn_waits_for_the_session_lock(loop) -> None:
     key = "websocket:test"
     msg = InboundMessage(
-        channel="websocket", sender_id="user", chat_id="test", content="/COMPACT@nanobot",
+        channel="websocket", sender_id="user", chat_id="test", content="/COMPACT@mason",
     )
     lock = loop._get_session_lock(key)
     async with lock:

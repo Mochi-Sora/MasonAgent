@@ -6,15 +6,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from typer.testing import CliRunner
 
-from nanobot.bus.events import InboundMessage, OutboundMessage
-from nanobot.bus.outbound_events import (
+from mason.bus.events import InboundMessage, OutboundMessage
+from mason.bus.outbound_events import (
     StreamDeltaEvent,
     StreamedResponseEvent,
     StreamEndEvent,
     outbound_message_for_event,
 )
-from nanobot.cli.commands import app
-from nanobot.config.schema import Config
+from mason.cli.commands import app
+from mason.config.schema import Config
 
 runner = CliRunner()
 
@@ -100,28 +100,28 @@ def test_interactive_agent_routes_a_complete_user_turn(
         async def aclose(self) -> None:
             self.aclose_calls += 1
 
-    read_input = AsyncMock(side_effect=["hello nanobot", "exit"])
+    read_input = AsyncMock(side_effect=["hello mason", "exit"])
     print_response = MagicMock()
-    monkeypatch.setattr("nanobot.cli.agent._load_runtime_config", lambda *_args: config)
-    monkeypatch.setattr("nanobot.cli.agent.sync_workspace_templates", lambda *_args: None)
-    monkeypatch.setattr("nanobot.cli.agent.is_default_workspace", lambda *_args: False)
-    monkeypatch.setattr("nanobot.cli.agent._set_nanobot_logs", lambda *_args: None)
-    monkeypatch.setattr("nanobot.cli.agent._model_display", lambda *_args: ("test-model", ""))
-    monkeypatch.setattr("nanobot.cli.agent.consume_restart_notice_from_env", lambda: None)
-    monkeypatch.setattr("nanobot.cli.agent.AgentLoop", _AgentLoop)
-    monkeypatch.setattr("nanobot.cli.agent.StreamRenderer", _Renderer)
-    monkeypatch.setattr("nanobot.providers.factory.make_provider", lambda *_args: object())
+    monkeypatch.setattr("mason.cli.agent._load_runtime_config", lambda *_args: config)
+    monkeypatch.setattr("mason.cli.agent.sync_workspace_templates", lambda *_args: None)
+    monkeypatch.setattr("mason.cli.agent.is_default_workspace", lambda *_args: False)
+    monkeypatch.setattr("mason.cli.agent._set_mason_logs", lambda *_args: None)
+    monkeypatch.setattr("mason.cli.agent._model_display", lambda *_args: ("test-model", ""))
+    monkeypatch.setattr("mason.cli.agent.consume_restart_notice_from_env", lambda: None)
+    monkeypatch.setattr("mason.cli.agent.AgentLoop", _AgentLoop)
+    monkeypatch.setattr("mason.cli.agent.StreamRenderer", _Renderer)
+    monkeypatch.setattr("mason.providers.factory.make_provider", lambda *_args: object())
     monkeypatch.setattr(
-        "nanobot.providers.image_generation.image_gen_provider_configs",
+        "mason.providers.image_generation.image_gen_provider_configs",
         lambda *_args: [],
     )
-    monkeypatch.setattr("nanobot.cron.service.CronService", lambda *_args: object())
-    monkeypatch.setattr("nanobot.cli.agent.signal.signal", lambda *_args: None)
-    monkeypatch.setattr("nanobot.cli.terminal._init_prompt_session", lambda: None)
-    monkeypatch.setattr("nanobot.cli.terminal._flush_pending_tty_input", lambda: None)
-    monkeypatch.setattr("nanobot.cli.terminal._restore_terminal", lambda: None)
-    monkeypatch.setattr("nanobot.cli.terminal._read_interactive_input_async", read_input)
-    monkeypatch.setattr("nanobot.cli.terminal._print_agent_response", print_response)
+    monkeypatch.setattr("mason.cron.service.CronService", lambda *_args: object())
+    monkeypatch.setattr("mason.cli.agent.signal.signal", lambda *_args: None)
+    monkeypatch.setattr("mason.cli.terminal._init_prompt_session", lambda: None)
+    monkeypatch.setattr("mason.cli.terminal._flush_pending_tty_input", lambda: None)
+    monkeypatch.setattr("mason.cli.terminal._restore_terminal", lambda: None)
+    monkeypatch.setattr("mason.cli.terminal._read_interactive_input_async", read_input)
+    monkeypatch.setattr("mason.cli.terminal._print_agent_response", print_response)
 
     result = runner.invoke(app, ["agent", "--session", "cli:journey"])
 
@@ -131,7 +131,7 @@ def test_interactive_agent_routes_a_complete_user_turn(
     assert (inbound.channel, inbound.chat_id, inbound.content) == (
         "cli",
         "journey",
-        "hello nanobot",
+        "hello mason",
     )
     assert inbound.metadata == {"_wants_stream": True}
     loop = seen["loop"]

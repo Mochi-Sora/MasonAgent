@@ -14,15 +14,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nanobot.bus.outbound_events import (
+from mason.bus.outbound_events import (
     ContextCompactionEvent,
     ProgressEvent,
     outbound_message_for_event,
 )
-from nanobot.bus.queue import MessageBus
-from nanobot.channels.base import BaseChannel
-from nanobot.channels.manager import ChannelManager
-from nanobot.config.schema import Config
+from mason.bus.queue import MessageBus
+from mason.channels.base import BaseChannel
+from mason.channels.manager import ChannelManager
+from mason.config.schema import Config
 
 
 class _MockChannel(BaseChannel):

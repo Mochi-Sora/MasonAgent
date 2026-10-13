@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nanobot.agent.tools.context import ToolContext
-from nanobot.agent.tools.dates import DATES_FILENAME, SearchDatesTool
-from nanobot.agent.tools.loader import ToolLoader
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.config.schema import ToolsConfig
+from mason.agent.tools.context import ToolContext
+from mason.agent.tools.dates import DATES_FILENAME, SearchDatesTool
+from mason.agent.tools.loader import ToolLoader
+from mason.agent.tools.registry import ToolRegistry
+from mason.config.schema import ToolsConfig
 
 
 def _tool(tmp_path: Path) -> SearchDatesTool:

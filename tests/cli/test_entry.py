@@ -3,8 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from nanobot.cli import entry
-from nanobot.cli.entry import _agent_invocation_args
+from mason.cli import entry
+from mason.cli.entry import _agent_invocation_args
 
 
 def test_root_command_routes_to_agent_without_copying_agent_options() -> None:
@@ -31,15 +31,15 @@ def test_root_shell_completion_keeps_root_subcommands() -> None:
     env = os.environ.copy()
     env.update(
         {
-            "_NANOBOT_COMPLETE": "complete_bash",
-            "COMP_WORDS": "nanobot ",
+            "_MASON_COMPLETE": "complete_bash",
+            "COMP_WORDS": "mason ",
             "COMP_CWORD": "1",
         }
     )
     script = (
         "import sys; "
-        "from nanobot.cli.entry import main; "
-        "sys.argv = ['nanobot']; "
+        "from mason.cli.entry import main; "
+        "sys.argv = ['mason']; "
         "main()"
     )
 
@@ -59,7 +59,7 @@ def test_root_shell_completion_keeps_root_subcommands() -> None:
 
 def test_root_alias_dispatches_the_shared_agent_command(monkeypatch) -> None:
     calls: dict[str, object] = {}
-    monkeypatch.setattr(entry.sys, "argv", ["nanobot", "-m", "hello"])
+    monkeypatch.setattr(entry.sys, "argv", ["mason", "-m", "hello"])
     monkeypatch.setattr(
         entry,
         "set_cli_process_identity",
@@ -77,5 +77,5 @@ def test_root_alias_dispatches_the_shared_agent_command(monkeypatch) -> None:
     assert calls == {
         "identity": ["agent", "-m", "hello"],
         "args": ["-m", "hello"],
-        "prog_name": "nanobot",
+        "prog_name": "mason",
     }

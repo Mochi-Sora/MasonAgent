@@ -9,16 +9,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent.runner_helpers import make_run_spec
-from nanobot.config.schema import AgentDefaults
-from nanobot.providers.base import LLMResponse, LLMUsage, ToolCallRequest
+from mason.config.schema import AgentDefaults
+from mason.providers.base import LLMResponse, LLMUsage, ToolCallRequest
 
 _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
 
 @pytest.mark.parametrize("invalid_block", [42, ["nested"], {}, {"type": "text", "text": 42}])
 def test_unrecognized_result_list_is_not_partially_offloaded(tmp_path, invalid_block):
-    from nanobot.agent.context_governance import ContextGovernanceConfig, ContextGovernor
-    from nanobot.agent.tools.registry import ToolRegistry
+    from mason.agent.context_governance import ContextGovernanceConfig, ContextGovernor
+    from mason.agent.tools.registry import ToolRegistry
 
     result = [{"type": "text", "text": "x" * 20_000}, invalid_block]
     config = ContextGovernanceConfig(
@@ -30,9 +30,9 @@ def test_unrecognized_result_list_is_not_partially_offloaded(tmp_path, invalid_b
 
 
 async def test_runner_persists_large_tool_results_for_follow_up_calls(tmp_path):
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.agent.runner import AgentRunner
-    from nanobot.session.manager import Session
+    from mason.agent.loop import AgentLoop
+    from mason.agent.runner import AgentRunner
+    from mason.session.manager import Session
 
     provider = MagicMock()
     captured_second_call: list[dict] = []
@@ -71,13 +71,13 @@ async def test_runner_persists_large_tool_results_for_follow_up_calls(tmp_path):
     assert "[tool output persisted]" in tool_message["content"]
     assert "Result truncated. Read the saved file" in tool_message["content"]
     assert "tool-results" in tool_message["content"]
-    persisted_path = tmp_path / ".nanobot" / "tool-results" / "test_runner" / "call_big.txt"
+    persisted_path = tmp_path / ".mason" / "tool-results" / "test_runner" / "call_big.txt"
     assert persisted_path.read_text(encoding="utf-8") == "x" * 20_000
 
-    from nanobot.agent.tools.filesystem import ReadFileTool
+    from mason.agent.tools.filesystem import ReadFileTool
 
     readback = await ReadFileTool(workspace=tmp_path).execute(
-        path=".nanobot/tool-results/test_runner/call_big.txt"
+        path=".mason/tool-results/test_runner/call_big.txt"
     )
     assert "x" * 20_000 in readback
 
@@ -116,9 +116,9 @@ async def test_runner_persists_large_tool_results_for_follow_up_calls(tmp_path):
 
 
 def test_persist_tool_result_prunes_old_session_buckets(tmp_path):
-    from nanobot.utils.helpers import maybe_persist_tool_result
+    from mason.utils.helpers import maybe_persist_tool_result
 
-    root = tmp_path / ".nanobot" / "tool-results"
+    root = tmp_path / ".mason" / "tool-results"
     old_bucket = root / "old_session"
     recent_bucket = root / "recent_session"
     old_bucket.mkdir(parents=True)
@@ -139,16 +139,16 @@ def test_persist_tool_result_prunes_old_session_buckets(tmp_path):
     )
 
     assert "truncated" in persisted
-    assert ".nanobot" in persisted
+    assert ".mason" in persisted
     assert not old_bucket.exists()
     assert recent_bucket.exists()
     assert (root / "current_session" / "call_big.txt").exists()
 
 
 def test_persist_tool_result_leaves_no_temp_files(tmp_path):
-    from nanobot.utils.helpers import maybe_persist_tool_result
+    from mason.utils.helpers import maybe_persist_tool_result
 
-    root = tmp_path / ".nanobot" / "tool-results"
+    root = tmp_path / ".mason" / "tool-results"
     maybe_persist_tool_result(
         tmp_path,
         "current:session",
@@ -162,16 +162,16 @@ def test_persist_tool_result_leaves_no_temp_files(tmp_path):
 
 
 def test_persist_tool_result_logs_cleanup_failures(monkeypatch, tmp_path):
-    from nanobot.utils.helpers import maybe_persist_tool_result
+    from mason.utils.helpers import maybe_persist_tool_result
 
     warnings: list[str] = []
 
     monkeypatch.setattr(
-        "nanobot.utils.helpers._cleanup_tool_result_buckets",
+        "mason.utils.helpers._cleanup_tool_result_buckets",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("busy")),
     )
     monkeypatch.setattr(
-        "nanobot.utils.helpers.logger.exception",
+        "mason.utils.helpers.logger.exception",
         lambda message, *args: warnings.append(message.format(*args)),
     )
 
@@ -184,13 +184,13 @@ def test_persist_tool_result_logs_cleanup_failures(monkeypatch, tmp_path):
     )
 
     assert "truncated" in persisted
-    assert ".nanobot" in persisted
+    assert ".mason" in persisted
     assert warnings and "Failed to clean stale tool result buckets" in warnings[0]
 
 
 async def test_read_file_result_is_not_offloaded(tmp_path):
     """read_file must not trigger generic offloading (prevents persist->read->persist loops)."""
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock()
     captured_second_call: list[dict] = []
@@ -230,15 +230,15 @@ async def test_read_file_result_is_not_offloaded(tmp_path):
     # read_file manages its own size; generic truncation must NOT apply
     assert len(tool_message["content"]) == 20_000
     # no file should have been written for this read_file call
-    offload_dir = tmp_path / ".nanobot" / "tool-results"
+    offload_dir = tmp_path / ".mason" / "tool-results"
     assert not any(offload_dir.rglob("call_rf.txt")) if offload_dir.exists() else True
 
 
 async def test_processed_tool_result_is_stable_for_persistence_and_replay(tmp_path):
     """The content sent after a tool call must survive the session round trip unchanged."""
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.agent.runner import AgentRunner
-    from nanobot.session.manager import Session
+    from mason.agent.loop import AgentLoop
+    from mason.agent.runner import AgentRunner
+    from mason.session.manager import Session
 
     raw_result = "start-" + ("x" * 20_000) + "-end-marker"
     first_provider = MagicMock()
@@ -309,7 +309,7 @@ async def test_processed_tool_result_is_stable_for_persistence_and_replay(tmp_pa
 
 
 async def test_runner_keeps_going_when_tool_result_persistence_fails():
-    from nanobot.agent.runner import AgentRunner
+    from mason.agent.runner import AgentRunner
 
     provider = MagicMock()
     captured_second_call: list[dict] = []
@@ -333,7 +333,7 @@ async def test_runner_keeps_going_when_tool_result_persistence_fails():
 
     runner = AgentRunner()
     with patch(
-        "nanobot.agent.context_governance.maybe_persist_tool_result",
+        "mason.agent.context_governance.maybe_persist_tool_result",
         side_effect=RuntimeError("disk full"),
     ):
         result = await runner.run(make_run_spec(provider,
@@ -350,11 +350,11 @@ async def test_runner_keeps_going_when_tool_result_persistence_fails():
 
 
 async def test_mixed_tool_text_survives_model_save_replay(tmp_path):
-    from nanobot.agent.context_governance import ContextGovernanceConfig, ContextGovernor
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.agent.tools.filesystem import ReadFileTool
-    from nanobot.agent.tools.registry import ToolRegistry
-    from nanobot.session.manager import Session
+    from mason.agent.context_governance import ContextGovernanceConfig, ContextGovernor
+    from mason.agent.loop import AgentLoop
+    from mason.agent.tools.filesystem import ReadFileTool
+    from mason.agent.tools.registry import ToolRegistry
+    from mason.session.manager import Session
 
     tools = ToolRegistry()
     reader = ReadFileTool(workspace=tmp_path, allowed_dir=tmp_path)
@@ -384,15 +384,15 @@ async def test_mixed_tool_text_survives_model_save_replay(tmp_path):
     replay = governor.prepare_messages_for_model(config, session.get_history())
     assert replay[-1]["content"][0]["text"] == reference
     assert "data:image" not in str(replay[-1]["content"])
-    readback = await reader.execute(path=".nanobot/tool-results/mixed/mixed_text_0.txt")
+    readback = await reader.execute(path=".mason/tool-results/mixed/mixed_text_0.txt")
     assert raw in readback
     assert messages[-1]["content"][0]["text"] == raw
 
 
 async def test_tiny_budget_keeps_complete_readable_reference(tmp_path):
-    from nanobot.agent.context_governance import ContextGovernanceConfig, ContextGovernor
-    from nanobot.agent.tools.filesystem import ReadFileTool
-    from nanobot.agent.tools.registry import ToolRegistry
+    from mason.agent.context_governance import ContextGovernanceConfig, ContextGovernor
+    from mason.agent.tools.filesystem import ReadFileTool
+    from mason.agent.tools.registry import ToolRegistry
 
     tools = ToolRegistry()
     reader = ReadFileTool(workspace=tmp_path, allowed_dir=tmp_path)
@@ -415,13 +415,13 @@ async def test_tiny_budget_keeps_complete_readable_reference(tmp_path):
 async def test_result_reference_survives_workspace_switch_without_bypassing_restriction(tmp_path):
     import re
 
-    from nanobot.agent.tools.filesystem import ReadFileTool
-    from nanobot.security.workspace_access import (
+    from mason.agent.tools.filesystem import ReadFileTool
+    from mason.security.workspace_access import (
         bind_workspace_scope,
         build_workspace_scope,
         reset_workspace_scope,
     )
-    from nanobot.utils.helpers import maybe_persist_tool_result
+    from mason.utils.helpers import maybe_persist_tool_result
 
     first = tmp_path / "first"
     second = tmp_path / "second"
@@ -443,7 +443,7 @@ async def test_result_reference_survives_workspace_switch_without_bypassing_rest
 
 @pytest.mark.parametrize("budget", [2048, 16000])
 def test_offload_preview_uses_budget_and_retains_tail(tmp_path, budget):
-    from nanobot.utils.helpers import maybe_persist_tool_result
+    from mason.utils.helpers import maybe_persist_tool_result
 
     content = "FIRST MATCH\n" + "x" * 20000 + "\n(use offset=250 to continue)"
     result = maybe_persist_tool_result(tmp_path, "search", "call", content, max_chars=budget)
@@ -452,13 +452,13 @@ def test_offload_preview_uses_budget_and_retains_tail(tmp_path, budget):
     assert "FIRST MATCH" in result
     assert "use offset=250 to continue" in result
     assert "Read the saved file" in result
-    assert (tmp_path / ".nanobot/tool-results/search/call.txt").read_text(encoding="utf-8") == content
+    assert (tmp_path / ".mason/tool-results/search/call.txt").read_text(encoding="utf-8") == content
 
 
 async def test_grep_page_survives_default_result_normalization(tmp_path):
-    from nanobot.agent.context_governance import ContextGovernanceConfig, ContextGovernor
-    from nanobot.agent.tools.registry import ToolRegistry
-    from nanobot.agent.tools.search import GrepTool
+    from mason.agent.context_governance import ContextGovernanceConfig, ContextGovernor
+    from mason.agent.tools.registry import ToolRegistry
+    from mason.agent.tools.search import GrepTool
 
     (tmp_path / "source.txt").write_text(
         "\n".join(f"needle {n} " + "x" * 100 for n in range(200)), encoding="utf-8",
@@ -473,4 +473,4 @@ async def test_grep_page_survives_default_result_normalization(tmp_path):
     assert "use offset=" in normalized
     assert len(normalized) <= _MAX_TOOL_RESULT_CHARS
     assert normalized == page
-    assert not (tmp_path / ".nanobot/tool-results").exists()
+    assert not (tmp_path / ".mason/tool-results").exists()

@@ -8,14 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from loguru import logger
 
-from nanobot.providers.base import LLMUsage
-from nanobot.providers.openai_responses.converters import (
+from mason.providers.base import LLMUsage
+from mason.providers.openai_responses.converters import (
     convert_messages,
     convert_tools,
     convert_user_message,
     split_tool_call_id,
 )
-from nanobot.providers.openai_responses.parsing import (
+from mason.providers.openai_responses.parsing import (
     ResponsesStreamCapture,
     consume_sdk_stream,
     consume_sse,
@@ -24,7 +24,7 @@ from nanobot.providers.openai_responses.parsing import (
     map_finish_reason,
     parse_response_output,
 )
-from nanobot.providers.openai_responses.state import (
+from mason.providers.openai_responses.state import (
     build_responses_state,
     is_compaction_compatibility_error,
     prepare_responses_input,
@@ -519,7 +519,7 @@ class TestParseResponseOutput:
             }],
             "status": "completed", "usage": {},
         }
-        with patch("nanobot.providers.openai_responses.parsing.logger") as mock_logger:
+        with patch("mason.providers.openai_responses.parsing.logger") as mock_logger:
             result = parse_response_output(resp)
         assert result.tool_calls[0].arguments == "{bad json"
         mock_logger.warning.assert_called_once()
@@ -1601,7 +1601,7 @@ class TestConsumeSdkStream:
             status="completed",
             action=SimpleNamespace(
                 type="search",
-                queries=["nanobot DeepSeek", "nanobot latest release"],
+                queries=["mason DeepSeek", "mason latest release"],
                 sources=[
                     SimpleNamespace(
                         title="DeepSeek Responses API",
@@ -1660,7 +1660,7 @@ class TestConsumeSdkStream:
                 "call_id": "ws_1",
                 "name": "web_search",
                 "arguments": {
-                    "query": "nanobot DeepSeek · nanobot latest release",
+                    "query": "mason DeepSeek · mason latest release",
                 },
                 "result": {
                     "status": "completed",
@@ -2106,7 +2106,7 @@ class TestConsumeSdkStream:
             for e in [ev1, ev2, ev3, ev4]:
                 yield e
 
-        with patch("nanobot.providers.openai_responses.parsing.logger") as mock_logger:
+        with patch("mason.providers.openai_responses.parsing.logger") as mock_logger:
             _, tool_calls, _, _, _ = await consume_sdk_stream(stream())
         assert tool_calls[0].arguments == "{bad"
         mock_logger.warning.assert_called_once()

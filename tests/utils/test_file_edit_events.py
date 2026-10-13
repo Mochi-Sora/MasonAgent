@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.agent.tools.apply_patch import ApplyPatchTool
-from nanobot.agent.tools.filesystem import EditFileTool, WriteFileTool
-from nanobot.utils.file_edit_events import (
+from mason.agent.tools.apply_patch import ApplyPatchTool
+from mason.agent.tools.filesystem import EditFileTool, WriteFileTool
+from mason.utils.file_edit_events import (
     FileDiff,
     FileEditResult,
     build_file_edit_end_event,

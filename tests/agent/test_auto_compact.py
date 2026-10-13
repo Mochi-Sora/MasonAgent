@@ -7,15 +7,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.command import CommandContext
-from nanobot.config.schema import AgentDefaults, Config
-from nanobot.events import NO_EVENTS
-from nanobot.providers.base import LLMResponse
-from nanobot.session.keys import HEARTBEAT_SESSION_KEY
+from mason.agent.loop import AgentLoop
+from mason.agent.tools.registry import ToolRegistry
+from mason.bus.events import InboundMessage
+from mason.bus.queue import MessageBus
+from mason.command import CommandContext
+from mason.config.schema import AgentDefaults, Config
+from mason.events import NO_EVENTS
+from mason.providers.base import LLMResponse
+from mason.session.keys import HEARTBEAT_SESSION_KEY
 
 
 def _make_loop(
@@ -207,7 +207,7 @@ class TestIdleScanThrottling:
     def test_configured_idle_scan_interval_throttles_checks(self, tmp_path, monkeypatch):
         """The configured interval should reach the loop and gate session scans."""
         ticks = iter((1_000.0, 1_000.0, 1_009.999, 1_010.0))
-        monkeypatch.setattr("nanobot.agent.loop.time.monotonic", lambda: next(ticks))
+        monkeypatch.setattr("mason.agent.loop.time.monotonic", lambda: next(ticks))
         config = Config.model_validate({
             "agents": {
                 "defaults": {
@@ -235,7 +235,7 @@ class TestIdleScanThrottling:
 
     def test_zero_idle_scan_interval_checks_every_tick(self, tmp_path, monkeypatch):
         """An explicit zero should leave each idle tick eligible to scan."""
-        monkeypatch.setattr("nanobot.agent.loop.time.monotonic", lambda: 1_000.0)
+        monkeypatch.setattr("mason.agent.loop.time.monotonic", lambda: 1_000.0)
         loop = _make_loop(tmp_path)
         loop.auto_compact.check_expired = MagicMock()
 

@@ -5,8 +5,8 @@ from threading import Event
 
 import pytest
 
-from nanobot.session.manager import SessionManager
-from nanobot.session.session_handles import (
+from mason.session.manager import SessionManager
+from mason.session.session_handles import (
     SESSION_HANDLE_METADATA_KEY,
     SessionHandleResolver,
     _allocate_name,

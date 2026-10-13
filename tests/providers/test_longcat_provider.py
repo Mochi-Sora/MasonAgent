@@ -1,7 +1,7 @@
 """Tests for the LongCat provider registration."""
 
-from nanobot.config.schema import ProvidersConfig
-from nanobot.providers.registry import PROVIDERS, find_by_name
+from mason.config.schema import ProvidersConfig
+from mason.providers.registry import PROVIDERS, find_by_name
 
 
 def test_longcat_config_field_exists():

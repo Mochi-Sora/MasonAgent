@@ -7,17 +7,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nanobot.agent import SubagentManager
-from nanobot.agent.hook import AgentHookContext
-from nanobot.agent.runner import AgentRunResult
-from nanobot.agent.subagent import (
+from mason.agent import SubagentManager
+from mason.agent.hook import AgentHookContext
+from mason.agent.runner import AgentRunResult
+from mason.agent.subagent import (
     SubagentStatus,
     _SubagentHook,
 )
-from nanobot.agent.tools.context import current_request_context
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import GenerationSettings, LLMProvider, LLMUsage
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.agent.tools.context import current_request_context
+from mason.bus.queue import MessageBus
+from mason.providers.base import GenerationSettings, LLMProvider, LLMUsage
+from mason.utils.llm_runtime import LLMRuntime
 
 # ---------------------------------------------------------------------------
 # Helpers

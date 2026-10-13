@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nanobot.config.schema import MemoryConfig, MemoryConsolidationConfig
+from mason.config.schema import MemoryConfig, MemoryConsolidationConfig
 
 
 def test_consolidation_defaults() -> None:

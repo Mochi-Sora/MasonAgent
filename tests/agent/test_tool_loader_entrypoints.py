@@ -2,10 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nanobot.agent.tools.base import Tool
-from nanobot.agent.tools.context import ToolContext
-from nanobot.agent.tools.loader import ToolLoader
-from nanobot.agent.tools.registry import ToolRegistry, is_tool_error_result
+from mason.agent.tools.base import Tool
+from mason.agent.tools.context import ToolContext
+from mason.agent.tools.loader import ToolLoader
+from mason.agent.tools.registry import ToolRegistry, is_tool_error_result
 
 
 def test_loader_discovers_entry_point_tools():
@@ -43,7 +43,7 @@ def test_loader_discovers_entry_point_tools():
 
     mock_ep.load.return_value = _FakeTool
 
-    with patch("nanobot.agent.tools.loader.entry_points", return_value=[mock_ep]):
+    with patch("mason.agent.tools.loader.entry_points", return_value=[mock_ep]):
         loader = ToolLoader()
         discovered = loader._discover_plugins()
 
@@ -73,7 +73,7 @@ def test_loader_skips_abstract_entry_point_tools():
 
     mock_ep.load.return_value = _AbstractTool
 
-    with patch("nanobot.agent.tools.loader.entry_points", return_value=[mock_ep]):
+    with patch("mason.agent.tools.loader.entry_points", return_value=[mock_ep]):
         loader = ToolLoader()
         discovered = loader._discover_plugins()
 
@@ -124,7 +124,7 @@ async def test_loader_entry_point_error_wrapper_preserves_tool_api(tmp_path):
     mock_ep.load.return_value = _ApiPluginTool
 
     registry = ToolRegistry()
-    with patch("nanobot.agent.tools.loader.entry_points", return_value=[mock_ep]):
+    with patch("mason.agent.tools.loader.entry_points", return_value=[mock_ep]):
         ToolLoader(test_classes=[]).load(
             ToolContext(config=None, workspace=str(tmp_path)),
             registry,

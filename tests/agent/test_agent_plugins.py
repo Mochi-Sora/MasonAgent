@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.agent import plugins as agent_plugins
-from nanobot.agent.plugins import (
+from mason.agent import plugins as agent_plugins
+from mason.agent.plugins import (
     AGENT_PLUGIN_MCP_SCHEMA,
     AGENT_PLUGIN_SCHEMA,
     agent_plugin_mcp_servers,
@@ -15,11 +15,11 @@ from nanobot.agent.plugins import (
     enabled_agent_plugin_skills,
     set_agent_plugin_enabled,
 )
-from nanobot.agent.skills import SkillsLoader
-from nanobot.agent.tools.context import ToolContext
-from nanobot.agent.tools.filesystem import ReadFileTool, WriteFileTool
-from nanobot.config.schema import ToolsConfig
-from nanobot.security.workspace_access import (
+from mason.agent.skills import SkillsLoader
+from mason.agent.tools.context import ToolContext
+from mason.agent.tools.filesystem import ReadFileTool, WriteFileTool
+from mason.config.schema import ToolsConfig
+from mason.security.workspace_access import (
     bind_workspace_scope,
     reset_workspace_scope,
     validate_workspace_scope_payload,
@@ -129,7 +129,7 @@ def test_plugin_manifest_boundary(tmp_path: Path, manifest: object, valid: bool)
 
 
 def test_plugin_logo_is_validated_and_contained(tmp_path: Path) -> None:
-    extension = {"extensions": {"dev.nanobot": {"logo": "./assets/icon.png"}}}
+    extension = {"extensions": {"dev.mason": {"logo": "./assets/icon.png"}}}
     plugin = _plugin(tmp_path, "demo", **extension)
     icon = plugin / "assets" / "icon.png"
     icon.parent.mkdir()
@@ -465,3 +465,15 @@ def test_plugin_activation_does_not_survive_in_place_code_replacement(
     assert discover_agent_plugins(tmp_path)[0].enabled is False
     assert enabled_agent_plugin_skill_dirs(tmp_path) == ()
     assert agent_plugin_mcp_servers(tmp_path) == {}
+
+
+def test_manifest_reads_legacy_dev_nanobot_extension(tmp_path: Path) -> None:
+    """Manifests written before the rename used ``dev.nanobot``."""
+    from mason.agent.plugins import _load_manifest
+
+    root = _plugin(tmp_path, "demo", extensions={"dev.nanobot": {"displayName": "Legacy Demo"}})
+
+    parsed = _load_manifest(root)
+
+    assert parsed is not None
+    assert parsed.display_name == "Legacy Demo"

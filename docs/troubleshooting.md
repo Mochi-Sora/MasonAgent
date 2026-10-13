@@ -7,29 +7,29 @@ Use this page to isolate where a failure lives. Start with the smallest surface 
 Run these in order:
 
 ```bash
-nanobot --version
-nanobot status
-nanobot agent -m "Hello!"
+mason --version
+mason status
+mason agent -m "Hello!"
 ```
 
 Then, only if the CLI works:
 
 ```bash
-nanobot gateway
+mason gateway
 ```
 
 This separates failures into layers:
 
 | Layer | What it proves |
 |---|---|
-| `nanobot --version` | Install and shell command discovery |
-| `nanobot status` | Config path, workspace, environment references, and active provider/model configuration |
-| `nanobot agent -m "Hello!"` | Config loading, provider/model access, workspace writes, and agent loop |
-| `nanobot gateway` | Channel startup, cron system jobs, heartbeat, and health endpoint |
+| `mason --version` | Install and shell command discovery |
+| `mason status` | Config path, workspace, environment references, and active provider/model configuration |
+| `mason agent -m "Hello!"` | Config loading, provider/model access, workspace writes, and agent loop |
+| `mason gateway` | Channel startup, cron system jobs, heartbeat, and health endpoint |
 
-If `nanobot agent -m "Hello!"` fails, fix that before debugging Telegram, Discord, Docker, systemd, or any chat app.
+If `mason agent -m "Hello!"` fails, fix that before debugging Telegram, Discord, Docker, systemd, or any chat app.
 
-`nanobot status` does not call the model. If provider/model setup is incomplete, it points to
+`mason status` does not call the model. If provider/model setup is incomplete, it points to
 the CLI setup wizard, then prints the command to check again.
 
 ## Session storage overlaps the workspace
@@ -45,24 +45,24 @@ make it permanent.
 To fix an existing instance:
 
 1. Stop the instance and back up its config directory and workspace.
-2. Keep the workspace and `.nanobot/workspace-id` in place. Move the config file **and its
+2. Keep the workspace and `.mason/workspace-id` in place. Move the config file **and its
    runtime data, including sessions**, to a directory outside the workspace.
 3. Update `--config` in your launch command or service, check relative paths, and restart.
 
 Moving only the config leaves history behind. Choosing a new workspace without moving
-its contents (including memory, skills, and `.nanobot/workspace-id`) can start an empty
+its contents (including memory, skills, and `.mason/workspace-id`) can start an empty
 workspace with a different session identity.
 
-## How to Read `nanobot status`
+## How to Read `mason status`
 
-`nanobot status` does not call a model. It checks the selected config and workspace,
+`mason status` does not call a model. It checks the selected config and workspace,
 resolves environment references, and validates the local settings required by the active
 provider/model without constructing a provider client.
 
 The output has this shape:
 
 ```text
-nanobot Status
+mason Status
 
 Config: /path/to/config.json ✓
 Workspace: /path/to/workspace ✓
@@ -78,13 +78,13 @@ Read it like this:
 
 | Line | Good sign | What to do if it looks wrong |
 |---|---|---|
-| `Config` | It points to the config file you meant to use and shows `✓`. | Run `nanobot onboard`, or pass `--config` to `nanobot agent`, `gateway`, or `serve` when testing a non-default instance. |
-| `Workspace` | It points to the workspace you meant to use and shows `✓`. | Run `nanobot onboard`, create the folder, fix permissions, or pass `--workspace` on commands that support it. |
+| `Config` | It points to the config file you meant to use and shows `✓`. | Run `mason onboard`, or pass `--config` to `mason agent`, `gateway`, or `serve` when testing a non-default instance. |
+| `Workspace` | It points to the workspace you meant to use and shows `✓`. | Run `mason onboard`, create the folder, fix permissions, or pass `--workspace` on commands that support it. |
 | `Model` | It shows the active model or the preset name you expect. | Set `agents.defaults.modelPreset` to the intended preset, or check `/model` if you changed models during a chat session. |
-| `Agent` | It says `provider/model configuration is ready`. | Follow the printed CLI setup route, then run `nanobot status` again. |
+| `Agent` | It says `provider/model configuration is ready`. | Follow the printed CLI setup route, then run `mason status` again. |
 | Provider rows | The provider used by the active preset shows `✓`, an OAuth marker, or a local URL. | Configure only the active provider first. It is normal for unused providers to say `not set`. |
 
-If `nanobot status` looks right but `nanobot agent -m "Hello!"` fails, the install and config paths are probably fine. Continue with [Provider and Model Problems](#provider-and-model-problems).
+If `mason status` looks right but `mason agent -m "Hello!"` fails, the install and config paths are probably fine. Continue with [Provider and Model Problems](#provider-and-model-problems).
 
 ## Installation Problems
 
@@ -96,33 +96,33 @@ Use the same Python command for install checks and module fallback. On macOS/Lin
 | `git: command not found` | Cloning is optional: download the repository ZIP instead, extract it, and run the installer from that folder. Install Git if you want the `--git` flow. |
 | Could not download the repository | A `--git` install needs network access to the git host. Use a downloaded ZIP and run the installer from that folder, or configure your proxy. |
 | `install.ps1` cannot be loaded because running scripts is disabled | Run it with a one-time bypass: `powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1`. |
-| `nanobot: command not found` | Use the module form, for example `python -m nanobot ...`, `python3 -m nanobot ...`, or `py -m nanobot ...`. Reinstall with the same Python command, or add that Python's scripts directory to `PATH`. |
-| `No module named nanobot` | You are running a different Python than the one used for installation. Run `python -m pip show nanobot-ai`, `python3 -m pip show nanobot-ai`, or `py -m pip show nanobot-ai`, matching the command that installed nanobot. |
+| `mason: command not found` | Use the module form, for example `python -m mason ...`, `python3 -m mason ...`, or `py -m mason ...`. Reinstall with the same Python command, or add that Python's scripts directory to `PATH`. |
+| `No module named mason` | You are running a different Python than the one used for installation. Run `python -m pip show mason`, `python3 -m pip show mason`, or `py -m pip show mason`, matching the command that installed mason. |
 | `pip is not available` | When the installer uses a virtual environment, it tries `python -m ensurepip --upgrade`. If that fails, install pip for that Python, or use a Python installer/distribution that includes pip. |
 | `externally-managed-environment` | Your system Python blocks global pip installs. Run the installer (it prefers `uv`, `pipx`, or a managed virtual environment), or install the checkout manually: `uv tool install --editable <checkout>` or `python -m venv .venv && .venv/bin/python -m pip install -e <checkout>`. Do not add `--break-system-packages`. |
 | Installer chose the wrong Python | Set `PYTHON` before running the installer, such as `PYTHON=python3 ./scripts/install.sh` or `$env:PYTHON="py"` before `.\scripts\install.ps1`. |
-| Editable install does not update | Editable installs follow the source tree, so pull or re-extract the checkout first. Then run `./scripts/install.sh` again from the checkout to refresh dependencies, and check `python -m nanobot --version` or `nanobot --version`. |
+| Editable install does not update | Editable installs follow the source tree, so pull or re-extract the checkout first. Then run `./scripts/install.sh` again from the checkout to refresh dependencies, and check `python -m mason --version` or `mason --version`. |
 
 ## Config Problems
 
 Default config path:
 
 ```text
-~/.nanobot/config.json
+~/.mason/config.json
 ```
 
 Default workspace path:
 
 ```text
-~/.nanobot/workspace/
+~/.mason/workspace/
 ```
 
-`nanobot status` reads the default config unless you pass explicit paths. Use the same `--config` and `--workspace` across status checks and runtime commands when debugging multiple instances:
+`mason status` reads the default config unless you pass explicit paths. Use the same `--config` and `--workspace` across status checks and runtime commands when debugging multiple instances:
 
 ```bash
-nanobot status --config ./bot-a/config.json --workspace ./bot-a/workspace
-nanobot agent --config ./bot-a/config.json --workspace ./bot-a/workspace -m "Hello"
-nanobot gateway --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason status --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason agent --config ./bot-a/config.json --workspace ./bot-a/workspace -m "Hello"
+mason gateway --config ./bot-a/config.json --workspace ./bot-a/workspace
 ```
 
 Common config mistakes:
@@ -131,30 +131,30 @@ Common config mistakes:
 |---|---|
 | JSON parse error | Validate commas, braces, and quotes. Most docs examples are partial snippets to merge. |
 | Unknown or missing provider | Use provider registry names such as `openrouter`, `anthropic`, `openai`, `ollama`, `vllm`, `lm_studio`, or define a custom OpenAI-compatible provider key under `providers` and reference that exact key from the active preset. |
-| snake_case vs camelCase confusion | Both are accepted, but docs use camelCase because nanobot writes config with aliases such as `apiKey`, `modelPresets`, `intervalS`. |
-| Environment variable error | `${VAR_NAME}` references are resolved at startup. Set the variable before running nanobot. |
-| Edited config but behavior did not change | Restart `nanobot gateway`; long-running processes read config at startup. |
+| snake_case vs camelCase confusion | Both are accepted, but docs use camelCase because mason writes config with aliases such as `apiKey`, `modelPresets`, `intervalS`. |
+| Environment variable error | `${VAR_NAME}` references are resolved at startup. Set the variable before running mason. |
+| Edited config but behavior did not change | Restart `mason gateway`; long-running processes read config at startup. |
 
 After editing config, check the shortest path to an Agent reply:
 
 ```bash
-nanobot status
+mason status
 ```
 
 To refresh missing defaults without overwriting existing settings, run:
 
 ```bash
-nanobot onboard --refresh
+mason onboard --refresh
 ```
 
-For an interactive choice between resetting and refreshing, run `nanobot onboard` and choose the option that keeps current values and merges missing defaults.
+For an interactive choice between resetting and refreshing, run `mason onboard` and choose the option that keeps current values and merges missing defaults.
 
 ## Provider and Model Problems
 
 First prove the provider in the CLI:
 
 ```bash
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 Then compare your config against [`providers.md`](./providers.md).
@@ -175,10 +175,10 @@ If you need a known-good snippet instead of diagnosis, use [`provider-cookbook.m
 | Codex says a model is not supported with a ChatGPT account | Use provider `openai_codex` with a Codex model such as `openai-codex/gpt-5.6-sol`. Do not use the direct-API `openai/...` prefix with Codex OAuth. |
 | Config says `providers.openai_codex` conflicts with the built-in provider | Under `providers`, keep only the canonical `openaiCodex` settings key and remove a duplicate `openai_codex` key. A model preset's `provider` value remains `openai_codex`. |
 | xAI OAuth needs a proxy | Set `providers.xaiGrok.proxy` before login. It applies to OAuth discovery, token exchange/refresh, and Grok subscription requests. |
-| xAI login runs on a remote/headless machine | Run `nanobot provider login xai-grok` interactively, open the printed URL elsewhere, and paste the final callback URL or authorization code when prompted. |
-| xAI returns 403 or subscription access denied | Confirm the signed-in account has an eligible X Premium / Grok subscription, then run `nanobot provider login xai-grok` again. This provider does not use an xAI API key or X Developer OAuth. |
+| xAI login runs on a remote/headless machine | Run `mason provider login xai-grok` interactively, open the printed URL elsewhere, and paste the final callback URL or authorization code when prompted. |
+| xAI returns 403 or subscription access denied | Confirm the signed-in account has an eligible X Premium / Grok subscription, then run `mason provider login xai-grok` again. This provider does not use an xAI API key or X Developer OAuth. |
 | xAI returns 400 `invalid-argument` | Read the bounded `Response body` appended to the provider error. Hosted `x_search` is sent only when xAI's model catalog advertises `supportsBackendSearch`; the model ID `grok-4.5` itself is valid. |
-| xAI model or X Search stops working after an upstream release | The integration follows Grok Build's public OAuth/proxy client contract. Update nanobot if xAI changes that contract. |
+| xAI model or X Search stops working after an upstream release | The integration follows Grok Build's public OAuth/proxy client contract. Update mason if xAI changes that contract. |
 
 ## Langfuse Problems
 
@@ -186,8 +186,8 @@ Langfuse tracing is optional and controlled by environment variables.
 
 | Symptom | Check |
 |---|---|
-| `LANGFUSE_SECRET_KEY is set but langfuse is not installed` | Install `langfuse` in the same Python environment that runs nanobot, then restart the process. |
-| No traces appear | Set `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_BASE_URL` before starting nanobot. |
+| `LANGFUSE_SECRET_KEY is set but langfuse is not installed` | Install `langfuse` in the same Python environment that runs mason, then restart the process. |
+| No traces appear | Set `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_BASE_URL` before starting mason. |
 | Wrong Langfuse project or region | Check that the key pair and `LANGFUSE_BASE_URL` come from the same Langfuse project/region. |
 | Only some providers trace | Langfuse tracing applies to OpenAI-compatible provider calls; native providers may not use that client path. |
 
@@ -195,19 +195,19 @@ See [`configuration.md#langfuse-observability`](./configuration.md#langfuse-obse
 
 ## Gateway Problems
 
-`nanobot gateway` is required for chat apps, heartbeat, memory consolidation, and long-running channel connections.
+`mason gateway` is required for chat apps, heartbeat, memory consolidation, and long-running channel connections.
 
 Default ports:
 
 | Surface | Default |
 |---|---|
 | Gateway health endpoint | `http://127.0.0.1:18790/health` |
-| OpenAI-compatible API (`nanobot serve`) | `http://127.0.0.1:8900` |
+| OpenAI-compatible API (`mason serve`) | `http://127.0.0.1:8900` |
 
 Common gateway checks:
 
 ```bash
-nanobot gateway --verbose
+mason gateway --verbose
 ```
 
 | Symptom | Check |
@@ -224,22 +224,22 @@ Before loading enabled channels, the gateway checks the dependencies declared by
 channel manifests. The CLI normally installs these dependencies when a channel is
 enabled. Installation during startup is a recovery path for an enabled config whose Python
 environment no longer has the required packages, for example after manually editing the
-config, upgrading nanobot, or recreating an isolated `uv tool`/`pipx` environment. The
+config, upgrading mason, or recreating an isolated `uv tool`/`pipx` environment. The
 gateway waits for the install so an enabled channel is not silently skipped; later starts
 skip the installation once the dependencies are present.
 
 If access to PyPI is slow in your region, configure pip to use a trusted package index. The
-installer honors the standard `PIP_INDEX_URL` environment variable, including when nanobot
+installer honors the standard `PIP_INDEX_URL` environment variable, including when mason
 itself was installed with `uv tool`:
 
 ```bash
-PIP_INDEX_URL=https://your-trusted-mirror.example/simple nanobot gateway
+PIP_INDEX_URL=https://your-trusted-mirror.example/simple mason gateway
 ```
 
-For the systemd user service created by `nanobot gateway install-service`, add a drop-in:
+For the systemd user service created by `mason gateway install-service`, add a drop-in:
 
 ```bash
-systemctl --user edit nanobot-gateway.service
+systemctl --user edit mason-gateway.service
 ```
 
 ```ini
@@ -251,7 +251,7 @@ Then reload and restart the service:
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user restart nanobot-gateway.service
+systemctl --user restart mason-gateway.service
 ```
 
 For a system-level or custom service, use `sudo systemctl edit <unit>` instead. Prefer an
@@ -263,9 +263,9 @@ commands or logs.
 Before debugging a chat app:
 
 ```bash
-nanobot agent -m "Hello!"
-nanobot channels status
-nanobot gateway
+mason agent -m "Hello!"
+mason channels status
+mason gateway
 ```
 
 Then check:
@@ -278,7 +278,7 @@ Then check:
 | Telegram rejects the token | Copy the current token from BotFather or regenerate it. |
 | Telegram receives no messages | Confirm the channel is enabled, the gateway is running, and the sender is paired or listed in `allowFrom`. |
 | Discord replies missing | Enable Message Content intent and invite the bot with the required permissions. |
-| WhatsApp or WeChat login expired | Re-run `nanobot channels login whatsapp` or `nanobot channels login weixin`. |
+| WhatsApp or WeChat login expired | Re-run `mason channels login whatsapp` or `mason channels login weixin`. |
 
 See [`chat-apps.md`](./chat-apps.md) for channel-specific setup.
 
@@ -299,21 +299,21 @@ See [`chat-apps.md`](./chat-apps.md) for channel-specific setup.
 |---|---|
 | Conversation context seems wrong | Confirm the active workspace and session. CLI sessions and chat app threads may use different sessions. |
 | Memory does not update immediately | Consolidation is periodic; recent turns remain searchable through `recall_backup` and session history until consolidation promotes them. |
-| Sessions disappear after changing `--config` | Sessions follow the config directory at `<config-dir>/sessions/<workspace-id>/`; use the original config path or copy that `sessions/` directory into the new config directory while nanobot is stopped. |
-| Sessions disappear after moving a workspace | Keep the workspace's `.nanobot/workspace-id` file with the move or backup. If it was lost, restore that marker from backup before starting nanobot. |
+| Sessions disappear after changing `--config` | Sessions follow the config directory at `<config-dir>/sessions/<workspace-id>/`; use the original config path or copy that `sessions/` directory into the new config directory while mason is stopped. |
+| Sessions disappear after moving a workspace | Keep the workspace's `.mason/workspace-id` file with the move or backup. If it was lost, restore that marker from backup before starting mason. |
 | You want one shared session across devices | Set `agents.defaults.unifiedSession` intentionally; otherwise keep separate sessions. |
 
 ## Collect Useful Evidence
 
 When opening an issue or asking for help, include:
 
-- install method and `nanobot --version`;
+- install method and `mason --version`;
 - operating system and Python version;
 - the command you ran;
-- relevant `nanobot status` output;
+- relevant `mason status` output;
 - sanitized config snippets, especially provider, model, channel, and tool settings;
-- gateway logs from `nanobot gateway --verbose`;
-- whether `nanobot agent -m "Hello!"` works.
+- gateway logs from `mason gateway --verbose`;
+- whether `mason agent -m "Hello!"` works.
 
 Never paste real API keys, bot tokens, OAuth tokens, or private chat IDs into public issues.
 

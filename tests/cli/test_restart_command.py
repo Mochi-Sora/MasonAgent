@@ -11,15 +11,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nanobot.agent.context import TranscriptInput
-from nanobot.bus.events import InboundMessage
-from nanobot.providers.base import LLMResponse, LLMUsage
+from mason.agent.context import TranscriptInput
+from mason.bus.events import InboundMessage
+from mason.providers.base import LLMResponse, LLMUsage
 
 
 def _make_loop():
     """Create a minimal AgentLoop with mocked dependencies."""
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.bus.queue import MessageBus
+    from mason.agent.loop import AgentLoop
+    from mason.bus.queue import MessageBus
 
     bus = MessageBus()
     provider = MagicMock()
@@ -27,9 +27,9 @@ def _make_loop():
     workspace = MagicMock()
     workspace.__truediv__ = MagicMock(return_value=MagicMock())
 
-    with patch("nanobot.agent.loop.ContextBuilder"), \
-         patch("nanobot.agent.loop.SessionManager"), \
-         patch("nanobot.agent.loop.SubagentManager") as mock_sub_mgr:
+    with patch("mason.agent.loop.ContextBuilder"), \
+         patch("mason.agent.loop.SessionManager"), \
+         patch("mason.agent.loop.SubagentManager") as mock_sub_mgr:
         mock_sub_mgr.return_value.close = AsyncMock()
         loop = AgentLoop(bus=bus, provider=provider, workspace=workspace)
     return loop, bus
@@ -39,9 +39,9 @@ class TestRestartCommand:
 
     @pytest.mark.asyncio
     async def test_restart_sends_message_and_calls_execv(self):
-        from nanobot.command.builtin import cmd_restart
-        from nanobot.command.router import CommandContext
-        from nanobot.utils.restart import (
+        from mason.command.builtin import cmd_restart
+        from mason.command.router import CommandContext
+        from mason.utils.restart import (
             RESTART_NOTIFY_CHANNEL_ENV,
             RESTART_NOTIFY_CHAT_ID_ENV,
             RESTART_STARTED_AT_ENV,
@@ -68,8 +68,8 @@ class TestRestartCommand:
         )
 
         with patch.dict(os.environ, {}, clear=False), \
-             patch("nanobot.command.builtin.asyncio", new=fake_asyncio), \
-             patch("nanobot.command.builtin.os.execv") as mock_execv:
+             patch("mason.command.builtin.asyncio", new=fake_asyncio), \
+             patch("mason.command.builtin.os.execv") as mock_execv:
             out = await cmd_restart(ctx)
             assert "Restarting" in out.content
             assert os.environ.get(RESTART_NOTIFY_CHANNEL_ENV) == "cli"
@@ -82,8 +82,8 @@ class TestRestartCommand:
 
     @pytest.mark.asyncio
     async def test_restart_windows_auto_spawns_and_exits(self):
-        from nanobot.command.builtin import cmd_restart
-        from nanobot.command.router import CommandContext
+        from mason.command.builtin import cmd_restart
+        from mason.command.router import CommandContext
 
         loop, _bus = _make_loop()
         msg = InboundMessage(channel="cli", sender_id="user", chat_id="direct", content="/restart")
@@ -98,17 +98,17 @@ class TestRestartCommand:
             create_task=lambda coro: scheduled.append(asyncio.create_task(coro)) or scheduled[-1],
         )
 
-        with patch("nanobot.command.builtin.asyncio", new=fake_asyncio), \
-             patch("nanobot.command.builtin.sys.platform", "win32"), \
-             patch("nanobot.command.builtin.subprocess.CREATE_NEW_PROCESS_GROUP", 512, create=True), \
-             patch("nanobot.command.builtin.subprocess.Popen") as mock_popen, \
-             patch("nanobot.command.builtin.os._exit") as mock_exit, \
-             patch("nanobot.command.builtin.os.execv") as mock_execv:
+        with patch("mason.command.builtin.asyncio", new=fake_asyncio), \
+             patch("mason.command.builtin.sys.platform", "win32"), \
+             patch("mason.command.builtin.subprocess.CREATE_NEW_PROCESS_GROUP", 512, create=True), \
+             patch("mason.command.builtin.subprocess.Popen") as mock_popen, \
+             patch("mason.command.builtin.os._exit") as mock_exit, \
+             patch("mason.command.builtin.os.execv") as mock_execv:
             await cmd_restart(ctx)
             await scheduled[0]
 
         mock_popen.assert_called_once_with(
-            [sys.executable, "-m", "nanobot"] + sys.argv[1:],
+            [sys.executable, "-m", "mason"] + sys.argv[1:],
             creationflags=512,
         )
         mock_exit.assert_called_once_with(0)
@@ -116,8 +116,8 @@ class TestRestartCommand:
 
     @pytest.mark.asyncio
     async def test_restart_exit_mode_does_not_spawn(self):
-        from nanobot.command.builtin import cmd_restart
-        from nanobot.command.router import CommandContext
+        from mason.command.builtin import cmd_restart
+        from mason.command.router import CommandContext
 
         loop, _bus = _make_loop()
         loop.restart_mode = "exit"
@@ -133,10 +133,10 @@ class TestRestartCommand:
             create_task=lambda coro: scheduled.append(asyncio.create_task(coro)) or scheduled[-1],
         )
 
-        with patch("nanobot.command.builtin.asyncio", new=fake_asyncio), \
-             patch("nanobot.command.builtin.subprocess.Popen") as mock_popen, \
-             patch("nanobot.command.builtin.os._exit") as mock_exit, \
-             patch("nanobot.command.builtin.os.execv") as mock_execv:
+        with patch("mason.command.builtin.asyncio", new=fake_asyncio), \
+             patch("mason.command.builtin.subprocess.Popen") as mock_popen, \
+             patch("mason.command.builtin.os._exit") as mock_exit, \
+             patch("mason.command.builtin.os.execv") as mock_execv:
             await cmd_restart(ctx)
             await scheduled[0]
 
@@ -167,8 +167,8 @@ class TestRestartCommand:
         )
 
         with patch.object(loop, "_enqueue_session_message", new_callable=MagicMock) as mock_dispatch, \
-             patch("nanobot.command.builtin.asyncio", new=fake_asyncio), \
-             patch("nanobot.command.builtin.os.execv"):
+             patch("mason.command.builtin.asyncio", new=fake_asyncio), \
+             patch("mason.command.builtin.os.execv"):
             await bus.publish_inbound(msg)
 
             loop._running = True
@@ -206,7 +206,7 @@ class TestRestartCommand:
                 pass
 
             mock_dispatch.assert_not_called()
-            assert "nanobot" in out.content.lower() or "Model" in out.content
+            assert "mason" in out.content.lower() or "Model" in out.content
 
     @pytest.mark.asyncio
     async def test_run_propagates_external_cancellation(self):
@@ -300,11 +300,11 @@ class TestRestartCommand:
     async def test_run_agent_loop_estimates_usage_when_provider_omits_it(self, monkeypatch):
         loop, _bus = _make_loop()
         monkeypatch.setattr(
-            "nanobot.agent.runner.estimate_prompt_tokens_chain",
+            "mason.agent.runner.estimate_prompt_tokens_chain",
             lambda *_args, **_kwargs: (123, "test"),
         )
         monkeypatch.setattr(
-            "nanobot.agent.runner.estimate_message_tokens",
+            "mason.agent.runner.estimate_message_tokens",
             lambda _message: 7,
         )
         loop.provider.chat_stream_with_retry = AsyncMock(side_effect=[

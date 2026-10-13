@@ -2,15 +2,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import (
+from mason.agent.loop import AgentLoop
+from mason.bus.queue import MessageBus
+from mason.providers.base import (
     GenerationSettings,
     LLMResponse,
     ProviderConversationState,
     ToolCallRequest,
 )
-from nanobot.session.summary import SUMMARY_CONTINUATION_TEXT
+from mason.session.summary import SUMMARY_CONTINUATION_TEXT
 
 
 def _make_loop(

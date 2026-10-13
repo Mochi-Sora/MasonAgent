@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.skills import SkillsLoader
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.command.builtin import cmd_skill, register_builtin_commands
-from nanobot.command.router import CommandContext, CommandRouter
-from nanobot.config.schema import ModelPresetConfig
+from mason.agent.loop import AgentLoop
+from mason.agent.skills import SkillsLoader
+from mason.bus.events import InboundMessage
+from mason.bus.queue import MessageBus
+from mason.command.builtin import cmd_skill, register_builtin_commands
+from mason.command.router import CommandContext, CommandRouter
+from mason.config.schema import ModelPresetConfig
 
 
 def _provider(default_model: str = "test-model") -> MagicMock:

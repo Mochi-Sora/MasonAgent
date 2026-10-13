@@ -14,12 +14,12 @@ pytest.importorskip("botpy")
 
 @pytest.fixture(autouse=True)
 def _isolated_media_root(tmp_path, monkeypatch):
-    monkeypatch.setattr("nanobot.channels.qq.runtime.get_media_dir", lambda *_: tmp_path)
+    monkeypatch.setattr("mason.channels.qq.runtime.get_media_dir", lambda *_: tmp_path)
 
 
 def _make_channel():
-    from nanobot.bus.queue import MessageBus
-    from nanobot.channels.qq.runtime import QQChannel, QQConfig
+    from mason.bus.queue import MessageBus
+    from mason.channels.qq.runtime import QQChannel, QQConfig
 
     bus = MessageBus()
     config = QQConfig(app_id="test_app", secret="test_secret", allow_from=["*"])
@@ -102,7 +102,7 @@ async def test_inbound_validation_does_not_run_dns_on_the_event_loop(monkeypatch
         validation_threads.append(threading.get_ident())
         return False, "blocked"
 
-    monkeypatch.setattr("nanobot.channels.qq.runtime.validate_url_target", validate)
+    monkeypatch.setattr("mason.channels.qq.runtime.validate_url_target", validate)
     channel = _make_channel()
     fake_http = _FakeDownloadHttp()
     channel._http = fake_http
@@ -119,7 +119,7 @@ async def test_inbound_download_does_not_follow_redirects(
     status: int,
 ) -> None:
     """A redirect on an inbound attachment download must be rejected, not followed."""
-    monkeypatch.setattr("nanobot.channels.qq.runtime.validate_url_target", lambda _url: (True, ""))
+    monkeypatch.setattr("mason.channels.qq.runtime.validate_url_target", lambda _url: (True, ""))
     channel = _make_channel()
     fake_http = _FakeDownloadHttp(status=status)
     channel._http = fake_http
@@ -150,7 +150,7 @@ async def test_inbound_download_saves_successful_attachment(
         validated_urls.append(target)
         return True, ""
 
-    monkeypatch.setattr("nanobot.channels.qq.runtime.validate_url_target", validate)
+    monkeypatch.setattr("mason.channels.qq.runtime.validate_url_target", validate)
     channel = _make_channel()
     channel._media_root = tmp_path
     fake_http = _FakeDownloadHttp(body=b"qq attachment", content_type="application/pdf")
@@ -171,7 +171,7 @@ async def test_inbound_download_saves_successful_attachment(
 
 @pytest.mark.asyncio
 async def test_inbound_download_blocks_hostname_with_mixed_dns_answers(monkeypatch):
-    monkeypatch.setattr("nanobot.security.network.socket.getaddrinfo", lambda *_: [
+    monkeypatch.setattr("mason.security.network.socket.getaddrinfo", lambda *_: [
         (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
         (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0)),
     ])
@@ -185,7 +185,7 @@ async def test_inbound_download_blocks_hostname_with_mixed_dns_answers(monkeypat
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["size", "stream", "cancel"])
 async def test_inbound_download_cleans_partial_files(tmp_path, monkeypatch, failure):
-    monkeypatch.setattr("nanobot.channels.qq.runtime.validate_url_target", lambda _: (True, ""))
+    monkeypatch.setattr("mason.channels.qq.runtime.validate_url_target", lambda _: (True, ""))
 
     async def chunks(_self, _chunk_size):
         yield b"partial content"

@@ -7,19 +7,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# This installer installs a local nanobot checkout in editable mode, so the
+# This installer installs a local mason checkout in editable mode, so the
 # running command always reflects the source tree it was installed from.
-$Package = "nanobot-ai"
+$Package = "mason"
 # The public repository URL. It enables remote installs without an explicit
 # --git flag.
 $DefaultGitUrl = "https://github.com/Mochi-Sora/MasonAgent"
 $script:RequestedRepo = $null
-$script:RequestedGit = $env:NANOBOT_INSTALL_GIT
+$script:RequestedGit = $env:MASON_INSTALL_GIT
 $script:RepoRoot = $null
 $script:InstallSource = ""
-$script:NanobotRunner = $null
-$script:NanobotPython = $null
-$script:NanobotBin = $null
+$script:MasonRunner = $null
+$script:MasonPython = $null
+$script:MasonBin = $null
 $script:LastInstallSucceeded = $false
 
 function Write-Info {
@@ -33,21 +33,21 @@ function Fail {
 }
 
 function Show-InstallFailureHint {
-    [Console]::Error.WriteLine("Error: could not install nanobot from $($script:InstallSource).")
+    [Console]::Error.WriteLine("Error: could not install mason from $($script:InstallSource).")
     [Console]::Error.WriteLine("If pip mentioned externally-managed-environment, use uv, pipx, or a virtual environment instead of system pip.")
     [Console]::Error.WriteLine("You can also run manually:")
     [Console]::Error.WriteLine("  uv tool install --force --upgrade --editable $($script:RepoRoot)")
-    [Console]::Error.WriteLine("  $Python -m venv `$HOME\.nanobot\venv")
-    [Console]::Error.WriteLine("  `$HOME\.nanobot\venv\Scripts\python.exe -m pip install --upgrade --editable $($script:RepoRoot)")
+    [Console]::Error.WriteLine("  $Python -m venv `$HOME\.mason\venv")
+    [Console]::Error.WriteLine("  `$HOME\.mason\venv\Scripts\python.exe -m pip install --upgrade --editable $($script:RepoRoot)")
     [Console]::Error.WriteLine("Then start setup with:")
-    [Console]::Error.WriteLine("  nanobot onboard --wizard")
-    throw "could not install nanobot from $($script:InstallSource)"
+    [Console]::Error.WriteLine("  mason onboard --wizard")
+    throw "could not install mason from $($script:InstallSource)"
 }
 
 function Show-Usage {
     Write-Host "Usage: install.ps1 [-DryRun] [--repo PATH] [--git URL]"
     Write-Host ""
-    Write-Host "By default this installs the nanobot checkout that contains this script"
+    Write-Host "By default this installs the mason checkout that contains this script"
     Write-Host "in editable mode. Run it from a clone:"
     Write-Host ""
     Write-Host "  .\scripts\install.ps1"
@@ -55,14 +55,14 @@ function Show-Usage {
     Write-Host "Options:"
     Write-Host "  --repo PATH  Install a different local checkout in editable mode."
     Write-Host "  --git URL    Clone (or update) the repository into"
-    Write-Host "               `$HOME\.nanobot\src and install from that clone."
+    Write-Host "               `$HOME\.mason\src and install from that clone."
     Write-Host "  -DryRun      Print what would happen without installing or starting setup."
     Write-Host ""
     Write-Host "Environment:"
-    Write-Host "  NANOBOT_SKIP_WIZARD=1   Skip the setup wizard."
-    Write-Host "  NANOBOT_VENV=path       Use a different managed virtual environment."
-    Write-Host "  NANOBOT_SRC_DIR=path    Clone into a different directory for --git."
-    Write-Host "  NANOBOT_INSTALL_GIT=URL Default repository for --git."
+    Write-Host "  MASON_SKIP_WIZARD=1   Skip the setup wizard."
+    Write-Host "  MASON_VENV=path       Use a different managed virtual environment."
+    Write-Host "  MASON_SRC_DIR=path    Clone into a different directory for --git."
+    Write-Host "  MASON_INSTALL_GIT=URL Default repository for --git."
     Write-Host "  PYTHON=python           Use a specific Python interpreter."
 }
 
@@ -72,23 +72,23 @@ function Test-Checkout {
         return $false
     }
     $Pyproject = Join-Path $Path "pyproject.toml"
-    $InitFile = Join-Path $Path "nanobot\__init__.py"
+    $InitFile = Join-Path $Path "mason\__init__.py"
     if (-not (Test-Path -LiteralPath $Pyproject) -or -not (Test-Path -LiteralPath $InitFile)) {
         return $false
     }
     $Content = Get-Content -LiteralPath $Pyproject -Raw
-    return [bool]($Content -match '(?m)^name\s*=\s*"nanobot-ai"')
+    return [bool]($Content -match '(?m)^name\s*=\s*"mason"')
 }
 
 function Resolve-GitCheckout {
     param([string]$Url)
     $HomeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { $null }
-    if ($env:NANOBOT_SRC_DIR) {
-        $SrcDir = $env:NANOBOT_SRC_DIR
+    if ($env:MASON_SRC_DIR) {
+        $SrcDir = $env:MASON_SRC_DIR
     } elseif ($HomeDir) {
-        $SrcDir = Join-Path $HomeDir ".nanobot\src"
+        $SrcDir = Join-Path $HomeDir ".mason\src"
     } else {
-        Fail "Installing from a git URL needs HOME or NANOBOT_SRC_DIR to choose a clone directory."
+        Fail "Installing from a git URL needs HOME or MASON_SRC_DIR to choose a clone directory."
     }
     if ($DryRun) {
         Write-Info "Dry run: would clone or update $Url in $SrcDir."
@@ -117,7 +117,7 @@ function Resolve-GitCheckout {
     $script:RepoRoot = $SrcDir
     if ((-not $DryRun) -or (Test-Path -LiteralPath $script:RepoRoot)) {
         if (-not (Test-Checkout $script:RepoRoot)) {
-            Fail "The repository at $($script:RepoRoot) does not look like a nanobot checkout."
+            Fail "The repository at $($script:RepoRoot) does not look like a mason checkout."
         }
     }
 }
@@ -129,7 +129,7 @@ function Resolve-Checkout {
         }
         $Candidate = (Resolve-Path -LiteralPath $script:RequestedRepo).Path
         if (-not (Test-Checkout $Candidate)) {
-            Fail "--repo $Candidate is not a nanobot checkout (expected pyproject.toml with name = `"nanobot-ai`")"
+            Fail "--repo $Candidate is not a mason checkout (expected pyproject.toml with name = `"mason`")"
         }
         $script:RepoRoot = $Candidate
         return
@@ -153,7 +153,7 @@ function Resolve-Checkout {
         return
     }
 
-    Fail "No nanobot checkout found. Run this script from a clone (.\scripts\install.ps1), pass --repo PATH, or pass --git URL."
+    Fail "No mason checkout found. Run this script from a clone (.\scripts\install.ps1), pass --repo PATH, or pass --git URL."
 }
 
 function Test-Python {
@@ -219,44 +219,44 @@ function Ensure-Pip {
     }
 }
 
-function Invoke-Nanobot {
-    param([string[]]$NanobotArgs)
+function Invoke-Mason {
+    param([string[]]$MasonArgs)
 
-    switch ($script:NanobotRunner) {
+    switch ($script:MasonRunner) {
         "uv" {
-            & uv tool run --from $Package nanobot @NanobotArgs
+            & uv tool run --from $Package mason @MasonArgs
         }
         "pipx" {
-            & pipx run --spec $Package nanobot @NanobotArgs
+            & pipx run --spec $Package mason @MasonArgs
         }
         "direct" {
-            & $script:NanobotBin @NanobotArgs
+            & $script:MasonBin @MasonArgs
         }
         "python" {
-            & $script:NanobotPython -m nanobot @NanobotArgs
+            & $script:MasonPython -m mason @MasonArgs
         }
         default {
-            Fail "nanobot was installed, but no runner was configured."
+            Fail "mason was installed, but no runner was configured."
         }
     }
 }
 
-function Get-NanobotCommand {
-    switch ($script:NanobotRunner) {
-        "uv" { return "uv tool run --from $Package nanobot" }
-        "pipx" { return "pipx run --spec $Package nanobot" }
-        "direct" { return $script:NanobotBin }
-        "python" { return "$script:NanobotPython -m nanobot" }
-        default { return "nanobot" }
+function Get-MasonCommand {
+    switch ($script:MasonRunner) {
+        "uv" { return "uv tool run --from $Package mason" }
+        "pipx" { return "pipx run --spec $Package mason" }
+        "direct" { return $script:MasonBin }
+        "python" { return "$script:MasonPython -m mason" }
+        default { return "mason" }
     }
 }
 
-function Test-FreshNanobotInstall {
+function Test-FreshMasonInstall {
     $HomeDir = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
     if (-not $HomeDir) {
         return $false
     }
-    return -not (Test-Path -LiteralPath (Join-Path $HomeDir ".nanobot\config.json"))
+    return -not (Test-Path -LiteralPath (Join-Path $HomeDir ".mason\config.json"))
 }
 
 function Test-BrowserSession {
@@ -278,8 +278,8 @@ function Install-WithActivePython {
     if ($LASTEXITCODE -ne 0) {
         Show-InstallFailureHint
     }
-    $script:NanobotRunner = "python"
-    $script:NanobotPython = $Python
+    $script:MasonRunner = "python"
+    $script:MasonPython = $Python
 }
 
 function Install-WithUv {
@@ -289,7 +289,7 @@ function Install-WithUv {
     if ($LASTEXITCODE -ne 0) {
         return
     }
-    $script:NanobotRunner = "uv"
+    $script:MasonRunner = "uv"
     $script:LastInstallSucceeded = $true
 }
 
@@ -312,15 +312,15 @@ function Install-WithPipx {
     }
     if ($PipxBinDir) {
         $PipxBinDir = "$PipxBinDir".Trim()
-        $Candidate = Join-Path $PipxBinDir "nanobot.exe"
+        $Candidate = Join-Path $PipxBinDir "mason.exe"
         if (Test-Path -LiteralPath $Candidate) {
-            $script:NanobotRunner = "direct"
-            $script:NanobotBin = $Candidate
+            $script:MasonRunner = "direct"
+            $script:MasonBin = $Candidate
             $script:LastInstallSucceeded = $true
             return
         }
     }
-    $script:NanobotRunner = "pipx"
+    $script:MasonRunner = "pipx"
     $script:LastInstallSucceeded = $true
 }
 
@@ -330,7 +330,7 @@ function Install-WithManagedVenv {
         Fail "HOME is not set; cannot create a managed virtual environment."
     }
 
-    $VenvDir = if ($env:NANOBOT_VENV) { $env:NANOBOT_VENV } else { Join-Path $HomeDir ".nanobot\venv" }
+    $VenvDir = if ($env:MASON_VENV) { $env:MASON_VENV } else { Join-Path $HomeDir ".mason\venv" }
     $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 
     if (-not (Test-Path $VenvPython)) {
@@ -346,7 +346,7 @@ function Install-WithManagedVenv {
     }
 
     if (-not (Test-Python $VenvPython)) {
-        Fail "The managed venv uses Python older than 3.11. Remove it or set NANOBOT_VENV to a new path."
+        Fail "The managed venv uses Python older than 3.11. Remove it or set MASON_VENV to a new path."
     }
 
     Write-Info "Installing $($script:InstallSource) in $VenvDir..."
@@ -356,8 +356,8 @@ function Install-WithManagedVenv {
         Show-InstallFailureHint
     }
 
-    $script:NanobotRunner = "python"
-    $script:NanobotPython = $VenvPython
+    $script:MasonRunner = "python"
+    $script:MasonPython = $VenvPython
 }
 
 for ($Index = 0; $Index -lt $RemainingArgs.Count; $Index++) {
@@ -409,25 +409,25 @@ Resolve-Checkout
 $script:InstallSource = "the checkout at $($script:RepoRoot)"
 
 if ($DryRun) {
-    Write-Info "Dry run: would install or upgrade nanobot from $($script:InstallSource)."
+    Write-Info "Dry run: would install or upgrade mason from $($script:InstallSource)."
     if (Test-VirtualEnv $Python) {
         Write-Info "Dry run: active virtual environment detected; would run: $Python -m pip install --upgrade --editable $script:RepoRoot"
-        Write-Info "Dry run: would run nanobot as: $Python -m nanobot"
+        Write-Info "Dry run: would run mason as: $Python -m mason"
     } elseif (Get-Command uv -ErrorAction SilentlyContinue) {
         Write-Info "Dry run: would run: uv tool install --python $Python --force --upgrade --editable $script:RepoRoot"
-        Write-Info "Dry run: would run nanobot as: uv tool run --from $Package nanobot"
+        Write-Info "Dry run: would run mason as: uv tool run --from $Package mason"
     } elseif (Get-Command pipx -ErrorAction SilentlyContinue) {
         Write-Info "Dry run: would run: pipx install --python $Python --force --editable $script:RepoRoot"
-        Write-Info "Dry run: would run nanobot as: pipx run --spec $Package nanobot"
+        Write-Info "Dry run: would run mason as: pipx run --spec $Package mason"
     } else {
         $HomeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { "~" }
-        $VenvDir = if ($env:NANOBOT_VENV) { $env:NANOBOT_VENV } else { Join-Path $HomeDir ".nanobot\venv" }
+        $VenvDir = if ($env:MASON_VENV) { $env:MASON_VENV } else { Join-Path $HomeDir ".mason\venv" }
         Write-Info "Dry run: would create or reuse a dedicated virtual environment: $VenvDir"
         Write-Info "Dry run: would run: $VenvDir\Scripts\python.exe -m pip install --upgrade --editable $script:RepoRoot"
-        Write-Info "Dry run: would run nanobot as: $VenvDir\Scripts\python.exe -m nanobot"
+        Write-Info "Dry run: would run mason as: $VenvDir\Scripts\python.exe -m mason"
     }
-    if ($env:NANOBOT_SKIP_WIZARD -eq "1") {
-        Write-Info "Dry run: would skip automatic setup because NANOBOT_SKIP_WIZARD=1."
+    if ($env:MASON_SKIP_WIZARD -eq "1") {
+        Write-Info "Dry run: would skip automatic setup because MASON_SKIP_WIZARD=1."
     } else {
         Write-Info "Dry run: would run the setup wizard."
     }
@@ -462,22 +462,22 @@ if (Test-VirtualEnv $Python) {
     }
 }
 
-Write-Info "Installed nanobot:"
-Invoke-Nanobot @("--version")
+Write-Info "Installed mason:"
+Invoke-Mason @("--version")
 if ($LASTEXITCODE -ne 0) {
-    Fail "nanobot was installed, but the command could not be started."
+    Fail "mason was installed, but the command could not be started."
 }
 
-if ($env:NANOBOT_SKIP_WIZARD -eq "1") {
-    Write-Info "Skipping automatic setup because NANOBOT_SKIP_WIZARD=1."
-    Write-Info "Run this later: $(Get-NanobotCommand) onboard"
+if ($env:MASON_SKIP_WIZARD -eq "1") {
+    Write-Info "Skipping automatic setup because MASON_SKIP_WIZARD=1."
+    Write-Info "Run this later: $(Get-MasonCommand) onboard"
     return
 }
 
 Write-Info "Starting setup wizard..."
-Invoke-Nanobot @("onboard", "--wizard")
+Invoke-Mason @("onboard", "--wizard")
 if ($LASTEXITCODE -ne 0) {
     Fail "Setup wizard did not complete."
 }
 
-Write-Info "Done. Try: $(Get-NanobotCommand) agent -m `"Hello!`""
+Write-Info "Done. Try: $(Get-MasonCommand) agent -m `"Hello!`""

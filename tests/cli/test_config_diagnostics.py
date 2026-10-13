@@ -3,8 +3,8 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from nanobot.cli.commands import app
-from nanobot.gateway import GatewayRuntime, RuntimeResult
+from mason.cli.commands import app
+from mason.gateway import GatewayRuntime, RuntimeResult
 
 runner = CliRunner()
 
@@ -57,7 +57,7 @@ def test_status_reports_ready_provider_and_next_step(tmp_path) -> None:
     assert "Agent: ✓ provider/model configuration is ready" in result.stdout
     assert "Ollama:" in result.stdout
     assert "Model: ollama/llama3.2" in result.stdout
-    assert 'nanobot agent -m "Hello!"' in result.stdout
+    assert 'mason agent -m "Hello!"' in result.stdout
     assert "Status does not call the model" in result.stdout
 
 
@@ -65,7 +65,7 @@ def test_status_validates_bedrock_without_constructing_provider(
     tmp_path,
     monkeypatch,
 ) -> None:
-    from nanobot.providers.bedrock_provider import BedrockProvider
+    from mason.providers.bedrock_provider import BedrockProvider
 
     config_path = tmp_path / "config.json"
     config_path.write_text(
@@ -128,8 +128,8 @@ def test_status_reports_missing_key_for_anthropic_backends(
     assert f"Agent: ✗ No API key configured for provider '{provider}'." in output
     assert f"{label}: not set" in output
     assert "provider/model configuration is ready" not in output
-    assert 'Next: nanobot agent -m "Hello!"' not in output
-    assert "nanobot onboard --wizard" in output
+    assert 'Next: mason agent -m "Hello!"' not in output
+    assert "mason onboard --wizard" in output
 
 
 @pytest.mark.parametrize(
@@ -162,7 +162,7 @@ def test_status_accepts_resolved_key_for_anthropic_backends(
     assert result.exit_code == 0
     assert "Agent: ✓ provider/model configuration is ready" in result.stdout
     assert f"{label}: ✓" in result.stdout
-    assert 'nanobot agent -m "Hello!"' in result.stdout
+    assert 'mason agent -m "Hello!"' in result.stdout
 
 
 def test_status_reports_missing_provider_with_shortest_setup_routes(tmp_path) -> None:
@@ -174,8 +174,8 @@ def test_status_reports_missing_provider_with_shortest_setup_routes(tmp_path) ->
     assert result.exit_code == 0
     assert "Agent: ✗" in result.stdout
     assert "No provider is configured for model" in result.stdout
-    assert "nanobot onboard --wizard" in result.stdout
-    assert "nanobot status --config" in result.stdout
+    assert "mason onboard --wizard" in result.stdout
+    assert "mason status --config" in result.stdout
 
 
 def test_status_readiness_does_not_validate_channel_configuration(tmp_path) -> None:
@@ -222,7 +222,7 @@ def test_status_reports_field_without_exposing_secret(tmp_path) -> None:
 
 
 def test_status_reports_missing_env_var_at_field(tmp_path, monkeypatch) -> None:
-    name = "NANOBOT_TEST_STATUS_MISSING"
+    name = "MASON_TEST_STATUS_MISSING"
     monkeypatch.delenv(name, raising=False)
     config_path = tmp_path / "config.json"
     config_path.write_text(
@@ -245,15 +245,15 @@ def test_gateway_reports_malformed_environment_config_without_traceback(
 ) -> None:
     config_path = tmp_path / "missing.json"
     invalid_value = "sensitive-not-json"
-    monkeypatch.setenv("NANOBOT_PROVIDERS", invalid_value)
-    monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
+    monkeypatch.setenv("MASON_PROVIDERS", invalid_value)
+    monkeypatch.setattr("mason.config.loader._current_config_path", config_path)
 
     result = runner.invoke(app, ["gateway"])
 
     assert result.exit_code == 1
     assert isinstance(result.exception, SystemExit)
     assert "Environment-based configuration could not be parsed" in result.stdout
-    assert "nanobot status --config" in result.stdout
+    assert "mason status --config" in result.stdout
     assert invalid_value not in result.stdout
     assert not config_path.exists()
 
@@ -273,7 +273,7 @@ def test_agent_entrypoints_point_invalid_config_to_status(tmp_path, args: list[s
 
     assert result.exit_code == 1
     assert "Invalid configuration" in result.stdout
-    assert "nanobot status --config" in result.stdout
+    assert "mason status --config" in result.stdout
     assert "Traceback" not in result.stdout
 
 
@@ -293,8 +293,8 @@ def test_agent_provider_setup_failure_points_to_shortest_routes(tmp_path) -> Non
 
     assert result.exit_code == 1
     assert "Agent cannot start: No provider is configured for model" in output
-    assert "nanobot onboard --wizard" in output
-    assert "nanobot status --config" in output
+    assert "mason onboard --wizard" in output
+    assert "mason status --config" in output
     assert "Traceback" not in output
     assert not workspace.exists()
 
@@ -330,8 +330,8 @@ def test_gateway_provider_setup_failure_points_to_shortest_routes(
 
     assert result.exit_code == 1
     assert "Gateway cannot start: No provider is configured for model" in output
-    assert "nanobot onboard --wizard" in output
-    assert "nanobot status --config" in output
+    assert "mason onboard --wizard" in output
+    assert "mason status --config" in output
     assert config_path.name in output
     assert "Traceback" not in output
     assert not workspace.exists()
@@ -343,7 +343,7 @@ def test_gateway_provider_setup_failure_points_to_shortest_routes(
         (
             ["gateway"],
             "Invalid configuration:",
-            "nanobot status --config",
+            "mason status --config",
         ),
     ],
 )
@@ -384,4 +384,4 @@ def test_status_missing_file_points_to_setup_without_changing_exit_contract(tmp_
 
     assert result.exit_code == 0
     assert "configuration file not found" in result.stdout
-    assert "nanobot onboard --wizard" in result.stdout
+    assert "mason onboard --wizard" in result.stdout

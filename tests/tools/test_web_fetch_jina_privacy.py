@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from nanobot.agent.tools import web as web_module
-from nanobot.agent.tools.web import (
+from mason.agent.tools import web as web_module
+from mason.agent.tools.web import (
     WebFetchTool,
     _redact_url_for_log,
     _url_carries_credentials,
@@ -52,7 +52,7 @@ class _RecordingJinaClient:
 @pytest.fixture
 def jina_client():
     _RecordingJinaClient.requested = []
-    with patch("nanobot.agent.tools.web.httpx.AsyncClient", _RecordingJinaClient):
+    with patch("mason.agent.tools.web.httpx.AsyncClient", _RecordingJinaClient):
         yield _RecordingJinaClient
 
 
@@ -203,10 +203,10 @@ async def test_execute_fetches_credential_urls_locally(monkeypatch) -> None:
             return FakeResponse()
 
     monkeypatch.setattr(tool, "_extract_readable_html", lambda html, mode: "ok")
-    monkeypatch.setattr("nanobot.agent.tools.web.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("mason.agent.tools.web.httpx.AsyncClient", FakeClient)
     monkeypatch.setattr(web_module, "_pinned_dns_transport", lambda: object())
 
-    with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_public):
+    with patch("mason.security.network.socket.getaddrinfo", _fake_resolve_public):
         result = await tool.execute(url="https://example.com/download?token=abc123")
 
     data = json.loads(result)
@@ -267,10 +267,10 @@ async def test_execute_does_not_send_redirected_credential_url_to_jina(monkeypat
             return FakeResponse()
 
     monkeypatch.setattr(tool, "_extract_readable_html", lambda html, mode: "ok")
-    monkeypatch.setattr("nanobot.agent.tools.web.httpx.AsyncClient", FakeClient)
+    monkeypatch.setattr("mason.agent.tools.web.httpx.AsyncClient", FakeClient)
     monkeypatch.setattr(web_module, "_pinned_dns_transport", lambda: object())
 
-    with patch("nanobot.security.network.socket.getaddrinfo", _fake_resolve_public):
+    with patch("mason.security.network.socket.getaddrinfo", _fake_resolve_public):
         result = await tool.execute(url=short_url)
 
     data = json.loads(result)

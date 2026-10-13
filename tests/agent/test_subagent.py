@@ -6,15 +6,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.runner import AgentRunResult
-from nanobot.agent.subagent import SubagentManager, SubagentStatus
-from nanobot.agent.tools.filesystem import FileToolsConfig
-from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import ToolsConfig
-from nanobot.llm_usage.context import llm_usage_source
-from nanobot.providers.base import GenerationSettings, LLMProvider, LLMResponse, ToolCallRequest
-from nanobot.security.workspace_access import build_workspace_scope
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.agent.runner import AgentRunResult
+from mason.agent.subagent import SubagentManager, SubagentStatus
+from mason.agent.tools.filesystem import FileToolsConfig
+from mason.bus.queue import MessageBus
+from mason.config.schema import ToolsConfig
+from mason.llm_usage.context import llm_usage_source
+from mason.providers.base import GenerationSettings, LLMProvider, LLMResponse, ToolCallRequest
+from mason.security.workspace_access import build_workspace_scope
+from mason.utils.llm_runtime import LLMRuntime
 
 
 def _runtime(provider: LLMProvider) -> LLMRuntime:
@@ -105,7 +105,7 @@ def test_subagent_prompt_keeps_agent_paths_for_selected_project(tmp_path):
     assert "one root and relative SKILL.md paths" in prompt
     assert "Join them when using `read_file`" in prompt
     assert str(project.resolve()) not in prompt
-    assert f"Nanobot's agent workspace: {agent_workspace.resolve()}" in prompt
+    assert f"Mason's agent workspace: {agent_workspace.resolve()}" in prompt
     assert f"History log: {agent_workspace.resolve() / 'memory' / 'history.jsonl'}" in prompt
     assert "global-custom" in prompt
     assert "project-custom" not in prompt

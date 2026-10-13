@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nanobot.session.goal_state import (
+from mason.session.goal_state import (
     GOAL_STATE_KEY,
     MAX_GOAL_OBJECTIVE_CHARS,
     discard_legacy_goal_state_key,

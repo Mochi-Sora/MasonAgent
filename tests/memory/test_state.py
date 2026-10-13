@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nanobot.memory.state import MemoryState
+from mason.memory.state import MemoryState
 
 
 def test_state_path_is_workspace_memory(tmp_path: Path) -> None:

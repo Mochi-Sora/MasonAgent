@@ -8,19 +8,19 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agent.runner_helpers import failed_test_consolidator
-from nanobot.agent.progress_hook import AgentProgressHook
-from nanobot.agent.runner import AgentRunner, AgentRunSpec
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.turn_delivery import TurnDeliveryFactory
-from nanobot.bus.events import InboundMessage, OutboundMessage
-from nanobot.bus.outbound_events import StreamDeltaEvent, StreamEndEvent
-from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import Config, ModelPresetConfig
-from nanobot.events import EventSink, ResponseSource, ResponseSourceEvent
-from nanobot.providers.base import LLMProvider, LLMResponse, ProviderCallContext
-from nanobot.providers.factory import make_provider, provider_signature
-from nanobot.providers.fallback_provider import FallbackProvider
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.agent.progress_hook import AgentProgressHook
+from mason.agent.runner import AgentRunner, AgentRunSpec
+from mason.agent.tools.registry import ToolRegistry
+from mason.agent.turn_delivery import TurnDeliveryFactory
+from mason.bus.events import InboundMessage, OutboundMessage
+from mason.bus.outbound_events import StreamDeltaEvent, StreamEndEvent
+from mason.bus.queue import MessageBus
+from mason.config.schema import Config, ModelPresetConfig
+from mason.events import EventSink, ResponseSource, ResponseSourceEvent
+from mason.providers.base import LLMProvider, LLMResponse, ProviderCallContext
+from mason.providers.factory import make_provider, provider_signature
+from mason.providers.fallback_provider import FallbackProvider
+from mason.utils.llm_runtime import LLMRuntime
 
 
 class AnswerProvider(LLMProvider):

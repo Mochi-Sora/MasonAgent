@@ -1,9 +1,9 @@
 from unittest.mock import MagicMock
 
-from nanobot.providers.base import ProviderConversationState
-from nanobot.session import Session, SessionManager
-from nanobot.session.manager import SessionStore
-from nanobot.session.model_selection import SESSION_MODEL_PRESET_METADATA_KEY
+from mason.providers.base import ProviderConversationState
+from mason.session import Session, SessionManager
+from mason.session.manager import SessionStore
+from mason.session.model_selection import SESSION_MODEL_PRESET_METADATA_KEY
 
 
 def test_manager_delegates_persistence_to_store(tmp_path) -> None:

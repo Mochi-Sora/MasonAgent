@@ -5,9 +5,9 @@ from __future__ import annotations
 import sys
 from collections.abc import Sequence
 
-from nanobot.channels.plugin import ChannelPlugin
-from nanobot.channels.registry import discover_plugins
-from nanobot.optional_features import (
+from mason.channels.plugin import ChannelPlugin
+from mason.channels.registry import discover_plugins
+from mason.optional_features import (
     ensure_enabled_channel_dependencies,
     extra_installed,
     install_args_for_extra,

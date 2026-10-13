@@ -9,15 +9,15 @@ import pytest
 from agent.runner_helpers import failed_test_consolidator
 from openai import AsyncOpenAI
 
-from nanobot.agent.hook import AgentHook
-from nanobot.agent.memory import MemoryArchiver, MemoryStore
-from nanobot.agent.runner import AgentRunner, AgentRunSpec
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
-from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
-from nanobot.providers.openai_compat_provider import OpenAICompatProvider
-from nanobot.providers.registry import ProviderSpec
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.agent.hook import AgentHook
+from mason.agent.memory import MemoryArchiver, MemoryStore
+from mason.agent.runner import AgentRunner, AgentRunSpec
+from mason.agent.tools.registry import ToolRegistry
+from mason.providers.azure_openai_provider import AzureOpenAIProvider
+from mason.providers.base import LLMProvider, LLMResponse, ToolCallRequest
+from mason.providers.openai_compat_provider import OpenAICompatProvider
+from mason.providers.registry import ProviderSpec
+from mason.utils.llm_runtime import LLMRuntime
 
 
 class _EventStream(httpx.AsyncByteStream):
@@ -74,7 +74,7 @@ def _events(api: str, kind: str) -> list[dict]:
 
 @pytest.fixture
 async def make_provider(monkeypatch):
-    monkeypatch.setenv("NANOBOT_STREAM_IDLE_TIMEOUT_S", "0.3")
+    monkeypatch.setenv("MASON_STREAM_IDLE_TIMEOUT_S", "0.3")
     clients = []
 
     async def make(api: str, kind: str, *, stall_at: int | None = None):
@@ -181,7 +181,7 @@ async def test_archive_preserves_raw_history_after_truncated_stream_retries(
 async def test_runner_streams_past_old_wall_limit_with_optional_ui(
     make_provider, monkeypatch, show_deltas,
 ):
-    monkeypatch.setenv("NANOBOT_LLM_TIMEOUT_S", "0.01")
+    monkeypatch.setenv("MASON_LLM_TIMEOUT_S", "0.01")
     provider, _ = await make_provider("chat", "reasoning")
     content_deltas = []
 
@@ -206,7 +206,7 @@ async def test_runner_streams_past_old_wall_limit_with_optional_ui(
 
 @pytest.mark.parametrize("finalize", [False, True], ids=["model-request", "finalization"])
 async def test_chat_only_provider_still_has_a_timeout(monkeypatch, finalize):
-    monkeypatch.setenv("NANOBOT_STREAM_IDLE_TIMEOUT_S", "0.05")
+    monkeypatch.setenv("MASON_STREAM_IDLE_TIMEOUT_S", "0.05")
 
     class ChatOnlyProvider(LLMProvider):
         _CHAT_RETRY_DELAYS = ()

@@ -6,13 +6,13 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from agent.runner_helpers import make_run_spec
-from nanobot.agent.runner import AgentRunner
-from nanobot.agent.tools.base import Tool
-from nanobot.agent.tools.capability_gate import CapabilityGate
-from nanobot.agent.tools.capability_search import FindCapabilitiesTool
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.config.schema import AgentDefaults
-from nanobot.providers.base import LLMResponse, ToolCallRequest
+from mason.agent.runner import AgentRunner
+from mason.agent.tools.base import Tool
+from mason.agent.tools.capability_gate import CapabilityGate
+from mason.agent.tools.capability_search import FindCapabilitiesTool
+from mason.agent.tools.registry import ToolRegistry
+from mason.config.schema import AgentDefaults
+from mason.providers.base import LLMResponse, ToolCallRequest
 
 _MAX_TOOL_RESULT_CHARS = AgentDefaults().max_tool_result_chars
 
@@ -118,7 +118,7 @@ async def test_runner_without_gate_sends_every_tool() -> None:
 
 
 async def test_runner_binds_gate_for_tool_execution_and_resets_it() -> None:
-    from nanobot.agent.tools.capability_gate import current_capability_gate
+    from mason.agent.tools.capability_gate import current_capability_gate
 
     registry = ToolRegistry()
     gate = CapabilityGate(registry=registry)

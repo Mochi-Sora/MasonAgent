@@ -1,4 +1,4 @@
-# nanobot Task Guides
+# mason Task Guides
 
 Start with [Install and Quick Start](../quick-start.md) and get one reply before using a guide below. Each guide targets one outcome; linked reference pages hold the complete option tables and edge cases.
 
@@ -14,7 +14,7 @@ Start with [Install and Quick Start](../quick-start.md) and get one reply before
 
 ## Connect a Chat App
 
-Use `nanobot onboard --wizard` for guided setup. These guides explain the account, bot, token, permission, and test-message steps on each platform.
+Use `mason onboard --wizard` for guided setup. These guides explain the account, bot, token, permission, and test-message steps on each platform.
 
 | Goal | Guide |
 |---|---|
@@ -48,4 +48,4 @@ Use `nanobot onboard --wizard` for guided setup. These guides explain the accoun
 | Improve Ollama tool prompt-cache reuse | [Configure Ollama prompt caching](./configure-ollama-prompt-cache.md) |
 | Add Langfuse tracing | [Configure Langfuse observability](./configure-langfuse-observability.md) |
 | Secure local tools | [Secure a local AI agent](./secure-local-ai-agent.md) |
-| Deploy the gateway | [Deploy nanobot gateway](./deploy-nanobot-gateway.md) |
+| Deploy the gateway | [Deploy mason gateway](./deploy-mason-gateway.md) |

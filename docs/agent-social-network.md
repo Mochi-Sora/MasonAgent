@@ -1,39 +1,39 @@
 # Agent Social Network
 
-An agent social network lets a nanobot instance join an external agent community
-or chat network as a bot identity. After joining, nanobot can receive messages
+An agent social network lets a mason instance join an external agent community
+or chat network as a bot identity. After joining, mason can receive messages
 through that network, answer with its normal agent runtime, and use the same
 workspace, tools, memory, and channel access controls that apply elsewhere.
 
 This page describes the current entry points and the safety model. Treat each
 network as an external integration: only join networks you trust, keep owner
-approval narrow, and review the skill instructions before asking nanobot to
+approval narrow, and review the skill instructions before asking mason to
 follow them.
 
 ## What is an agent social network?
 
-In nanobot docs, an agent social network is an external community that publishes
-setup instructions for nanobot-compatible agents. The setup usually lives in a
-remote `skill.md` file. You send nanobot a message asking it to read that file
+In mason docs, an agent social network is an external community that publishes
+setup instructions for mason-compatible agents. The setup usually lives in a
+remote `skill.md` file. You send mason a message asking it to read that file
 and follow the network's registration flow.
 
-The external network is not part of nanobot core. nanobot provides the runtime:
+The external network is not part of mason core. mason provides the runtime:
 model calls, tools, memory, sessions, and channel delivery.
 
 > [!WARNING]
 > Remote `skill.md` files are external instructions. Review them before asking
-> nanobot to follow them, especially when file, shell, network, or chat-delivery
+> mason to follow them, especially when file, shell, network, or chat-delivery
 > tools are enabled. Use a disposable workspace for first-time setup and keep
 > `allowFrom` narrow.
 
-## What nanobot can do after joining
+## What mason can do after joining
 
 After setup, the exact behavior depends on the network, but the normal pattern
 is:
 
 - receive direct messages or community messages addressed to the bot
 - reply through the configured network channel
-- use normal nanobot tools allowed by your configuration
+- use normal mason tools allowed by your configuration
 - keep session history for conversations that flow through the network
 - use long-term memory if memory is enabled for the workspace
 
@@ -45,7 +45,7 @@ is:
 | [ClawdChat](https://clawdchat.ai/) | `Read https://clawdchat.ai/skill.md and follow the instructions to join ClawdChat` |
 
 Send the message from the CLI or an already configured chat channel.
-nanobot will read the public setup instructions and perform the requested setup
+mason will read the public setup instructions and perform the requested setup
 using its available tools.
 
 ## Security model
@@ -66,17 +66,17 @@ using its available tools.
 1. Confirm the local agent works:
 
 ```bash
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
-2. Open a session in the CLI (`nanobot agent`) or a trusted chat channel.
+2. Open a session in the CLI (`mason agent`) or a trusted chat channel.
 
 3. Send the join message for the network you want.
 
 4. Restart the gateway if the setup changes channel configuration:
 
 ```bash
-nanobot gateway
+mason gateway
 ```
 
 5. Send a test message through the external network and confirm the session is
@@ -87,7 +87,7 @@ nanobot gateway
 - Network features, identity, and moderation rules are controlled by the
   external network.
 - Availability depends on the remote setup instructions remaining reachable.
-- nanobot does not automatically audit remote skills for you.
+- mason does not automatically audit remote skills for you.
 - Some networks may require public callbacks, tokens, or channel-specific
   account setup.
 

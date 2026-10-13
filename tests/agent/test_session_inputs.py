@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import LLMResponse
-from nanobot.runtime_context import public_history_message
-from nanobot.session.session_messages import SESSION_MESSAGE_METADATA_KEY
+from mason.agent.loop import AgentLoop
+from mason.bus.events import InboundMessage
+from mason.bus.queue import MessageBus
+from mason.providers.base import LLMResponse
+from mason.runtime_context import public_history_message
+from mason.session.session_messages import SESSION_MESSAGE_METADATA_KEY
 
 
 def _loop(tmp_path: Path) -> AgentLoop:
@@ -53,7 +53,7 @@ async def test_session_message_runs_as_user_input_and_replies_on_target_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr("mason.config.paths.get_data_dir", lambda: tmp_path / "state")
     loop = _loop(tmp_path)
     loop.sessions.save(loop.sessions.get_or_create("telegram:target"))
     msg = _message()
@@ -85,7 +85,7 @@ async def test_session_message_text_is_not_dispatched_as_a_slash_command(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr("mason.config.paths.get_data_dir", lambda: tmp_path / "state")
     loop = _loop(tmp_path)
     loop.sessions.save(loop.sessions.get_or_create("telegram:target"))
     task = asyncio.create_task(loop.run())

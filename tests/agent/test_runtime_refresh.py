@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.queue import MessageBus
-from nanobot.bus.runtime_events import RuntimeModelChanged
-from nanobot.config.errors import ConfigLoadError
-from nanobot.config.schema import ModelPresetConfig
-from nanobot.providers.base import GenerationSettings
-from nanobot.providers.factory import ProviderSnapshot, load_provider_snapshot
-from nanobot.session.model_selection import (
+from mason.agent.loop import AgentLoop
+from mason.bus.queue import MessageBus
+from mason.bus.runtime_events import RuntimeModelChanged
+from mason.config.errors import ConfigLoadError
+from mason.config.schema import ModelPresetConfig
+from mason.providers.base import GenerationSettings
+from mason.providers.factory import ProviderSnapshot, load_provider_snapshot
+from mason.session.model_selection import (
     SESSION_MODEL_PRESET_METADATA_KEY,
     model_preset_from_metadata,
 )
@@ -99,7 +99,7 @@ def test_provider_snapshot_missing_env_reports_explicit_config_path(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    name = "NANOBOT_TEST_REFRESH_MISSING_KEY"
+    name = "MASON_TEST_REFRESH_MISSING_KEY"
     monkeypatch.delenv(name, raising=False)
     config_path = tmp_path / "custom.json"
     config_path.write_text(

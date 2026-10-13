@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.turn_delivery import TurnDeliveryFactory
-from nanobot.bus.events import OutboundMessage
-from nanobot.bus.queue import MessageBus
-from nanobot.session.manager import SessionManager
-from nanobot.session.recovery import RECOVERY_METADATA_KEY, RecoveryCoordinator
-from nanobot.session.turn_continuation import INTERNAL_CONTINUATION_META
+from mason.agent.loop import AgentLoop
+from mason.agent.turn_delivery import TurnDeliveryFactory
+from mason.bus.events import OutboundMessage
+from mason.bus.queue import MessageBus
+from mason.session.manager import SessionManager
+from mason.session.recovery import RECOVERY_METADATA_KEY, RecoveryCoordinator
+from mason.session.turn_continuation import INTERNAL_CONTINUATION_META
 
 
 @pytest.mark.asyncio

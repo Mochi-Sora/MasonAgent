@@ -77,7 +77,7 @@ jobs:
                   python_required=true
                   docker_required=true
                   ;;
-                nanobot/*)
+                mason/*)
                   python_required=true
                   docker_required=true
                   ;;
@@ -170,7 +170,7 @@ jobs:
       # later uv run sync pruning the packages installed by the previous step.
       - name: Lint with ruff
         if: matrix.coverage
-        run: uv run --no-sync ruff check nanobot tests conftest.py
+        run: uv run --no-sync ruff check mason tests conftest.py
 
       - name: Type check with BasedPyright (strict)
         if: matrix.coverage
@@ -181,7 +181,7 @@ jobs:
         run: >-
           uv run --no-sync python -m pytest
           ${{ matrix.pytest_args }}
-          --cov=nanobot --cov-report=term-missing:skip-covered
+          --cov=mason --cov-report=term-missing:skip-covered
           -vv -o faulthandler_timeout=60
           --durations=25 --durations-min=1.0
 
@@ -190,7 +190,7 @@ jobs:
         run: >-
           uv run --no-sync python -m pytest
           tests/cli/test_commands.py
-          --cov=nanobot --cov-append --cov-report=term-missing:skip-covered
+          --cov=mason --cov-append --cov-report=term-missing:skip-covered
           --durations=25 --durations-min=1.0
 
       - name: Run compatibility tests
@@ -253,21 +253,21 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image with default channel dependencies
-        run: docker build -t nanobot:test .
+        run: docker build -t mason:test .
 
       - name: Verify Docker Compose startup and privilege boundary
         env:
           HOME: ${{ runner.temp }}
         run: |
-          docker compose run --rm --no-deps --build -T nanobot-cli status
-          docker compose run --rm --no-deps -T --entrypoint sh nanobot-cli -s <<'OUTER'
+          docker compose run --rm --no-deps --build -T mason-cli status
+          docker compose run --rm --no-deps -T --entrypoint sh mason-cli -s <<'OUTER'
           set -eu
           field() {
             awk -v key="$1:" '$1 == key { print $2 }' /proc/self/status
           }
           test "$(id -u)" = "0"
           test "$(field NoNewPrivs)" = "1"
-          setpriv --reuid=nanobot --regid=nanobot --init-groups sh -s <<'INNER'
+          setpriv --reuid=mason --regid=mason --init-groups sh -s <<'INNER'
           set -eu
           field() {
             awk -v key="$1:" '$1 == key { print $2 }' /proc/self/status
@@ -287,17 +287,17 @@ jobs:
           from pathlib import Path
 
           config = json.loads(Path(os.environ["RUNNER_TEMP"], "bwrap-compose.json").read_text())
-          for service_name in ("nanobot-gateway", "nanobot-api", "nanobot-cli"):
+          for service_name in ("mason-gateway", "mason-api", "mason-cli"):
               service = config["services"][service_name]
               assert {"CHOWN", "SETGID", "SETUID", "SYS_ADMIN"} <= set(service["cap_add"])
               assert "no-new-privileges:true" in service["security_opt"]
           PY
 
       - name: Verify default WhatsApp dependencies
-        run: docker run --rm --entrypoint python nanobot:test -c "import neonize, segno"
+        run: docker run --rm --entrypoint python mason:test -c "import neonize, segno"
 
       - name: Verify runtime dependency permissions
         run: >-
-          docker run --rm --user 1000:1000 --entrypoint sh nanobot:test -c
-          'test -w /app/.venv && test ! -w /app && test ! -w /app/nanobot &&
+          docker run --rm --user 1000:1000 --entrypoint sh mason:test -c
+          'test -w /app/.venv && test ! -w /app && test ! -w /app/mason &&
           python -m scripts.install_channel_dependencies discord && python -c "import discord"'

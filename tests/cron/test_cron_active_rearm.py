@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.cron.service import CronService
-from nanobot.cron.types import CronJob, CronSchedule
+from mason.cron.service import CronService
+from mason.cron.types import CronJob, CronSchedule
 
 
 @pytest.mark.asyncio

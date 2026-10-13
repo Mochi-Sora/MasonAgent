@@ -7,8 +7,8 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 from oauth_cli_kit.models import OAuthToken
 
-import nanobot.providers.openai_codex_oauth as codex_oauth
-from nanobot.providers.openai_codex_oauth import (
+import mason.providers.openai_codex_oauth as codex_oauth
+from mason.providers.openai_codex_oauth import (
     OpenAICodexOAuthError,
     OpenAICodexOAuthInputError,
     complete_openai_codex_oauth_login,

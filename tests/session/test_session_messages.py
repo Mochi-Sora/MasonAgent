@@ -1,4 +1,4 @@
-from nanobot.session.session_messages import (
+from mason.session.session_messages import (
     SESSION_MESSAGE_METADATA_KEY,
     SessionMessageEnvelope,
     session_message_envelope,

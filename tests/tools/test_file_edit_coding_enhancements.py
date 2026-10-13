@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-from nanobot.agent.tools.file_state import file_read_context
-from nanobot.agent.tools.filesystem import EditFileTool, ReadFileTool
+from mason.agent.tools.file_state import file_read_context
+from mason.agent.tools.filesystem import EditFileTool, ReadFileTool
 
 
 def test_read_file_force_bypasses_dedup(tmp_path):

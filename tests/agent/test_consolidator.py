@@ -5,28 +5,28 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.memory import (
+from mason.agent.memory import (
     _ARCHIVE_TOOL_RESULT,
     _HISTORY_ENTRY_HARD_CAP,
     Consolidator,
     MemoryStore,
 )
-from nanobot.events import AgentEvent, ContextCompactionEvent, EventSink
-from nanobot.providers.base import (
+from mason.events import AgentEvent, ContextCompactionEvent, EventSink
+from mason.providers.base import (
     GenerationSettings,
     LLMResponse,
     ProviderConversationState,
     ToolCallRequest,
 )
-from nanobot.runtime_context import (
+from mason.runtime_context import (
     RUNTIME_CONTEXT_HISTORY_META,
     RuntimeContextBlock,
     append_runtime_context,
 )
-from nanobot.session.keys import UNIFIED_SESSION_KEY, remember_last_channel
-from nanobot.session.manager import Session
-from nanobot.utils.llm_runtime import LLMRuntime
-from nanobot.utils.prompt_templates import render_template
+from mason.session.keys import UNIFIED_SESSION_KEY, remember_last_channel
+from mason.session.manager import Session
+from mason.utils.llm_runtime import LLMRuntime
+from mason.utils.prompt_templates import render_template
 
 _ARCHIVE_PROMPT = render_template("agent/consolidator_archive.md", strip=True)
 
@@ -280,7 +280,7 @@ class TestTurnTranscriptSummary:
 
 class TestConsolidatorSummarize:
     def test_format_messages_keeps_media_only_user_turn(self):
-        path = "/home/user/.nanobot/media/websocket/clip.mp4"
+        path = "/home/user/.mason/media/websocket/clip.mp4"
 
         formatted = MemoryStore._format_messages([
             {
@@ -519,7 +519,7 @@ class TestConsolidatorArchiveErrorHandling:
         runtime = replace(runtime, context_window_tokens=128_000)
         consolidator.store.raw_archive = MagicMock()
         monkeypatch.setattr(
-            "nanobot.agent.memory.render_template",
+            "mason.agent.memory.render_template",
             MagicMock(side_effect=RuntimeError("template failed")),
         )
         session = Session(key="test:template")
@@ -589,7 +589,7 @@ class TestCompactIdleSession:
     @pytest.fixture
     def real_consolidator(self, store, mock_provider):
         """Create a Consolidator with a real SessionManager (not a mock)."""
-        from nanobot.session.manager import SessionManager
+        from mason.session.manager import SessionManager
 
         sessions = SessionManager(store.workspace)
         return Consolidator(
@@ -1586,7 +1586,7 @@ class TestRawArchiveTruncation:
 
     @pytest.mark.parametrize("boundary", ["A ", "\n\n", "<think>PRIVATE</think>"])
     def test_raw_chunks_preserve_sanitized_boundaries(self, store, boundary):
-        from nanobot.utils.helpers import strip_think
+        from mason.utils.helpers import strip_think
 
         message = {"role": "assistant", "content": ""}
         prefix_len = len(store._format_messages([{**message, "content": "x"}])) - 1

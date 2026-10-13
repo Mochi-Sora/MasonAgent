@@ -1,30 +1,30 @@
-# Connect nanobot as a Native Linear Agent
+# Connect mason as a Native Linear Agent
 
 This guide takes you from an empty Linear channel configuration to a working
 @mention or delegated issue. You create a private Linear OAuth app, save its
-credentials in `~/.nanobot/config.json`, and authorize a workspace with
-`nanobot channels connect linear`.
+credentials in `~/.mason/config.json`, and authorize a workspace with
+`mason channels connect linear`.
 
 > [!NOTE]
 > Linear's Agent APIs are currently a Developer Preview. Their schema may
-> change. Keep nanobot current when you use this channel.
+> change. Keep mason current when you use this channel.
 
 ## What this channel does
 
 - A new task starts when someone explicitly @mentions the installed app or
   delegates an issue to it.
-- An ordinary issue comment does not invoke nanobot.
-- A follow-up inside the existing Agent Session continues the same nanobot
+- An ordinary issue comment does not invoke mason.
+- A follow-up inside the existing Agent Session continues the same mason
   session without another @mention.
-- Linear's stop control asks nanobot to cancel the active turn. The sender must
+- Linear's stop control asks mason to cancel the active turn. The sender must
   have access, just as for other requests. An activity already delivered to
   Linear cannot be recalled.
-- nanobot reports its acknowledgement, tool activity, reasoning, and final
+- mason reports its acknowledgement, tool activity, reasoning, and final
   answer as native Linear Agent Activities.
 - Button choices are sent as Linear selection activities, and local outbound
   files are uploaded to Linear before they are linked in the response.
 - Private `uploads.linear.app` links in the session prompt are downloaded with
-  the workspace OAuth token and passed to nanobot as inbound media after access
+  the workspace OAuth token and passed to mason as inbound media after access
   checks. A prompt can import up to 10 attachments and 40 MB in total; skipped
   or unavailable files are called out in the prompt instead of failing silently.
 
@@ -34,22 +34,22 @@ grant `app:assignable`.
 
 The native channel owns Agent Session transport. Connect the Linear MCP app when
 the agent also needs tools for searching or changing Linear issues; OAuth scopes
-on the channel do not expose those actions as nanobot tools. MCP does not replace
+on the channel do not expose those actions as mason tools. MCP does not replace
 the channel's OAuth installation, webhook, or Agent Session transport.
 
 ## Before you start
 
 There are two separate decisions: **connect a workspace**, then **choose who can
-use nanobot**. The administrator sets up the app once; teammates do not need to
+use mason**. The administrator sets up the app once; teammates do not need to
 create their own apps, paste credentials, or scan a code.
 
 ```text
-Prepare HTTPS → Create the Linear app → Save credentials in nanobot
+Prepare HTTPS → Create the Linear app → Save credentials in mason
              → Authorize a workspace → Enable members → Try an @mention
 ```
 
 The HTTPS address receives Linear events. OAuth installs the app in a workspace.
-Member access controls who may ask your nanobot to do work. These steps serve
+Member access controls who may ask your mason to do work. These steps serve
 different purposes; authorizing a workspace does not automatically approve all
 its members.
 
@@ -57,25 +57,25 @@ Prepare these four things:
 
 | Requirement | What you need |
 |---|---|
-| Working nanobot | `nanobot agent -m "Hello"` returns a response |
+| Working mason | `mason agent -m "Hello"` returns a response |
 | Linear access | Permission to create a private OAuth app; a workspace admin must approve its installation |
-| Public HTTPS origin | A reachable address such as `https://nanobot.example.com`; use a fixed hostname for ongoing use |
-| Local route | The public address forwards to nanobot's Linear listener, which defaults to port `3979` |
+| Public HTTPS origin | A reachable address such as `https://mason.example.com`; use a fixed hostname for ongoing use |
+| Local route | The public address forwards to mason's Linear listener, which defaults to port `3979` |
 
 The public address is an **origin**, not a complete endpoint. Enter
-`https://nanobot.example.com`, not
-`https://nanobot.example.com/linear/webhook`.
+`https://mason.example.com`, not
+`https://mason.example.com/linear/webhook`.
 
 ### Webhook and networking requirements
 
 The native Linear Agent transport requires a webhook; there is no polling mode.
-The OAuth callback also needs to reach the same nanobot instance.
+The OAuth callback also needs to reach the same mason instance.
 
 You do **not** need a public IP address when using an HTTPS tunnel such as
 Cloudflare Tunnel or Tailscale Funnel. On a publicly reachable server, Caddy,
 nginx, or another reverse proxy can provide HTTPS and forward requests to
 `127.0.0.1:3979`. Use a stable hostname for normal use: if the hostname changes,
-update `publicBaseUrl` in nanobot and both registered URLs in the Linear app.
+update `publicBaseUrl` in mason and both registered URLs in the Linear app.
 
 Choose the simplest option that matches your deployment:
 
@@ -89,8 +89,8 @@ Choose the simplest option that matches your deployment:
 With the default paths, the route must preserve these two requests:
 
 ```text
-https://nanobot.example.com/linear/oauth/callback  -> 127.0.0.1:3979
-https://nanobot.example.com/linear/webhook         -> 127.0.0.1:3979
+https://mason.example.com/linear/oauth/callback  -> 127.0.0.1:3979
+https://mason.example.com/linear/webhook         -> 127.0.0.1:3979
 ```
 
 Keep `host` at `127.0.0.1` when the proxy or tunnel runs on the same machine so
@@ -114,7 +114,7 @@ cloudflared tunnel --url http://127.0.0.1:3979
 
 Use the printed `https://<random-name>.trycloudflare.com` origin as
 `publicBaseUrl` in the setup below. Keep the tunnel running throughout
-authorization and testing. The listener starts during `nanobot channels connect
+authorization and testing. The listener starts during `mason channels connect
 linear`, so a 502 before that step can mean the local listener has not started
 yet.
 
@@ -127,7 +127,7 @@ These settings must be updated together:
 
 | Setting | Value with the new tunnel hostname |
 |---|---|
-| nanobot `publicBaseUrl` | `https://<new-hostname>.trycloudflare.com` |
+| mason `publicBaseUrl` | `https://<new-hostname>.trycloudflare.com` |
 | Linear **Redirect URIs** | `https://<new-hostname>.trycloudflare.com/linear/oauth/callback` |
 | Linear **Webhooks → URL** | `https://<new-hostname>.trycloudflare.com/linear/webhook` |
 
@@ -142,8 +142,8 @@ pointing at the old tunnel. After updating the Webhook URL, also check its
 In Linear, create a **private** OAuth application for your workspace with:
 
 ```text
-Redirect URI:  https://nanobot.example.com/linear/oauth/callback
-Webhook URL:   https://nanobot.example.com/linear/webhook
+Redirect URI:  https://mason.example.com/linear/oauth/callback
+Webhook URL:   https://mason.example.com/linear/webhook
 Webhook types: AgentSessionEvent, PermissionChange, OAuthAuthorization
 ```
 
@@ -159,12 +159,12 @@ points to the current public origin and that **Events** includes
 > [!IMPORTANT]
 > OAuth authorization and webhook delivery are separate. Authorization can
 > succeed while webhook delivery is disabled. In that state, Linear can create
-> an Agent Session, but nanobot receives no task and Linear may report
-> **Agent didn't start** or **nanobot failed to start**.
+> an Agent Session, but mason receives no task and Linear may report
+> **Agent didn't start** or **mason failed to start**.
 
-### 2. Save the credentials in nanobot
+### 2. Save the credentials in mason
 
-Merge this into `~/.nanobot/config.json`:
+Merge this into `~/.mason/config.json`:
 
 ```json
 {
@@ -174,7 +174,7 @@ Merge this into `~/.nanobot/config.json`:
       "clientId": "YOUR_LINEAR_CLIENT_ID",
       "clientSecret": "YOUR_LINEAR_CLIENT_SECRET",
       "webhookSigningSecret": "YOUR_LINEAR_WEBHOOK_SIGNING_SECRET",
-      "publicBaseUrl": "https://nanobot.example.com",
+      "publicBaseUrl": "https://mason.example.com",
       "host": "127.0.0.1",
       "port": 3979,
       "webhookPath": "/linear/webhook",
@@ -188,14 +188,14 @@ Merge this into `~/.nanobot/config.json`:
 
 Copy the values from the Linear app's settings:
 
-| Linear value | nanobot field |
+| Linear value | mason field |
 |---|---|
 | Client ID | `clientId` |
 | Client secret | `clientSecret` |
 | Webhook signing secret | `webhookSigningSecret` |
 
 Treat the Client Secret and Webhook signing secret like passwords. They belong
-only in the nanobot configuration and the Linear application settings.
+only in the mason configuration and the Linear application settings.
 
 Listener settings, callback paths, and allowed users use the same block; see
 [Configuration](../configuration.md#channel-settings) for every field.
@@ -205,7 +205,7 @@ Listener settings, callback paths, and allowed users use the same block; see
 Stop the gateway if it is already running, then run:
 
 ```bash
-nanobot channels connect linear
+mason channels connect linear
 ```
 
 1. The command prints an authorization URL. Open it in a browser.
@@ -219,19 +219,19 @@ A successful authorization prints the connected workspace. Start the gateway so
 Linear can deliver webhooks:
 
 ```bash
-nanobot gateway
+mason gateway
 ```
 
-Use `nanobot channels connect linear --force` to add or replace a workspace
+Use `mason channels connect linear --force` to add or replace a workspace
 later, `--operation inspect` to list connected workspaces, and
 `--operation disconnect --workspace-id <id>` to revoke one workspace's tokens
 and remove its local installation.
 
 The pre-filled approach above creates a private app for the current workspace. A
-distributable OAuth app can authorize additional workspaces; nanobot stores and
+distributable OAuth app can authorize additional workspaces; mason stores and
 refreshes each workspace installation separately.
 
-### 4. Choose who can use nanobot
+### 4. Choose who can use mason
 
 Access is controlled in two layers:
 
@@ -239,9 +239,9 @@ Access is controlled in two layers:
   every active member of the connected workspace.
 - Without a matching `allowFrom` entry, a member's first prompt returns a
   pairing code. Approve it with `/pairing approve <code>` from an authorized
-  chat or the local CLI (`nanobot agent -m "/pairing approve ABCD-EFGH"`).
+  chat or the local CLI (`mason agent -m "/pairing approve ABCD-EFGH"`).
 
-At request admission nanobot checks current team membership through the app's
+At request admission mason checks current team membership through the app's
 Linear API authorization, including active status and excluding app accounts.
 Directory/API failure does not authorize a task; transient failures use the
 channel's bounded webhook retry path. This adds API requests and latency, rather
@@ -258,7 +258,7 @@ By default, reasoning is posted as Linear thought activities. Set
 2. Add a comment that @mentions the app and includes a request, for example:
 
    ```text
-   @nanobot summarize the likely cause and suggest the next diagnostic step
+   @mason summarize the likely cause and suggest the next diagnostic step
    ```
 
    You can instead delegate the issue to the app to start the Agent Session.
@@ -269,12 +269,12 @@ By default, reasoning is posted as Linear thought activities. Set
 
 ## Reconnect, remove, or reset workspaces
 
-Each nanobot instance uses one configured Linear OAuth app, which may have
+Each mason instance uses one configured Linear OAuth app, which may have
 multiple workspace installations. A **private** app can only be installed in its
 own workspace. To use the same app in another workspace, its distribution must
-allow that installation in Linear; changing a nanobot field cannot bypass this.
+allow that installation in Linear; changing a mason field cannot bypass this.
 
-- **Add or replace a workspace**: run `nanobot channels connect linear --force`.
+- **Add or replace a workspace**: run `mason channels connect linear --force`.
   Choose the other workspace in Linear, review team access, and authorize. You
   do not need another HTTPS address or another set of app credentials for the
   same app.
@@ -282,18 +282,18 @@ allow that installation in Linear; changing a nanobot field cannot bypass this.
   authorization or grant missing scopes. Cancelling authorization leaves
   existing connections alone.
 - **Remove a workspace**: run
-  `nanobot channels connect linear --operation disconnect --workspace-id <id>`.
+  `mason channels connect linear --operation disconnect --workspace-id <id>`.
   This revokes that workspace's tokens and clears its local installation. Other
   workspaces are unaffected. App credentials remain available for connecting
   again.
 - **Switch apps**: update `clientId`, `clientSecret`, and
   `webhookSigningSecret`, then run `--operation disconnect` for the old
-  app's workspaces and `nanobot channels connect linear` for the new one.
+  app's workspaces and `mason channels connect linear` for the new one.
   Installations that belong to a different OAuth Client ID are rejected until
   they are reconnected.
 
 Removal does not delete the Linear workspace, app, issues or comments, nor
-nanobot conversation history or pairing approvals. Deleting the app itself is a
+mason conversation history or pairing approvals. Deleting the app itself is a
 separate action in Linear.
 
 ## Updating a remote installation
@@ -316,12 +316,12 @@ A local branch does not update an already running remote gateway.
 
 The setup is complete when all of these checks pass:
 
-- `nanobot status` lists the Linear channel as enabled with no runtime error,
-  and `nanobot gateway` startup logs no Linear listener failure.
+- `mason status` lists the Linear channel as enabled with no runtime error,
+  and `mason gateway` startup logs no Linear listener failure.
 - The Linear app's **Webhooks → Delivery status** is enabled, its URL uses the
   current public origin, and **Events** includes **Agent session events**.
 - While the channel is running, opening
-  `http://127.0.0.1:3979/linear/health` on the nanobot machine returns
+  `http://127.0.0.1:3979/linear/health` on the mason machine returns
   `{"ok":true}`. Use your configured host and port if you changed them.
 - If your proxy also forwards `/linear/health`, its public URL returns
   `{"ok":true}`. This is optional: a proxy exposing only the callback and webhook
@@ -339,10 +339,10 @@ The setup is complete when all of these checks pass:
 - OAuth uses authorization code flow, PKCE, a short-lived CSRF state, and the
   Linear app actor.
 - Webhooks are verified against `Linear-Signature` using the raw request body
-  before JSON parsing. nanobot also checks the delivery timestamp and configured
+  before JSON parsing. mason also checks the delivery timestamp and configured
   OAuth Client ID.
 - `Linear-Delivery` IDs are deduplicated.
-- Verified events are committed to a local SQLite queue before nanobot returns
+- Verified events are committed to a local SQLite queue before mason returns
   HTTP 200. Queued webhook deliveries that have not yet been dispatched are
   retried after a restart. This does not guarantee resumption of an interrupted
   agent turn.
@@ -350,7 +350,7 @@ The setup is complete when all of these checks pass:
   database, not in `config.json`.
 - OAuth revocation removes the affected workspace installation locally.
 
-Back up the nanobot instance data directory as carefully as other credentials.
+Back up the mason instance data directory as carefully as other credentials.
 Do not publish `linear/state.sqlite3`, the Client Secret, or the Webhook signing
 secret.
 
@@ -359,19 +359,19 @@ secret.
 | Symptom | What to check |
 |---|---|
 | `publicBaseUrl` is rejected | Use a public `https://` origin: no HTTP, localhost, private IP, or path. |
-| `Invalid redirect_uri parameter for the application` | In the Linear app matching nanobot's Client ID, set **Redirect URIs** to the current public origin plus `/linear/oauth/callback` (or your configured `oauthCallbackPath`). It must match the authorization request exactly. Then run `nanobot channels connect linear` again. |
-| The tunnel URL changed | Update `publicBaseUrl` and the Redirect URI and Webhook URL in the Linear app, then run `nanobot channels connect linear` again. |
+| `Invalid redirect_uri parameter for the application` | In the Linear app matching mason's Client ID, set **Redirect URIs** to the current public origin plus `/linear/oauth/callback` (or your configured `oauthCallbackPath`). It must match the authorization request exactly. Then run `mason channels connect linear` again. |
+| The tunnel URL changed | Update `publicBaseUrl` and the Redirect URI and Webhook URL in the Linear app, then run `mason channels connect linear` again. |
 | `Unable to start the Linear callback listener` | Another process uses the listen port, usually a running gateway with Linear enabled. Stop it and retry. |
 | OAuth opens but cannot finish | Confirm the proxy forwards `/linear/oauth/callback` to the configured listen host and port. Paste the full callback URL back into the terminal, including `code` and `state`. |
-| Public health returns 502 | The channel is not running. Start `nanobot gateway`. Check local health first, then confirm the tunnel or proxy targets the same listener port. |
+| Public health returns 502 | The channel is not running. Start `mason gateway`. Check local health first, then confirm the tunnel or proxy targets the same listener port. |
 | Another workspace is unavailable during authorization | Check the current app's distribution and your installation permissions in Linear. A private app only works in its own workspace. `--force` does not create a new app. |
-| **Agent didn't start**, **nanobot failed to start**, or a session stays on **Thinking…** without a response | First check **Webhooks → Delivery status** in the Linear app. If **Disabled**, enable it from **…**. Confirm the current Webhook URL and `AgentSessionEvent` subscription, then select **Retry** in the Linear session. OAuth success and a working `/linear/health` endpoint do not prove that Linear is sending events. |
-| An @mention still gets no response with delivery enabled | Inspect **Webhook delivery failures** in the Linear app and run `nanobot gateway logs`. A 404 points to the webhook path; a 502 points to the listener or tunnel; a 401 can indicate a signing-secret mismatch or stale event timestamp. Confirm the Client ID and signing secret belong to the same app and the workspace authorization has not been revoked. |
+| **Agent didn't start**, **mason failed to start**, or a session stays on **Thinking…** without a response | First check **Webhooks → Delivery status** in the Linear app. If **Disabled**, enable it from **…**. Confirm the current Webhook URL and `AgentSessionEvent` subscription, then select **Retry** in the Linear session. OAuth success and a working `/linear/health` endpoint do not prove that Linear is sending events. |
+| An @mention still gets no response with delivery enabled | Inspect **Webhook delivery failures** in the Linear app and run `mason gateway logs`. A 404 points to the webhook path; a 502 points to the listener or tunnel; a 401 can indicate a signing-secret mismatch or stale event timestamp. Confirm the Client ID and signing secret belong to the same app and the workspace authorization has not been revoked. |
 | The first @mention returns a pairing code | Approve it with `/pairing approve <code>`, or add the member's Linear user ID to `allowFrom` and restart the gateway. |
 | Normal comments do nothing | This is intentional. Start a task by @mentioning the app, or continue inside an existing Agent Session. |
-| Delegating an issue does not start a session | Run `nanobot channels connect linear --force` so the installation grants `app:assignable`, then confirm the app can be selected as the issue delegate. |
-| The agent can discuss an issue but cannot search or change it | Connect the Linear MCP app (`nanobot mcp login <server>`). The native channel transports the conversation but does not add issue-management tools. |
-| Authorization reports missing scopes | Run `nanobot channels connect linear --force`. Do not reuse an authorization URL that omits `read`, `write`, `app:mentionable`, or `app:assignable`. |
+| Delegating an issue does not start a session | Run `mason channels connect linear --force` so the installation grants `app:assignable`, then confirm the app can be selected as the issue delegate. |
+| The agent can discuss an issue but cannot search or change it | Connect the Linear MCP app (`mason mcp login <server>`). The native channel transports the conversation but does not add issue-management tools. |
+| Authorization reports missing scopes | Run `mason channels connect linear --force`. Do not reuse an authorization URL that omits `read`, `write`, `app:mentionable`, or `app:assignable`. |
 
 For Linear's platform-side behavior, see the official
 [Agents guide](https://linear.app/developers/agents),

@@ -7,16 +7,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.runtime_control import (
+from mason.agent.loop import AgentLoop
+from mason.agent.tools.runtime_control import (
     RUNTIME_COMMAND_KEYS,
     RUNTIME_SNAPSHOT_KEYS,
     AgentRuntimeControl,
     RuntimeControl,
 )
-from nanobot.agent.tools.self import MyTool, MyToolConfig
-from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import ToolsConfig
+from mason.agent.tools.self import MyTool, MyToolConfig
+from mason.bus.queue import MessageBus
+from mason.config.schema import ToolsConfig
 
 
 def _make_loop(tmp_path: Path, *, allow_set: bool = False) -> AgentLoop:

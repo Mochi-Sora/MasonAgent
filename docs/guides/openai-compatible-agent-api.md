@@ -1,12 +1,12 @@
-# How to Run an OpenAI-Compatible Agent API with nanobot
+# How to Run an OpenAI-Compatible Agent API with mason
 
-nanobot can expose a local OpenAI-compatible endpoint behind
+mason can expose a local OpenAI-compatible endpoint behind
 `/v1/chat/completions`. This lets existing OpenAI-style clients talk to a
-tool-using nanobot agent instead of a raw model.
+tool-using mason agent instead of a raw model.
 
 ## What you will build
 
-- a working nanobot agent
+- a working mason agent
 - a local API server on `127.0.0.1:8900`
 - a `/v1/chat/completions` request
 - optional session isolation with `session_id`
@@ -21,8 +21,8 @@ want in-process access to sessions, memory, runtime helpers, and hooks.
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
-nanobot plugins enable api
-nanobot agent -m "Hello!"
+mason plugins enable api
+mason agent -m "Hello!"
 ```
 
 ## Minimal working example
@@ -30,7 +30,7 @@ nanobot agent -m "Hello!"
 Start the API server:
 
 ```bash
-nanobot serve
+mason serve
 ```
 
 Call the chat endpoint:
@@ -60,14 +60,14 @@ curl http://127.0.0.1:8900/v1/chat/completions \
 
 ## Troubleshooting
 
-- If `/v1/chat/completions` fails, test `nanobot agent -m "Hello!"` first.
+- If `/v1/chat/completions` fails, test `mason agent -m "Hello!"` first.
 - If remote clients cannot connect, check `api.host`, `api.port`, firewall, and
   API key configuration.
 - If sessions mix together, pass unique `session_id` values.
 
-## Related nanobot docs
+## Related mason docs
 
-- [Nanobot OpenAI-Compatible API](../openai-api.md)
+- [Mason OpenAI-Compatible API](../openai-api.md)
 - [Python SDK](../python-sdk.md)
 - [Configuration](../configuration.md)
 - [Deployment](../deployment.md)

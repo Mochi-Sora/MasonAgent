@@ -12,8 +12,8 @@ from urllib.request import getproxies_environment
 import httpx
 import pytest
 
-import nanobot.agent.tools.mcp as mcp_mod
-from nanobot.agent.tools.mcp import (
+import mason.agent.tools.mcp as mcp_mod
+from mason.agent.tools.mcp import (
     MCPPromptWrapper,
     MCPProvider,
     MCPResourceWrapper,
@@ -23,8 +23,8 @@ from nanobot.agent.tools.mcp import (
     _sanitize_name,
     connect_mcp_servers,
 )
-from nanobot.agent.tools.registry import ToolRegistry, is_tool_error_result
-from nanobot.config.schema import MCPServerConfig
+from mason.agent.tools.registry import ToolRegistry, is_tool_error_result
+from mason.config.schema import MCPServerConfig
 
 _PROXY_ENV_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
 
@@ -69,7 +69,7 @@ def _clear_proxy_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
     # getproxies() falls back to OS-level proxy settings (e.g. the Windows
     # registry) when no environment variables are set; keep tests hermetic.
-    monkeypatch.setattr("nanobot.security.network.getproxies", getproxies_environment)
+    monkeypatch.setattr("mason.security.network.getproxies", getproxies_environment)
 
 
 @pytest.fixture(autouse=True)
@@ -214,11 +214,11 @@ async def test_saved_oauth_http_403_projects_failed_runtime_without_details(
     async def reachable(_url: str) -> bool:
         return True
 
-    oauth_mod = ModuleType("nanobot.agent.tools.mcp_oauth")
+    oauth_mod = ModuleType("mason.agent.tools.mcp_oauth")
     oauth_mod.MCPAuthorizationRequiredError = AuthorizationRequiredError  # type: ignore[attr-defined]
     oauth_mod.create_mcp_oauth_auth = create_auth  # type: ignore[attr-defined]
     oauth_mod.mcp_oauth_has_credentials = lambda _name, _url: True  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "nanobot.agent.tools.mcp_oauth", oauth_mod)
+    monkeypatch.setitem(sys.modules, "mason.agent.tools.mcp_oauth", oauth_mod)
     monkeypatch.setattr(mcp_mod, "validate_url_target", lambda _url: (True, ""))
     monkeypatch.setattr(mcp_mod, "_probe_http_url", reachable)
     monkeypatch.setattr(
@@ -640,7 +640,7 @@ _PNG_B64 = (
 
 @pytest.mark.asyncio
 async def test_execute_persists_image_block_as_artifact(tmp_path: Path) -> None:
-    from nanobot.config.loader import set_config_path
+    from mason.config.loader import set_config_path
 
     set_config_path(tmp_path / "config.json")
 
@@ -671,7 +671,7 @@ async def test_execute_persists_image_block_as_artifact(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_execute_notes_unstorable_image_block(tmp_path: Path) -> None:
-    from nanobot.config.loader import set_config_path
+    from mason.config.loader import set_config_path
 
     set_config_path(tmp_path / "config.json")
 
@@ -1011,7 +1011,7 @@ async def test_connect_mcp_servers_enabled_tools_warns_on_unknown_entries(
     def _warning(message: str, *args: object) -> None:
         warnings.append(message.format(*args))
 
-    monkeypatch.setattr("nanobot.agent.tools.mcp.logger.warning", _warning)
+    monkeypatch.setattr("mason.agent.tools.mcp.logger.warning", _warning)
 
     stacks = await connect_mcp_servers(
         {"test": MCPServerConfig(command="fake", enabled_tools=["unknown"])},
@@ -1113,7 +1113,7 @@ async def test_connect_mcp_servers_rejects_unsafe_http_urls_before_probe(
         warnings.append(message.format(*args))
 
     monkeypatch.setattr(mcp_mod.asyncio, "open_connection", _open_connection)
-    monkeypatch.setattr("nanobot.agent.tools.mcp.logger.warning", _warning)
+    monkeypatch.setattr("mason.agent.tools.mcp.logger.warning", _warning)
 
     registry = ToolRegistry()
     stacks = await connect_mcp_servers({"local": config}, registry)
@@ -1126,7 +1126,7 @@ async def test_connect_mcp_servers_rejects_unsafe_http_urls_before_probe(
 
 @pytest.mark.asyncio
 async def test_validate_mcp_request_url_rejects_loopback_without_whitelist() -> None:
-    from nanobot.security.network import configure_ssrf_whitelist
+    from mason.security.network import configure_ssrf_whitelist
 
     configure_ssrf_whitelist([])
     request = httpx.Request("GET", "http://127.0.0.1/private")
@@ -1189,7 +1189,7 @@ async def test_connect_mcp_servers_env_proxy_adds_proxy_mounts_and_keeps_pinned_
         lambda: httpx.MockTransport(lambda request: httpx.Response(200, request=request)),
     )
     monkeypatch.setattr(
-        "nanobot.security.network.httpx.AsyncHTTPTransport",
+        "mason.security.network.httpx.AsyncHTTPTransport",
         lambda **_kwargs: httpx.MockTransport(
             lambda request: httpx.Response(200, request=request)
         ),
@@ -1221,7 +1221,7 @@ def test_mcp_http_clients_no_proxy_env_keeps_pinned_direct_route(monkeypatch):
         lambda: httpx.MockTransport(lambda request: httpx.Response(200, request=request)),
     )
     monkeypatch.setattr(
-        "nanobot.security.network.httpx.AsyncHTTPTransport",
+        "mason.security.network.httpx.AsyncHTTPTransport",
         lambda **_kwargs: httpx.MockTransport(
             lambda request: httpx.Response(200, request=request)
         ),
@@ -1526,10 +1526,10 @@ async def test_connect_mcp_servers_attaches_oauth_to_remote_http_client(
         captured.update(name=name, url=url, handlers=handlers)
         return oauth_auth
 
-    oauth_mod = ModuleType("nanobot.agent.tools.mcp_oauth")
+    oauth_mod = ModuleType("mason.agent.tools.mcp_oauth")
     oauth_mod.MCPAuthorizationRequiredError = RuntimeError  # type: ignore[attr-defined]
     oauth_mod.create_mcp_oauth_auth = _create_auth  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "nanobot.agent.tools.mcp_oauth", oauth_mod)
+    monkeypatch.setitem(sys.modules, "mason.agent.tools.mcp_oauth", oauth_mod)
 
     class FakeAsyncClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -1605,10 +1605,10 @@ async def test_connect_mcp_servers_skips_background_oauth_without_credentials(
         probe_called = True
         return True
 
-    oauth_mod = ModuleType("nanobot.agent.tools.mcp_oauth")
+    oauth_mod = ModuleType("mason.agent.tools.mcp_oauth")
     oauth_mod.MCPAuthorizationRequiredError = AuthorizationRequiredError  # type: ignore[attr-defined]
     oauth_mod.create_mcp_oauth_auth = _create_auth  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "nanobot.agent.tools.mcp_oauth", oauth_mod)
+    monkeypatch.setitem(sys.modules, "mason.agent.tools.mcp_oauth", oauth_mod)
     monkeypatch.setattr(mcp_mod, "validate_url_target", lambda _url: (True, ""))
     monkeypatch.setattr(mcp_mod, "_probe_http_url", _probe)
 
@@ -1686,13 +1686,13 @@ async def test_connect_mcp_servers_passes_stdio_cwd(
 
     registry = ToolRegistry()
     stacks = await connect_mcp_servers(
-        {"test": MCPServerConfig(command="fake", cwd="/tmp/nanobot-mcp-test")},
+        {"test": MCPServerConfig(command="fake", cwd="/tmp/mason-mcp-test")},
         registry,
     )
     for stack in stacks.values():
         await stack.aclose()
 
-    assert captured["cwd"] == "/tmp/nanobot-mcp-test"
+    assert captured["cwd"] == "/tmp/mason-mcp-test"
 
 
 # ---------------------------------------------------------------------------

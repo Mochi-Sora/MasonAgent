@@ -5,18 +5,18 @@ import pytest
 from loguru import logger
 
 from agent.session_helpers import run_session
-from nanobot.agent.context import TranscriptInput
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.context import current_request_context
-from nanobot.bus.events import (
+from mason.agent.context import TranscriptInput
+from mason.agent.loop import AgentLoop
+from mason.agent.tools.context import current_request_context
+from mason.bus.events import (
     INBOUND_META_RUNTIME_CONTROL,
     RUNTIME_CONTROL_SESSION_DISCARD,
     InboundMessage,
 )
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import GenerationSettings, LLMResponse, ToolCallRequest
-from nanobot.session.keys import UNIFIED_SESSION_KEY
-from nanobot.session.manager import SessionPolicy
+from mason.bus.queue import MessageBus
+from mason.providers.base import GenerationSettings, LLMResponse, ToolCallRequest
+from mason.session.keys import UNIFIED_SESSION_KEY
+from mason.session.manager import SessionPolicy
 
 
 def _message(key: str, content: str) -> InboundMessage:
@@ -119,7 +119,7 @@ async def test_session_policy_controls_tool_logs_and_result_offload(
     messages = loop.provider.chat_stream_with_retry.await_args.kwargs["messages"]
     content = next(m["content"] for m in messages if m["role"] == "tool")
     preview = content[0]["text"] if structured else content
-    offload_root = tmp_path / ".nanobot" / "tool-results"
+    offload_root = tmp_path / ".mason" / "tool-results"
     assert (secret in "\n".join(logs)) is (privacy == "ordinary")
     if structured:
         assert content[1] == image
@@ -166,13 +166,13 @@ async def test_direct_transient_run_never_spills_before_cancellation(tmp_path) -
     ))
     try:
         await asyncio.wait_for(second_call.wait(), timeout=2)
-        assert not (tmp_path / ".nanobot" / "tool-results").exists()
+        assert not (tmp_path / ".mason" / "tool-results").exists()
     finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
     await loop.discard_session(session.key)
-    assert not (tmp_path / ".nanobot" / "tool-results").exists()
+    assert not (tmp_path / ".mason" / "tool-results").exists()
     assert current_request_context() is None
 
 

@@ -6,9 +6,9 @@ import typer
 from rich.console import Console
 from typer.testing import CliRunner
 
-from nanobot.cli.gateway import _resolved_config_selector, create_gateway_app
-from nanobot.config.schema import Config
-from nanobot.gateway import (
+from mason.cli.gateway import _resolved_config_selector, create_gateway_app
+from mason.config.schema import Config
+from mason.gateway import (
     GatewayAlreadyRunningError,
     GatewayInstance,
     GatewayRuntimePaths,
@@ -16,7 +16,7 @@ from nanobot.gateway import (
     GatewayStatus,
     RuntimeResult,
 )
-from nanobot.gateway.service import GatewayServiceOptions, GatewayServiceResult
+from mason.gateway.service import GatewayServiceOptions, GatewayServiceResult
 
 runner = CliRunner()
 
@@ -26,7 +26,7 @@ def test_default_config_has_the_same_gateway_identity_when_explicit(
     tmp_path: Path,
 ) -> None:
     config_path = tmp_path / "config.json"
-    monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
+    monkeypatch.setattr("mason.config.loader._current_config_path", config_path)
 
     assert _resolved_config_selector(None) == config_path
     assert _resolved_config_selector(str(config_path)) == config_path
@@ -93,9 +93,9 @@ class FakeServiceInstaller:
             True,
             "service_install_dry_run" if dry_run else "service_installed",
             "systemd",
-            self.tmp_path / "nanobot-gateway.service",
+            self.tmp_path / "mason-gateway.service",
             (("systemctl", "--user", "daemon-reload"),),
-            "[Unit]\nDescription=Nanobot Gateway\n",
+            "[Unit]\nDescription=Mason Gateway\n",
         )
 
     def uninstall(self, *, name: str, manager: str, dry_run: bool) -> GatewayServiceResult:
@@ -105,8 +105,8 @@ class FakeServiceInstaller:
             True,
             "service_uninstall_dry_run" if dry_run else "service_uninstalled",
             "systemd",
-            self.tmp_path / "nanobot-gateway.service",
-            (("systemctl", "--user", "disable", "--now", "nanobot-gateway.service"),),
+            self.tmp_path / "mason-gateway.service",
+            (("systemctl", "--user", "disable", "--now", "mason-gateway.service"),),
         )
 
 
@@ -398,7 +398,7 @@ def test_gateway_restart_does_not_create_a_persistent_gateway(tmp_path):
 
     assert result.exit_code == 1
     assert "there is nothing to restart" in result.stdout
-    assert "nanobot gateway --background" in result.stdout
+    assert "mason gateway --background" in result.stdout
 
 
 def test_gateway_restart_explains_foreground_lifecycle(tmp_path):

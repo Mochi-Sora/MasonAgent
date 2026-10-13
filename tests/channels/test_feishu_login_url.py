@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nanobot.channels.feishu import runtime as feishu_runtime
+from mason.channels.feishu import runtime as feishu_runtime
 
 
 def _begin_response(uri: str) -> dict:

@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import tiktoken
 
-from nanobot.utils import helpers
-from nanobot.utils.helpers import (
+from mason.utils import helpers
+from mason.utils.helpers import (
     _write_text_atomic,
     atomic_write_lines,
     content_with_media_breadcrumbs,

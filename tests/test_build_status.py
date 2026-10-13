@@ -1,7 +1,7 @@
 """Tests for build_status_content cache hit rate display."""
 
-from nanobot.providers.base import LLMUsage
-from nanobot.utils.helpers import build_status_content
+from mason.providers.base import LLMUsage
+from mason.utils.helpers import build_status_content
 
 
 def test_status_shows_cache_hit_rate():

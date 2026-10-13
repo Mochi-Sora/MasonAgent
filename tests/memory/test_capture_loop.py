@@ -11,9 +11,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.queue import MessageBus
-from nanobot.providers.base import LLMResponse
+from mason.agent.loop import AgentLoop
+from mason.bus.queue import MessageBus
+from mason.providers.base import LLMResponse
 
 
 def _make_loop(tmp_path: Path, *replies: str) -> AgentLoop:

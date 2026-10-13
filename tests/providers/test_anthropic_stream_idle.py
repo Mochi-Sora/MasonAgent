@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.providers.anthropic_provider import AnthropicProvider
+from mason.providers.anthropic_provider import AnthropicProvider
 
 
 def _final_message_stub(text: str = "Hi") -> SimpleNamespace:
@@ -96,7 +96,7 @@ async def test_chat_stream_without_callback_survives_long_active_stream(monkeypa
     which measures total wall-clock time and kills the stream even though it
     is continuously active.
     """
-    monkeypatch.setenv("NANOBOT_STREAM_IDLE_TIMEOUT_S", "0.15")
+    monkeypatch.setenv("MASON_STREAM_IDLE_TIMEOUT_S", "0.15")
     provider = AnthropicProvider(api_key="sk-test")
     provider._client = MagicMock()
 
@@ -126,7 +126,7 @@ async def test_chat_stream_without_callback_survives_long_active_stream(monkeypa
 @pytest.mark.asyncio
 async def test_chat_stream_without_callback_still_enforces_idle_timeout(monkeypatch) -> None:
     """A genuinely stalled stream must still be cut off by the idle timeout."""
-    monkeypatch.setenv("NANOBOT_STREAM_IDLE_TIMEOUT_S", "0.05")
+    monkeypatch.setenv("MASON_STREAM_IDLE_TIMEOUT_S", "0.05")
     provider = AnthropicProvider(api_key="sk-test")
     provider._client = MagicMock()
 

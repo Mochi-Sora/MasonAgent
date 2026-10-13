@@ -2,9 +2,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from nanobot.cli import commands
-from nanobot.config.loader import load_config
-from nanobot.session.manager import SessionManager
+from mason.cli import commands
+from mason.config.loader import load_config
+from mason.session.manager import SessionManager
 
 
 def test_sessions_restore_workspace_command_prepares_downgrade(

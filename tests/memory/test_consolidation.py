@@ -9,12 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.skills import SkillsLoader
-from nanobot.memory.consolidation import MemoryConsolidator
-from nanobot.memory.state import MemoryState
-from nanobot.memory.store import MemoryDB
-from nanobot.providers.base import GenerationSettings, LLMResponse
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.agent.skills import SkillsLoader
+from mason.memory.consolidation import MemoryConsolidator
+from mason.memory.state import MemoryState
+from mason.memory.store import MemoryDB
+from mason.providers.base import GenerationSettings, LLMResponse
+from mason.utils.llm_runtime import LLMRuntime
 
 _NOW = datetime(2026, 1, 2, 12, 0, 0)
 
@@ -337,7 +337,7 @@ async def test_prompt_reads_workspace_state_by_default(
 
 
 def test_preview_keeps_head_and_tail() -> None:
-    from nanobot.memory.consolidation import _preview
+    from mason.memory.consolidation import _preview
 
     text = "START" + "x" * 1_000 + "END"
     out = _preview(text, 100)

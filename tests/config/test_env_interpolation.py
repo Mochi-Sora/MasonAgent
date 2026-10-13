@@ -2,15 +2,15 @@ import json
 
 import pytest
 
-from nanobot.config.errors import ConfigLoadError
-from nanobot.config.loader import (
+from mason.config.errors import ConfigLoadError
+from mason.config.loader import (
     _resolve_env_vars,
     load_config,
     resolve_config_env_vars,
     resolve_env_refs,
     save_config,
 )
-from nanobot.config.schema import Config
+from mason.config.schema import Config
 
 
 class TestResolveEnvVars:
@@ -75,7 +75,7 @@ class TestResolveConfig:
         assert resolved.providers.groq.api_key == "resolved-key"
 
     def test_missing_env_var_reports_config_field(self, tmp_path, monkeypatch):
-        name = "NANOBOT_TEST_MISSING_PROVIDER_KEY"
+        name = "MASON_TEST_MISSING_PROVIDER_KEY"
         monkeypatch.delenv(name, raising=False)
         config_path = tmp_path / "config.json"
         config = Config.model_validate(
@@ -107,17 +107,17 @@ class TestResolveConfig:
         assert saved["channels"]["telegram"]["token"] == "${MY_TOKEN}"
 
     def test_interpolates_agent_defaults_and_preserves_template(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("NANOBOT_TEST_AGENT_MODEL", "openai/gpt-4.1")
+        monkeypatch.setenv("MASON_TEST_AGENT_MODEL", "openai/gpt-4.1")
         config_path = tmp_path / "config.json"
         config_path.write_text(
             json.dumps(
-                {"agents": {"defaults": {"model": "${NANOBOT_TEST_AGENT_MODEL}"}}}
+                {"agents": {"defaults": {"model": "${MASON_TEST_AGENT_MODEL}"}}}
             ),
             encoding="utf-8",
         )
 
         config = load_config(config_path)
-        assert config.agents.defaults.model == "${NANOBOT_TEST_AGENT_MODEL}"
+        assert config.agents.defaults.model == "${MASON_TEST_AGENT_MODEL}"
 
         resolved = resolve_config_env_vars(config)
         assert resolved.agents.defaults.model == "openai/gpt-4.1"
@@ -125,10 +125,10 @@ class TestResolveConfig:
         save_config(config, config_path)
 
         saved = json.loads(config_path.read_text(encoding="utf-8"))
-        assert saved["agents"]["defaults"]["model"] == "${NANOBOT_TEST_AGENT_MODEL}"
+        assert saved["agents"]["defaults"]["model"] == "${MASON_TEST_AGENT_MODEL}"
 
         reloaded = load_config(config_path)
-        assert reloaded.agents.defaults.model == "${NANOBOT_TEST_AGENT_MODEL}"
+        assert reloaded.agents.defaults.model == "${MASON_TEST_AGENT_MODEL}"
 
     def test_save_keeps_oauth_provider_configs_excluded(self, tmp_path):
         config_path = tmp_path / "config.json"

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-from nanobot.providers.openai_compat_provider import OpenAICompatProvider
-from nanobot.providers.registry import find_by_name
+from mason.providers.openai_compat_provider import OpenAICompatProvider
+from mason.providers.registry import find_by_name
 
 
 def test_provider_init_does_not_mutate_shared_env_keys(monkeypatch) -> None:

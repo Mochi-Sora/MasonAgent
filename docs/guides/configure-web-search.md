@@ -1,12 +1,12 @@
-# How to Configure Web Search for a nanobot AI Agent
+# How to Configure Web Search for a mason AI Agent
 
-nanobot includes built-in web search and web fetch tools. Search uses
+mason includes built-in web search and web fetch tools. Search uses
 DuckDuckGo by default and can be configured for API-backed or self-hosted
 providers.
 
 ## What you will build
 
-- web tools enabled in nanobot
+- web tools enabled in mason
 - one search provider selected in `config.json`
 - optional web fetch settings for page reading
 
@@ -19,7 +19,7 @@ research, source discovery, or page fetching during a task.
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 Web tools are enabled by default. Configure them only when you want a specific
@@ -86,7 +86,7 @@ in the logs.
 - If fetch is blocked, inspect the target URL and SSRF whitelist.
 - If a proxy changes network behavior, verify `NO_PROXY` and proxy settings.
 
-## Related nanobot docs
+## Related mason docs
 
 - [Configuration: Web Tools](../configuration.md#web-tools)
 - [Security](../configuration.md#security)

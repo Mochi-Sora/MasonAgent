@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nanobot.agent.tools.exec_session import _ExecSession
-from nanobot.agent.tools.shell import ExecTool, _reap_pid
+from mason.agent.tools.exec_session import _ExecSession
+from mason.agent.tools.shell import ExecTool, _reap_pid
 
 
 def _python_command(code: str) -> str:
@@ -23,14 +23,14 @@ def _python_command(code: str) -> str:
 
 def test_reap_pid_noops_without_waitpid():
     """On platforms (or test stubs) without waitpid, reaping is a no-op."""
-    with patch("nanobot.agent.tools.shell.os") as mock_os:
+    with patch("mason.agent.tools.shell.os") as mock_os:
         mock_os.waitpid = None
         mock_os.WNOHANG = None
         _reap_pid(12345)
 
 
 def test_reap_pid_calls_waitpid_wnohang():
-    with patch("nanobot.agent.tools.shell.os") as mock_os:
+    with patch("mason.agent.tools.shell.os") as mock_os:
         mock_os.waitpid = MagicMock(return_value=(12345, 0))
         mock_os.WNOHANG = 1
         _reap_pid(12345)
@@ -38,7 +38,7 @@ def test_reap_pid_calls_waitpid_wnohang():
 
 
 def test_reap_pid_swallows_already_reaped_errors():
-    with patch("nanobot.agent.tools.shell.os") as mock_os:
+    with patch("mason.agent.tools.shell.os") as mock_os:
         mock_os.WNOHANG = 1
         mock_os.waitpid = MagicMock(side_effect=ChildProcessError("no child"))
         _reap_pid(99)
@@ -55,7 +55,7 @@ async def test_kill_process_skips_kill_when_already_exited():
     process.returncode = 0
     process.kill = MagicMock(side_effect=ProcessLookupError("already dead"))
 
-    with patch("nanobot.agent.tools.shell._reap_pid") as reap:
+    with patch("mason.agent.tools.shell._reap_pid") as reap:
         await ExecTool._kill_process(process)
 
     process.kill.assert_not_called()
@@ -71,7 +71,7 @@ async def test_kill_process_kills_and_reaps_live_process():
     process.kill = MagicMock()
     process.wait = AsyncMock(return_value=0)
 
-    with patch("nanobot.agent.tools.shell._reap_pid") as reap:
+    with patch("mason.agent.tools.shell._reap_pid") as reap:
         await ExecTool._kill_process(process)
 
     process.kill.assert_called_once()
@@ -88,7 +88,7 @@ async def test_kill_process_reaps_even_if_kill_races_exit():
     process.kill = MagicMock(side_effect=ProcessLookupError("raced exit"))
     process.wait = AsyncMock(return_value=0)
 
-    with patch("nanobot.agent.tools.shell._reap_pid") as reap:
+    with patch("mason.agent.tools.shell._reap_pid") as reap:
         await ExecTool._kill_process(process)
 
     process.kill.assert_called_once()
@@ -105,7 +105,7 @@ async def test_execute_reaps_after_normal_completion():
     with (
         patch.object(ExecTool, "_spawn", return_value=mock_proc),
         patch.object(ExecTool, "_guard_command", return_value=None),
-        patch("nanobot.agent.tools.shell._reap_pid") as reap,
+        patch("mason.agent.tools.shell._reap_pid") as reap,
     ):
         tool = ExecTool()
         result = await tool.execute(command="echo ok")
@@ -166,9 +166,9 @@ async def test_execute_exception_after_success_does_not_raise_on_dead_process():
     with (
         patch.object(ExecTool, "_spawn", return_value=mock_proc),
         patch.object(ExecTool, "_guard_command", return_value=None),
-        patch("nanobot.agent.tools.shell._reap_pid") as reap,
+        patch("mason.agent.tools.shell._reap_pid") as reap,
         patch(
-            "nanobot.agent.tools.shell.clamp_session_int",
+            "mason.agent.tools.shell.clamp_session_int",
             side_effect=RuntimeError("boom after exit"),
         ),
     ):
@@ -208,10 +208,10 @@ async def test_kill_process_tree_targets_group_after_root_exits():
     process.returncode = 0
 
     with (
-        patch("nanobot.agent.tools.shell._IS_WINDOWS", False),
-        patch("nanobot.agent.tools.shell.os.killpg", create=True) as kill_group,
-        patch("nanobot.agent.tools.shell.signal.SIGKILL", 9, create=True),
-        patch("nanobot.agent.tools.shell._reap_pid") as reap,
+        patch("mason.agent.tools.shell._IS_WINDOWS", False),
+        patch("mason.agent.tools.shell.os.killpg", create=True) as kill_group,
+        patch("mason.agent.tools.shell.signal.SIGKILL", 9, create=True),
+        patch("mason.agent.tools.shell._reap_pid") as reap,
     ):
         await ExecTool._kill_process_tree(process)
 
@@ -310,7 +310,7 @@ async def test_exec_session_kill_reaps():
         owner_session_key=None,
     )
     try:
-        with patch("nanobot.agent.tools.shell._reap_pid") as reap:
+        with patch("mason.agent.tools.shell._reap_pid") as reap:
             await session.kill()
         process.kill.assert_called_once()
         reap.assert_called_once_with(2001)
@@ -331,7 +331,7 @@ async def test_exec_session_kill_reaps_if_process_exits_before_kill():
         owner_session_key=None,
     )
     try:
-        with patch("nanobot.agent.tools.shell._reap_pid") as reap:
+        with patch("mason.agent.tools.shell._reap_pid") as reap:
             await session.kill()
         reap.assert_called_once_with(2002)
     finally:
@@ -386,7 +386,7 @@ async def test_exec_session_poll_reaps_after_exit():
         owner_session_key=None,
     )
     try:
-        with patch("nanobot.agent.tools.shell._reap_pid") as reap:
+        with patch("mason.agent.tools.shell._reap_pid") as reap:
             poll = await session.poll(yield_time_ms=0, max_output_chars=1000)
         assert poll.done is True
         assert poll.exit_code == 0

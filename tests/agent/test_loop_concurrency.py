@@ -21,7 +21,7 @@ def test_request_concurrency_is_unlimited_by_default(
     monkeypatch: pytest.MonkeyPatch,
     loop_factory,
 ) -> None:
-    monkeypatch.delenv("NANOBOT_MAX_CONCURRENT_REQUESTS", raising=False)
+    monkeypatch.delenv("MASON_MAX_CONCURRENT_REQUESTS", raising=False)
 
     loop = loop_factory(provider=_provider(), patch_deps=True)
 
@@ -33,7 +33,7 @@ async def test_positive_request_concurrency_keeps_explicit_cap(
     monkeypatch: pytest.MonkeyPatch,
     loop_factory,
 ) -> None:
-    monkeypatch.setenv("NANOBOT_MAX_CONCURRENT_REQUESTS", "2")
+    monkeypatch.setenv("MASON_MAX_CONCURRENT_REQUESTS", "2")
     loop = loop_factory(provider=_provider(), patch_deps=True)
     gate = loop._concurrency_gate
 

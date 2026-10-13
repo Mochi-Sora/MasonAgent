@@ -7,11 +7,11 @@ what matters, and stays out of the way.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Mochi-Sora/MasonAgent/main/scripts/install.sh | sh
-nanobot agent -m "hello"    # the wizard sets up the provider and model first
+mason agent -m "hello"    # the wizard sets up the provider and model first
 ```
 
-> The project is **Mason**. The Python package and CLI still ship under the `nanobot`
-> name while the rename lands, so every command in this document starts with `nanobot`.
+> The project is **Mason**. The Python package and CLI still ship under the `mason`
+> name while the rename lands, so every command in this document starts with `mason`.
 
 ---
 
@@ -117,7 +117,7 @@ restores the classic always-loaded behaviour.
 - **Providers** are pluggable (`anthropic`, OpenAI-compatible and Responses APIs, Azure,
   Bedrock, GitHub Copilot, OpenAI Codex, xAI and more), selected through model presets;
   consolidation can run on a different preset than the conversation.
-- **Surfaces today:** the CLI (`nanobot agent`, `nanobot gateway`, `nanobot serve` for the
+- **Surfaces today:** the CLI (`mason agent`, `mason gateway`, `mason serve` for the
   OpenAI-compatible API), the messaging channels above, and the Python SDK. Mason is
   terminal- and chat-first: it deliberately ships **no WebUI and no TUI**.
 
@@ -126,24 +126,24 @@ restores the classic always-loaded behaviour.
 ## Quick start
 
 ```bash
-# One line: clones into ~/.nanobot/src, installs editable, runs the wizard
+# One line: clones into ~/.mason/src, installs editable, runs the wizard
 curl -fsSL https://raw.githubusercontent.com/Mochi-Sora/MasonAgent/main/scripts/install.sh | sh
 
 # or from a checkout:
 ./scripts/install.sh
 # or, manually:
-# uv sync --all-extras && uv run nanobot onboard
-# pip install -e . && nanobot onboard
+# uv sync --all-extras && uv run mason onboard
+# pip install -e . && mason onboard
 
-nanobot onboard            # interactive setup: provider, credentials, model
-nanobot agent -m "hello"   # one-shot
-nanobot agent              # interactive terminal session
-nanobot gateway            # long-running service: channels, cron jobs, heartbeat
-nanobot serve              # OpenAI-compatible HTTP API
+mason onboard            # interactive setup: provider, credentials, model
+mason agent -m "hello"   # one-shot
+mason agent              # interactive terminal session
+mason gateway            # long-running service: channels, cron jobs, heartbeat
+mason serve              # OpenAI-compatible HTTP API
 ```
 
-Configuration lives in `~/.nanobot/config.json`; the agent workspace (profiles, skills,
-memory) defaults to `~/.nanobot/workspace/`.
+Configuration lives in `~/.mason/config.json`; the agent workspace (profiles, skills,
+memory) defaults to `~/.mason/workspace/`.
 
 ---
 

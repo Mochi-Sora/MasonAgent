@@ -14,10 +14,10 @@ import pytest
 
 pytest.importorskip("botpy")
 
-from nanobot.bus.events import OutboundMessage
-from nanobot.bus.outbound_events import ContextCompactionEvent, outbound_message_for_event
-from nanobot.bus.queue import MessageBus
-from nanobot.channels.qq.runtime import QQChannel, QQConfig
+from mason.bus.events import OutboundMessage
+from mason.bus.outbound_events import ContextCompactionEvent, outbound_message_for_event
+from mason.bus.queue import MessageBus
+from mason.channels.qq.runtime import QQChannel, QQConfig
 
 
 def _make_channel(**config_kwargs) -> QQChannel:

@@ -1,6 +1,6 @@
-# AI Agent Memory in nanobot
+# AI Agent Memory in mason
 
-This page explains how nanobot implements long-term AI agent memory: the working
+This page explains how mason implements long-term AI agent memory: the working
 state, the curated long-term memory graph, and today's verbatim backup.
 
 Good memory is not a pile of notes. It is a quiet system of attention. It notices
@@ -9,7 +9,7 @@ lived experience into something calm, durable, and useful.
 
 ## The Three Surfaces
 
-nanobot does not treat memory as one giant file. It separates remembering into
+mason does not treat memory as one giant file. It separates remembering into
 three surfaces with different lifetimes, because different kinds of remembering
 deserve different tools:
 
@@ -109,7 +109,7 @@ cursor stays where it was, so the same episodes are retried next time.
 ## Daily Rollover
 
 Once a day — at `00:00` in the configured timezone, and on gateway startup when a
-day was missed — nanobot rolls memory over:
+day was missed — mason rolls memory over:
 
 - yesterday's backup episodes are discarded (those already promoted by
   consolidation; unprocessed ones survive until they have had their chance),
@@ -119,7 +119,7 @@ day was missed — nanobot rolls memory over:
 ## The Files
 
 In this page, `workspace` means the configured **agent workspace** (by default
-`~/.nanobot/workspace/`, or the path passed with `--workspace`). Selecting a
+`~/.mason/workspace/`, or the path passed with `--workspace`). Selecting a
 different project for a session changes that session's project context and tool working
 directory; it does not relocate the files below.
 
@@ -215,7 +215,7 @@ sqlite3 memory/memory.db "select ts, role, substr(content, 1, 80) from episodes 
 
 ## Notes and Limits
 
-- **Windows is unsupported** for the memory subsystem. The rest of nanobot still
+- **Windows is unsupported** for the memory subsystem. The rest of mason still
   runs there; memory is skipped rather than emulated.
 - **Speed.** Retrieval is served by SQLite with FTS5 indexes over both tiers, so a
   `recall_memory` or `recall_backup` call is a local index lookup, not a scan of a

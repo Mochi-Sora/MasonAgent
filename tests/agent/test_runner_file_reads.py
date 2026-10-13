@@ -7,14 +7,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent.runner_helpers import make_run_spec
-from nanobot.agent.context import TranscriptInput
-from nanobot.agent.hook import AgentHook, AgentHookContext
-from nanobot.agent.runner import AgentRunner
-from nanobot.agent.tools.execution import execute_tool_calls
-from nanobot.agent.tools.file_state import FileStates, bind_file_states, reset_file_states
-from nanobot.agent.tools.filesystem import ListDirTool, ReadFileTool
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.providers.base import LLMProvider, LLMResponse, ToolCallRequest
+from mason.agent.context import TranscriptInput
+from mason.agent.hook import AgentHook, AgentHookContext
+from mason.agent.runner import AgentRunner
+from mason.agent.tools.execution import execute_tool_calls
+from mason.agent.tools.file_state import FileStates, bind_file_states, reset_file_states
+from mason.agent.tools.filesystem import ListDirTool, ReadFileTool
+from mason.agent.tools.registry import ToolRegistry
+from mason.providers.base import LLMProvider, LLMResponse, ToolCallRequest
 
 
 def _tools(tmp_path):
@@ -85,7 +85,7 @@ async def test_dedup_uses_compacted_request_instead_of_raw_transcript(tmp_path, 
         contains_original = any(message.get("tool_call_id") == "read-1" for message in messages)
         return (600 if contains_original else 100), "test-counter"
 
-    monkeypatch.setattr("nanobot.agent.context_governance.estimate_prompt_tokens_chain", estimate)
+    monkeypatch.setattr("mason.agent.context_governance.estimate_prompt_tokens_chain", estimate)
     consolidate = AsyncMock(return_value="The file was inspected; its original text was omitted.")
 
     def build(transcript):

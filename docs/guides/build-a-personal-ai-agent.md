@@ -1,4 +1,4 @@
-# How to Build a Personal AI Agent with nanobot
+# How to Build a Personal AI Agent with mason
 
 This guide builds a personal AI agent you can run locally, talk to from the
 terminal, and later connect to chat apps, memory, tools, and
@@ -6,7 +6,7 @@ automations.
 
 ## What you will build
 
-- a configured nanobot install
+- a configured mason install
 - one working model provider
 - one local agent reply
 - an ongoing chat session for longer work
@@ -14,13 +14,13 @@ automations.
 ## When to use this
 
 Use this when you want a personal AI agent that you control rather than a hosted
-chat-only interface. nanobot is useful when the agent needs local workspace
+chat-only interface. mason is useful when the agent needs local workspace
 access, tool calls, session history, memory, scheduled work, or chat app
 delivery.
 
 ## Install
 
-Follow [Quick Start](../quick-start.md) to install nanobot using the recommended
+Follow [Quick Start](../quick-start.md) to install mason using the recommended
 method for your operating system and configure one model. Return here after
 you receive the first reply. If terminals and config files are new to you, use
 [Start Without Technical Background](../start-without-technical-background.md)
@@ -31,13 +31,13 @@ instead.
 First prove the runtime can answer:
 
 ```bash
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 Then start an interactive session for longer work:
 
 ```bash
-nanobot agent
+mason agent
 ```
 
 The interactive session keeps persistent chat history and tool access for
@@ -48,7 +48,7 @@ deeper tasks.
 - Keep one workspace per project or personal context.
 - Use `modelPresets` when you want stable names for fast, deep, local, or
   fallback models.
-- Keep `nanobot gateway` running for chat apps, automations, and
+- Keep `mason gateway` running for chat apps, automations, and
   background delivery.
 - Use the Python SDK or OpenAI-compatible API when another program should call
   the agent.
@@ -64,13 +64,13 @@ deeper tasks.
 
 ## Troubleshooting
 
-- `nanobot status` shows the config path, workspace path, and active model.
-- If `nanobot agent -m "Hello!"` fails, fix provider setup before connecting
+- `mason status` shows the config path, workspace path, and active model.
+- If `mason agent -m "Hello!"` fails, fix provider setup before connecting
   chat apps.
 - If a chat app does not answer, check gateway logs and provider
   credentials.
 
-## Related nanobot docs
+## Related mason docs
 
 - [Quick Start](../quick-start.md)
 - [Concepts](../concepts.md)

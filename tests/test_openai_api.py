@@ -10,8 +10,8 @@ import pytest
 import pytest_asyncio
 from loguru import logger
 
-from nanobot.agent.hook import AgentHook, AgentRunHookContext
-from nanobot.api.server import (
+from mason.agent.hook import AgentHook, AgentRunHookContext
+from mason.api.server import (
     API_CHAT_ID,
     API_SESSION_KEY,
     _chat_completion_response,
@@ -19,7 +19,7 @@ from nanobot.api.server import (
     create_app,
     handle_chat_completions,
 )
-from nanobot.providers.base import LLMUsage
+from mason.providers.base import LLMUsage
 
 try:
     from aiohttp.test_utils import TestClient, TestServer
@@ -498,7 +498,7 @@ async def test_multimodal_remote_image_url_returns_400(aiohttp_client, mock_agen
 @pytest.mark.skipif(not HAS_AIOHTTP, reason="aiohttp not installed")
 @pytest.mark.asyncio
 async def test_empty_response_falls_back_without_retry(aiohttp_client) -> None:
-    from nanobot.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
+    from mason.utils.runtime import EMPTY_FINAL_RESPONSE_MESSAGE
 
     call_count = 0
 
@@ -527,9 +527,9 @@ async def test_empty_response_falls_back_without_retry(aiohttp_client) -> None:
 @pytest.mark.asyncio
 async def test_process_direct_accepts_media() -> None:
     """process_direct should forward media paths to _process_message."""
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.bus.queue import MessageBus
-    from nanobot.bus.runtime_events import RuntimeEventPublisher
+    from mason.agent.loop import AgentLoop
+    from mason.bus.queue import MessageBus
+    from mason.bus.runtime_events import RuntimeEventPublisher
 
     loop = AgentLoop.__new__(AgentLoop)
     loop._session_locks = {}

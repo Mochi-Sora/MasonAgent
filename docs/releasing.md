@@ -9,7 +9,7 @@ uploading to PyPI are separate operations.
 1. Choose the previous release and the exact candidate commit. Work in a clean worktree;
    do not include local configuration, session data, credentials, or unrelated changes.
 2. Update `project.version` in `pyproject.toml` and the final source-only fallback in
-   `nanobot/__init__.py`. Private package versions are not the Python release version.
+   `mason/__init__.py`. Private package versions are not the Python release version.
 3. Review the changes since the previous tag. Write highlights, upgrade and rollback guidance,
    contributor acknowledgements, and the full changelog. Verify counts against the final
    range; commit counts are not merged-PR counts. Coordinate security disclosures separately.
@@ -19,7 +19,7 @@ uploading to PyPI are separate operations.
    ```bash
    uv sync --all-extras --dev
    uv run --no-sync python -m scripts.install_channel_dependencies --all-channels
-   uv run --no-sync ruff check nanobot tests conftest.py
+   uv run --no-sync ruff check mason tests conftest.py
    uv run --no-sync basedpyright
    uv run --no-sync pytest
    ```
@@ -44,11 +44,11 @@ and any remaining release gates. Rebuild and recheck if the packaged source chan
 1. Confirm all pre-tag gates above are complete. Create and push exactly `vX.Y.Z`; do not move
    or reuse a published version tag.
 2. Create the matching GitHub Release. A draft may be used while assembling its attachments.
-3. Upload the checked `nanobot_ai-X.Y.Z.tar.gz` and `nanobot_ai-X.Y.Z-py3-none-any.whl` to PyPI.
+3. Upload the checked `mason_ai-X.Y.Z.tar.gz` and `mason_ai-X.Y.Z-py3-none-any.whl` to PyPI.
    Do not upload stale files from a shared `dist/` directory. This repository has no automatic
    PyPI publication workflow.
-4. Verify installation from PyPI in a clean environment, including `nanobot onboard` and one
-   real `nanobot agent -m "Hello!"` reply.
+4. Verify installation from PyPI in a clean environment, including `mason onboard` and one
+   real `mason agent -m "Hello!"` reply.
 5. Publish the release announcement and add the dated entry to
    [Release Archive](./release-archive.md). Complete any coordinated advisory publication and
    reporter notification. Record links and completion status in the release tracking issue.

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from nanobot.agent.runner import AgentRunSpec
-from nanobot.config.schema import AgentDefaults
-from nanobot.providers.base import GenerationSettings, LLMProvider
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.agent.runner import AgentRunSpec
+from mason.config.schema import AgentDefaults
+from mason.providers.base import GenerationSettings, LLMProvider
+from mason.utils.llm_runtime import LLMRuntime
 
 
 async def failed_test_consolidator(

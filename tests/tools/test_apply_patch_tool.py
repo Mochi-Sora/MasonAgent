@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from nanobot.agent.tools.apply_patch import ApplyPatchTool
+from mason.agent.tools.apply_patch import ApplyPatchTool
 
 
 def test_apply_patch_edits_replace(tmp_path):
@@ -355,7 +355,7 @@ def test_apply_patch_media_dir_is_read_only_by_default(tmp_path, monkeypatch):
     media.mkdir()
     target = media / "demo.md"
     target.write_text("before\n", encoding="utf-8")
-    monkeypatch.setattr("nanobot.agent.tools.path_utils.get_media_dir", lambda: media)
+    monkeypatch.setattr("mason.agent.tools.path_utils.get_media_dir", lambda: media)
     tool = ApplyPatchTool(workspace=workspace, allowed_dir=workspace)
 
     result = asyncio.run(

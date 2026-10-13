@@ -13,15 +13,15 @@ from contextlib import suppress
 from pathlib import Path
 from types import SimpleNamespace
 
-from nanobot.agent.hook import AgentRunHookContext
-from nanobot.agent.tools.mcp import MCPProvider
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.cli.gateway_runtime import (
+from mason.agent.hook import AgentRunHookContext
+from mason.agent.tools.mcp import MCPProvider
+from mason.agent.tools.registry import ToolRegistry
+from mason.cli.gateway_runtime import (
     _close_gateway_runtime,
     _gateway_memory_stats,
     _MCPReadinessHook,
 )
-from nanobot.memory.store import MemoryDB
+from mason.memory.store import MemoryDB
 
 
 class _FakeAgent:

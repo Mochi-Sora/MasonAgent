@@ -6,10 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import LazyCapabilitiesConfig, ToolsConfig
-from nanobot.providers.base import LLMResponse
+from mason.agent.loop import AgentLoop
+from mason.bus.queue import MessageBus
+from mason.config.schema import LazyCapabilitiesConfig, ToolsConfig
+from mason.providers.base import LLMResponse
 
 
 def _make_loop(tmp_path: Path, tools_config: ToolsConfig | None = None) -> AgentLoop:

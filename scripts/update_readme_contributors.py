@@ -28,7 +28,7 @@ class Contributor(TypedDict):
 def fetch_contributors() -> list[Contributor]:
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "nanobot-readme",
+        "User-Agent": "mason-readme",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     if token := os.environ.get("GITHUB_TOKEN"):

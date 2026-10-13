@@ -1,15 +1,15 @@
 
 import pytest
 
-from nanobot.agent.turn_delivery import TurnDeliveryFactory
-from nanobot.bus.events import InboundMessage, OutboundMessage
-from nanobot.bus.outbound_events import ContextCompactionEvent
-from nanobot.bus.queue import MessageBus
-from nanobot.bus.runtime_events import TurnCompleted
-from nanobot.events import RetryStatusEvent
-from nanobot.providers.base import LLMProvider, ProviderCallContext
-from nanobot.session.keys import HEARTBEAT_SESSION_KEY
-from nanobot.session.turn_metadata import (
+from mason.agent.turn_delivery import TurnDeliveryFactory
+from mason.bus.events import InboundMessage, OutboundMessage
+from mason.bus.outbound_events import ContextCompactionEvent
+from mason.bus.queue import MessageBus
+from mason.bus.runtime_events import TurnCompleted
+from mason.events import RetryStatusEvent
+from mason.providers.base import LLMProvider, ProviderCallContext
+from mason.session.keys import HEARTBEAT_SESSION_KEY
+from mason.session.turn_metadata import (
     WEBUI_TURN_METADATA_KEY,
 )
 
@@ -227,7 +227,7 @@ async def test_retry_completion_is_isolated_between_turns_in_one_session() -> No
 async def test_next_model_request_clears_exhaustion_within_the_same_turn() -> None:
     from unittest.mock import AsyncMock, patch
 
-    from nanobot.providers.base import LLMResponse
+    from mason.providers.base import LLMResponse
 
     class Provider(LLMProvider):
         async def chat(self, **kwargs):
@@ -242,7 +242,7 @@ async def test_next_model_request_clears_exhaustion_within_the_same_turn() -> No
     msg = InboundMessage(channel="websocket", sender_id="user", chat_id="chat", content="")
     delivery = TurnDeliveryFactory(bus).create(msg, msg.session_key)
     await delivery.events.emit(RetryStatusEvent("exhausted", 4, 4, "connection"))
-    with patch("nanobot.providers.base.asyncio.sleep", new_callable=AsyncMock):
+    with patch("mason.providers.base.asyncio.sleep", new_callable=AsyncMock):
         response = await Provider(provider_name="test").chat_stream_with_retry(
             [{"role": "user", "content": "continue"}],
             provider_context=ProviderCallContext(events=delivery.events),

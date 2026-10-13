@@ -1,27 +1,27 @@
-# Build a Discord AI Agent with nanobot
+# Build a Discord AI Agent with mason
 
-This guide connects nanobot to Discord so a Discord user or server channel can
-talk to your self-hosted AI agent through the nanobot gateway.
+This guide connects mason to Discord so a Discord user or server channel can
+talk to your self-hosted AI agent through the mason gateway.
 
 ## What this guide builds
 
 - a Discord bot application
 - Message Content intent enabled
-- the `discord` channel enabled in nanobot
+- the `discord` channel enabled in mason
 - one direct message or mention test
 
 ## Prerequisites
 
-- A working local nanobot reply:
+- A working local mason reply:
 
 ```bash
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 - Access to the Discord Developer Portal.
 - A Discord server where you can invite a bot.
 
-## Install nanobot
+## Install mason
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
@@ -32,13 +32,13 @@ nanobot agent -m "Hello!"
 Install the optional channel dependency:
 
 ```bash
-nanobot plugins enable discord
+mason plugins enable discord
 ```
 
 Create a Discord application, add a bot, copy the token, and enable
 `MESSAGE CONTENT INTENT` in the bot settings.
 
-Merge this snippet into `~/.nanobot/config.json`:
+Merge this snippet into `~/.mason/config.json`:
 
 ```json
 {
@@ -63,11 +63,11 @@ Invite the bot with permissions to read history and send messages.
 Set `replyToMessage` to `true` to make responses use Discord's native reply UI.
 It defaults to `false`, preserving the existing behavior.
 
-## Run nanobot gateway
+## Run mason gateway
 
 ```bash
-nanobot channels status
-nanobot gateway
+mason channels status
+mason gateway
 ```
 
 ## Test a message
@@ -76,7 +76,7 @@ Send the bot a DM first. It should return a pairing code. Approve it from a
 trusted local surface:
 
 ```bash
-nanobot agent -m "/pairing approve ABCD-EFGH"
+mason agent -m "/pairing approve ABCD-EFGH"
 ```
 
 After approval, mention it in an allowed server channel:

@@ -13,20 +13,20 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.subagent import SubagentManager, SubagentStatus
-from nanobot.agent.tools.registry import is_tool_error_result
-from nanobot.agent.tools.search import FindFilesTool, GrepTool
-from nanobot.agent.tools.web import WebSearchTool
-from nanobot.bus.queue import MessageBus
-from nanobot.config.schema import WebSearchConfig
-from nanobot.providers.base import GenerationSettings
-from nanobot.security.workspace_access import (
+from mason.agent.loop import AgentLoop
+from mason.agent.subagent import SubagentManager, SubagentStatus
+from mason.agent.tools.registry import is_tool_error_result
+from mason.agent.tools.search import FindFilesTool, GrepTool
+from mason.agent.tools.web import WebSearchTool
+from mason.bus.queue import MessageBus
+from mason.config.schema import WebSearchConfig
+from mason.providers.base import GenerationSettings
+from mason.security.workspace_access import (
     bind_workspace_scope,
     default_workspace_scope,
     reset_workspace_scope,
 )
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.utils.llm_runtime import LLMRuntime
 
 
 @pytest.mark.asyncio
@@ -41,7 +41,7 @@ async def test_web_search_tool_refreshes_dynamic_config_loader(monkeypatch) -> N
 
     monkeypatch.setattr(WebSearchTool, "_search_duckduckgo", fake_duckduckgo)
 
-    assert await tool.execute("nanobot") == "duckduckgo:nanobot:3"
+    assert await tool.execute("mason") == "duckduckgo:mason:3"
 
 
 @pytest.mark.asyncio
@@ -434,7 +434,7 @@ async def test_grep_searches_xlsx_beyond_attachment_preview_limit(
 ) -> None:
     from openpyxl import Workbook
 
-    from nanobot.utils import document as document_utils
+    from mason.utils import document as document_utils
 
     workbook_path = tmp_path / "long.xlsx"
     workbook = Workbook()
@@ -858,7 +858,7 @@ async def test_search_invalid_glob_is_an_error_even_in_empty_directory(tmp_path,
 
 @pytest.mark.parametrize("tool_class", [FindFilesTool, GrepTool])
 async def test_search_skips_generated_directories_but_allows_explicit_roots(tmp_path, tool_class):
-    excluded = [".worktrees/other", ".worktree/other", ".nanobot/tool-results", "webui/.verify-run"]
+    excluded = [".worktrees/other", ".worktree/other", ".mason/tool-results", "webui/.verify-run"]
     for name in ["src", ".agent", *excluded]:
         directory = tmp_path / name
         directory.mkdir(parents=True)
@@ -1023,7 +1023,7 @@ async def test_grep_marks_a_long_line_already_present_as_context(tmp_path):
 
 @pytest.mark.parametrize("mode", ["content", "count", "files_with_matches"])
 async def test_grep_closes_document_stream_and_preserves_locators(tmp_path, monkeypatch, mode):
-    from nanobot.utils.document import DocumentLineSource, LocatedDocumentLine
+    from mason.utils.document import DocumentLineSource, LocatedDocumentLine
 
     (tmp_path / "source.pdf").write_bytes(b"placeholder")
     visited = []
@@ -1039,7 +1039,7 @@ async def test_grep_closes_document_stream_and_preserves_locators(tmp_path, monk
             closed.append(True)
 
     monkeypatch.setattr(
-        "nanobot.agent.tools.search.open_document_line_source",
+        "mason.agent.tools.search.open_document_line_source",
         lambda *_args, **_kwargs: DocumentLineSource(document_lines(), "pages=2-3"),
     )
     result = await GrepTool(workspace=tmp_path).execute(

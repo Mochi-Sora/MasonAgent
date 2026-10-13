@@ -8,13 +8,13 @@ from datetime import datetime
 
 import pytest
 
-from nanobot.agent.tools.context import RequestContext, request_context
-from nanobot.agent.tools.loader import ToolLoader
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.agent.tools.sessions import ReadSessionTool, SearchSessionsTool
-from nanobot.runtime_context import RuntimeContextBlock, append_runtime_context
-from nanobot.session.manager import SessionManager
-from nanobot.session.session_handles import SessionHandleResolver
+from mason.agent.tools.context import RequestContext, request_context
+from mason.agent.tools.loader import ToolLoader
+from mason.agent.tools.registry import ToolRegistry
+from mason.agent.tools.sessions import ReadSessionTool, SearchSessionsTool
+from mason.runtime_context import RuntimeContextBlock, append_runtime_context
+from mason.session.manager import SessionManager
+from mason.session.session_handles import SessionHandleResolver
 
 
 def _save_session(

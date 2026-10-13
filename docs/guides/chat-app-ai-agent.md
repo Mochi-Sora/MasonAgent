@@ -1,6 +1,6 @@
-# How to Connect an AI Agent to Chat Apps with nanobot
+# How to Connect an AI Agent to Chat Apps with mason
 
-nanobot can run as a self-hosted chatbot or AI agent in Telegram, Discord,
+mason can run as a self-hosted chatbot or AI agent in Telegram, Discord,
 Slack, WeChat, Email, Mattermost, and other chat apps. The gateway receives chat
 messages, runs the agent, and sends replies back to the same channel.
 
@@ -20,7 +20,7 @@ private DMs, team channels, group chats, email threads, or bot workspaces.
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 Get one reply in the terminal before adding a channel. Then choose one platform guide for the bot/account prerequisites:
@@ -40,10 +40,10 @@ Get one reply in the terminal before adding a channel. Then choose one platform 
 Use the guided channel setup:
 
 1. Get the platform token, login state, webhook, or mailbox credentials.
-2. Run `nanobot onboard --wizard` and choose the channel step.
+2. Run `mason onboard --wizard` and choose the channel step.
 3. Pick the platform and answer the credential prompts, or start its QR flow.
 4. Install optional support if prompted.
-5. Start the gateway: `nanobot gateway`.
+5. Start the gateway: `mason gateway`.
 6. Send a private test message.
 7. Approve the pairing request with `/pairing approve <code>` from an authorized chat when a DM-capable channel asks for one.
 
@@ -52,13 +52,13 @@ To configure manually instead, use the full [Chat Apps reference](../chat-apps.m
 Check status from the terminal when you need a lower-level confirmation:
 
 ```bash
-nanobot channels status
+mason channels status
 ```
 
 For a chat-only or server deployment, start the gateway directly:
 
 ```bash
-nanobot gateway
+mason gateway
 ```
 
 Use the full [Chat Apps reference](../chat-apps.md) when you manage `config.json` directly or need platform-specific advanced settings.
@@ -80,14 +80,14 @@ Use the full [Chat Apps reference](../chat-apps.md) when you manage `config.json
 
 ## Troubleshooting
 
-- If `nanobot channels status` does not show the channel, the config key or
+- If `mason channels status` does not show the channel, the config key or
   optional dependency is likely missing.
 - If the first DM returns a pairing code, approve it with `/pairing approve <code>` from an authorized chat.
-- If messages do not arrive, run `nanobot gateway --verbose` and compare
+- If messages do not arrive, run `mason gateway --verbose` and compare
   platform credentials, event permissions, and allow lists.
 - If group replies are unexpected, review that channel's group policy.
 
-## Related nanobot docs
+## Related mason docs
 
 - [Chat Apps](../chat-apps.md)
 - [Configuration](../configuration.md#channel-settings)

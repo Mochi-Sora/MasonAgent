@@ -2,8 +2,8 @@
 
 import asyncio
 
-from nanobot.agent.loop import AgentLoop
-from nanobot.bus.events import InboundMessage
+from mason.agent.loop import AgentLoop
+from mason.bus.events import InboundMessage
 
 
 async def run_session(loop: AgentLoop, msg: InboundMessage) -> None:

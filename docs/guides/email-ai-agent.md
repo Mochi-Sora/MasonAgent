@@ -1,28 +1,28 @@
-# Build an Email AI Agent with nanobot
+# Build an Email AI Agent with mason
 
-This guide turns nanobot into an email AI agent that polls IMAP for accepted
+This guide turns mason into an email AI agent that polls IMAP for accepted
 messages and replies through SMTP.
 
 ## What this guide builds
 
-- a dedicated mailbox for nanobot
+- a dedicated mailbox for mason
 - IMAP and SMTP credentials in `config.json`
 - an allowed sender list
 - a gateway process that polls and replies
 
 ## Prerequisites
 
-- A working local nanobot reply:
+- A working local mason reply:
 
 ```bash
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 - A mailbox for the bot.
 - IMAP and SMTP access. For Gmail, use an app password rather than your account
   password.
 
-## Install nanobot
+## Install mason
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
@@ -30,7 +30,7 @@ nanobot agent -m "Hello!"
 
 ## Enable the Email channel
 
-Merge this snippet into `~/.nanobot/config.json` and replace the addresses and
+Merge this snippet into `~/.mason/config.json` and replace the addresses and
 passwords:
 
 ```json
@@ -41,13 +41,13 @@ passwords:
       "consentGranted": true,
       "imapHost": "imap.gmail.com",
       "imapPort": 993,
-      "imapUsername": "my-nanobot@gmail.com",
+      "imapUsername": "my-mason@gmail.com",
       "imapPassword": "your-app-password",
       "smtpHost": "smtp.gmail.com",
       "smtpPort": 587,
-      "smtpUsername": "my-nanobot@gmail.com",
+      "smtpUsername": "my-mason@gmail.com",
       "smtpPassword": "your-app-password",
-      "fromAddress": "my-nanobot@gmail.com",
+      "fromAddress": "my-mason@gmail.com",
       "allowFrom": ["your-real-email@gmail.com"],
       "trustedAuthservIds": ["mx.google.com"],
       "autoReplyEnabled": true
@@ -56,11 +56,11 @@ passwords:
 }
 ```
 
-## Run nanobot gateway
+## Run mason gateway
 
 ```bash
-nanobot channels status
-nanobot gateway
+mason channels status
+mason gateway
 ```
 
 ## Test a message
@@ -78,7 +78,7 @@ gateway running long enough for the polling interval to receive it.
   `authserv-id` added by your receiving mail service. For Gmail this is normally
   `mx.google.com`. The service must prepend one consolidated
   `Authentication-Results` header and remove inbound headers claiming the same
-  identity. nanobot rejects authenticated email when this trust anchor is missing
+  identity. mason rejects authenticated email when this trust anchor is missing
   or appears more than once.
 - Use environment variables for mailbox passwords.
 - Enable attachment types only when the agent needs them.

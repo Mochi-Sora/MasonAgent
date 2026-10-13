@@ -7,22 +7,22 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.agent.goal_permission import goal_mutation_allowed, goal_mutation_permission
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.tools.context import (
+from mason.agent.goal_permission import goal_mutation_allowed, goal_mutation_permission
+from mason.agent.loop import AgentLoop
+from mason.agent.tools.context import (
     RequestContext,
     current_request_context,
     request_context,
 )
-from nanobot.agent.tools.long_task import (
+from mason.agent.tools.long_task import (
     CreateGoalTool,
     UpdateGoalTool,
 )
-from nanobot.agent.tools.registry import ToolRegistry
-from nanobot.bus.queue import MessageBus
-from nanobot.session.goal_state import GOAL_STATE_KEY, MAX_GOAL_OBJECTIVE_CHARS
-from nanobot.session.manager import SessionManager
-from nanobot.session.turn_continuation import should_finalize_on_max_iterations
+from mason.agent.tools.registry import ToolRegistry
+from mason.bus.queue import MessageBus
+from mason.session.goal_state import GOAL_STATE_KEY, MAX_GOAL_OBJECTIVE_CHARS
+from mason.session.manager import SessionManager
+from mason.session.turn_continuation import should_finalize_on_max_iterations
 
 
 def _goal_metadata() -> dict[str, object]:

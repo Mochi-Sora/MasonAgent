@@ -1,7 +1,7 @@
-# Build a WhatsApp AI Agent with nanobot
+# Build a WhatsApp AI Agent with mason
 
-This guide connects nanobot to WhatsApp through the `whatsapp` channel. The
-channel links as a WhatsApp device and uses the same nanobot agent runtime,
+This guide connects mason to WhatsApp through the `whatsapp` channel. The
+channel links as a WhatsApp device and uses the same mason agent runtime,
 tools, memory, and workspace as the CLI.
 
 ## What this guide builds
@@ -13,16 +13,16 @@ tools, memory, and workspace as the CLI.
 
 ## Prerequisites
 
-- A working local nanobot reply:
+- A working local mason reply:
 
 ```bash
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 - A WhatsApp account that can link a new device.
-- A machine that can keep `nanobot gateway` running.
+- A machine that can keep `mason gateway` running.
 
-## Install nanobot
+## Install mason
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
@@ -33,18 +33,18 @@ nanobot agent -m "Hello!"
 Install the optional channel dependency:
 
 ```bash
-nanobot plugins enable whatsapp
+mason plugins enable whatsapp
 ```
 
 Link WhatsApp as a device:
 
 ```bash
-nanobot channels login whatsapp
+mason channels login whatsapp
 ```
 
 Scan the QR code from WhatsApp -> Settings -> Linked Devices.
 
-Merge this snippet into `~/.nanobot/config.json`:
+Merge this snippet into `~/.mason/config.json`:
 
 ```json
 {
@@ -61,11 +61,11 @@ Omitting `allowFrom` enables pairing-only mode for private chats. `groupPolicy`
 defaults to `"open"` in the channel, but `"mention"` is safer for a first
 deployment.
 
-## Run nanobot gateway
+## Run mason gateway
 
 ```bash
-nanobot channels status
-nanobot gateway
+mason channels status
+mason gateway
 ```
 
 ## Test a message
@@ -74,7 +74,7 @@ Send the bot a private WhatsApp message. It should return a pairing code.
 Approve it from a trusted local surface:
 
 ```bash
-nanobot agent -m "/pairing approve ABCD-EFGH"
+mason agent -m "/pairing approve ABCD-EFGH"
 ```
 
 Send the message again after approval. The reply should use the same model and
@@ -90,10 +90,10 @@ workspace as your local CLI check.
 
 ## Troubleshooting
 
-- If QR linking fails, rerun `nanobot channels login whatsapp`.
+- If QR linking fails, rerun `mason channels login whatsapp`.
 - If you are migrating from the old bridge, remove `bridgeUrl` and
   `bridgeToken`, then re-login.
-- If a sender appears as a LID instead of a phone number, let nanobot learn the
+- If a sender appears as a LID instead of a phone number, let mason learn the
   mapping at runtime or use `lidMappings` in the full reference.
 - If a first private message returns a pairing code, approve it before testing
   normal replies.

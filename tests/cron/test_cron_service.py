@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.cron.service import CronJobSkippedError, CronService
-from nanobot.cron.types import CronJob, CronPayload, CronSchedule
-from nanobot.runtime_context import RUNTIME_CONTEXT_INPUT_META
+from mason.cron.service import CronJobSkippedError, CronService
+from mason.cron.types import CronJob, CronPayload, CronSchedule
+from mason.runtime_context import RUNTIME_CONTEXT_INPUT_META
 
 
 async def _wait_until(predicate, *, timeout: float = 1.0, interval: float = 0.01) -> None:

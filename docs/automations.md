@@ -1,21 +1,21 @@
 # Automations
 
-<!-- Meta description: Create, run, and manage nanobot scheduled automations, local triggers, and heartbeat-backed background checks. -->
+<!-- Meta description: Create, run, and manage mason scheduled automations, local triggers, and heartbeat-backed background checks. -->
 
 Automations are agent turns that run later in a linked topic. Use them
-when nanobot should do work without someone actively typing: reminders,
+when mason should do work without someone actively typing: reminders,
 recurring checks, nightly summaries, CI follow-ups, local script reports, or
 webhook-driven events.
 
 Create automations from the chat where the result should appear. That lets
-nanobot keep the right session history, workspace, and reply target.
+mason keep the right session history, workspace, and reply target.
 
 ## Choose an Automation Type
 
 | Type | Starts from | Best for | Created with |
 |---|---|---|---|
-| Scheduled automation | Time, interval, or cron expression | Recurring reminders, scheduled summaries, one-time future tasks | Ask nanobot in the target topic to schedule it with the `cron` tool |
-| Local trigger | A local `nanobot trigger ...` command | CI jobs, webhooks, shell scripts, generated reports | `/trigger <name>` in the target topic |
+| Scheduled automation | Time, interval, or cron expression | Recurring reminders, scheduled summaries, one-time future tasks | Ask mason in the target topic to schedule it with the `cron` tool |
+| Local trigger | A local `mason trigger ...` command | CI jobs, webhooks, shell scripts, generated reports | `/trigger <name>` in the target topic |
 | Heartbeat | Protected system schedule | Quiet recurring checks that should only report useful results | Edit `<workspace>/HEARTBEAT.md` |
 
 The two user-created automation types are scheduled automations and local
@@ -24,13 +24,13 @@ protected from normal automation edits.
 
 ## Before You Create One
 
-Keep `nanobot gateway` running. The gateway owns background delivery for chat
+Keep `mason gateway` running. The gateway owns background delivery for chat
 apps, scheduled automations, local triggers, heartbeat, and
 memory consolidation jobs.
 
 Use the same workspace and config for the gateway and any process that sends
-local trigger messages. If you run multiple nanobot instances, pass the matching
-`--config` or `--workspace` option to `nanobot trigger`.
+local trigger messages. If you run multiple mason instances, pass the matching
+`--config` or `--workspace` option to `mason trigger`.
 
 Create each automation from the target chat. An automation without a linked
 chat has nowhere to deliver the turn.
@@ -38,7 +38,7 @@ chat has nowhere to deliver the turn.
 ## Scheduled Automations
 
 Scheduled automations are created by the agent's `cron` tool. In practice, ask
-nanobot from the target chat:
+mason from the target chat:
 
 ```text
 Every weekday at 9am, check open pull requests and summarize blockers here.
@@ -52,7 +52,7 @@ Tomorrow at 4pm, remind me to send the release notes.
 
 The cron tool supports interval schedules, cron expressions, and one-time
 scheduled tasks. Cron expressions can include an IANA timezone such as
-`America/Vancouver`; otherwise nanobot uses the runtime default timezone.
+`America/Vancouver`; otherwise mason uses the runtime default timezone.
 
 Scheduled automations normally deliver the result back to the session where they
 were created. Use them for work that should run on a predictable schedule and
@@ -64,7 +64,7 @@ report, use heartbeat instead of a user-created scheduled automation.
 ## Local Triggers
 
 Local triggers let a local script or external service send a message into a
-specific nanobot session later.
+specific mason session later.
 
 Create the trigger from the chat where future messages should
 arrive:
@@ -73,30 +73,30 @@ arrive:
 /trigger PR review
 ```
 
-nanobot replies with a trigger ID and a command shaped like:
+mason replies with a trigger ID and a command shaped like:
 
 ```bash
-nanobot trigger trg_8K4P2Q9X "Review PR #4502"
+mason trigger trg_8K4P2Q9X "Review PR #4502"
 ```
 
-Replace the quoted text with the message nanobot should receive. For generated
+Replace the quoted text with the message mason should receive. For generated
 or longer content, pipe stdin:
 
 ```bash
-generate-report | nanobot trigger trg_8K4P2Q9X
+generate-report | mason trigger trg_8K4P2Q9X
 ```
 
 For multiple instances, use the same config or workspace selector as the
 gateway:
 
 ```bash
-nanobot trigger --config ./bot-a/config.json trg_8K4P2Q9X "Nightly report"
-nanobot trigger --workspace ./bot-a/workspace trg_8K4P2Q9X "Nightly report"
+mason trigger --config ./bot-a/config.json trg_8K4P2Q9X "Nightly report"
+mason trigger --workspace ./bot-a/workspace trg_8K4P2Q9X "Nightly report"
 ```
 
-nanobot does not provide a built-in public webhook receiver for local triggers.
-If GitHub, CI, or another external system should wake nanobot, run your own
-small webhook service and have it call `nanobot trigger` after it builds the
+mason does not provide a built-in public webhook receiver for local triggers.
+If GitHub, CI, or another external system should wake mason, run your own
+small webhook service and have it call `mason trigger` after it builds the
 final message.
 
 ## Heartbeat
@@ -110,12 +110,12 @@ Use heartbeat for checks such as "watch this repo for important failures" or
 a scheduled automation instead when every run should produce a visible reminder
 or report.
 
-Heartbeat is enabled by default when `nanobot gateway` starts. Configure it in
+Heartbeat is enabled by default when `mason gateway` starts. Configure it in
 [`configuration.md#gateway-heartbeat`](./configuration.md#gateway-heartbeat).
 
 ## Manage Automations
 
-Manage scheduled automations by asking nanobot in a chat:
+Manage scheduled automations by asking mason in a chat:
 
 - list them ("list my scheduled jobs");
 - remove a job by ID ("remove job <id>").
@@ -127,7 +127,7 @@ alone.
 
 Local triggers are managed with `/trigger` inside the linked chat. Each trigger
 command needs a message, so there is no "run now" action: call
-the printed `nanobot trigger ...` command yourself and replace `"message"` with
+the printed `mason trigger ...` command yourself and replace `"message"` with
 the content that should be delivered.
 
 ## Delivery and Reliability
@@ -167,18 +167,18 @@ For a CI follow-up, create a trigger once:
 Then have your CI or webhook adapter call:
 
 ```bash
-nanobot trigger <trigger-id> "Build failed on main. Inspect the logs and suggest the next fix."
+mason trigger <trigger-id> "Build failed on main. Inspect the logs and suggest the next fix."
 ```
 
 For a local report script:
 
 ```bash
-generate-report | nanobot trigger <trigger-id>
+generate-report | mason trigger <trigger-id>
 ```
 
 ## Troubleshooting
 
-If an automation does not run, check that `nanobot gateway` is running, the
+If an automation does not run, check that `mason gateway` is running, the
 automation is enabled, and it was created from a linked topic.
 
 If a local trigger waits forever, confirm the command uses the same workspace or
@@ -187,12 +187,12 @@ config as the gateway.
 If a trigger message appears twice after a restart, treat it as expected
 at-least-once delivery and make the external message idempotent.
 
-If you need to edit, remove, or inspect automations, ask nanobot in a chat or
+If you need to edit, remove, or inspect automations, ask mason in a chat or
 edit `<workspace>/cron/jobs.json` while the gateway is stopped.
 
 ## Related Docs
 
 - [`chat-commands.md#local-triggers`](./chat-commands.md#local-triggers) for `/trigger`
-- [`cli-reference.md#local-triggers`](./cli-reference.md#local-triggers) for `nanobot trigger`
+- [`cli-reference.md#local-triggers`](./cli-reference.md#local-triggers) for `mason trigger`
 - [`configuration.md#gateway-heartbeat`](./configuration.md#gateway-heartbeat) for heartbeat settings
 - [`guides/long-running-ai-agent.md`](./guides/long-running-ai-agent.md) for long-running agent work

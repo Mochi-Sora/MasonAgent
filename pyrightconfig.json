@@ -1,5 +1,5 @@
 {
-  "include": ["nanobot"],
+  "include": ["mason"],
   "exclude": ["**/tests", "**/node_modules", "**/__pycache__", "**/.*"],
   "typeCheckingMode": "strict",
   "pythonVersion": "3.11",

@@ -1,6 +1,6 @@
-# How to Run a Long-Running AI Agent with nanobot
+# How to Run a Long-Running AI Agent with mason
 
-nanobot can keep agent work alive across turns through sustained goals,
+mason can keep agent work alive across turns through sustained goals,
 persistent sessions, scheduled automations, local triggers, and a gateway
 process that stays running.
 
@@ -21,7 +21,7 @@ from scripts and build jobs.
 
 ```bash
 ./scripts/install.sh  # from a checkout; runs the setup wizard
-nanobot agent -m "Hello!"
+mason agent -m "Hello!"
 ```
 
 ## Minimal working example
@@ -29,7 +29,7 @@ nanobot agent -m "Hello!"
 Start a gateway:
 
 ```bash
-nanobot gateway
+mason gateway
 ```
 
 From a chat session, start a sustained goal:
@@ -39,7 +39,7 @@ From a chat session, start a sustained goal:
 ```
 
 For scheduled or trigger-based runs, create the automation from the target chat
-so nanobot can link it to the correct session and workspace.
+so mason can link it to the correct session and workspace.
 
 ## Production notes
 
@@ -47,7 +47,7 @@ so nanobot can link it to the correct session and workspace.
   triggers.
 - Use stable session keys or chat sessions for work that should preserve context.
 - Keep goals bounded and explicit about done-ness.
-- Ask nanobot to list your scheduled jobs before relying on a schedule.
+- Ask mason to list your scheduled jobs before relying on a schedule.
 
 ## Security notes
 
@@ -60,10 +60,10 @@ so nanobot can link it to the correct session and workspace.
 - If a goal appears stuck, inspect the active session and gateway logs.
 - If an automation does not run, check that it is linked to a chat/session and
   that the gateway is still running.
-- If a local trigger fails, check the printed `nanobot trigger ...` command and
+- If a local trigger fails, check the printed `mason trigger ...` command and
   the gateway logs.
 
-## Related nanobot docs
+## Related mason docs
 
 - [Automations](../automations.md)
 

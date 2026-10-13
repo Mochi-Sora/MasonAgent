@@ -2,7 +2,7 @@ from io import StringIO
 
 from loguru import logger
 
-from nanobot.utils.log_config import add_console_log_sink
+from mason.utils.log_config import add_console_log_sink
 
 
 def test_console_log_sink_includes_context_and_escapes_message_newlines() -> None:

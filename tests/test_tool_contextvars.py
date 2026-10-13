@@ -6,15 +6,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nanobot.agent.tools.context import RequestContext, request_context
-from nanobot.agent.tools.cron import CronTool
-from nanobot.agent.tools.message import MessageTool
-from nanobot.agent.tools.spawn import SpawnTool
-from nanobot.cron.service import CronService
-from nanobot.providers.base import GenerationSettings, LLMProvider
-from nanobot.runtime_context import RUNTIME_CONTEXT_INPUT_META, RuntimeContextBlock
-from nanobot.session.keys import UNIFIED_SESSION_KEY
-from nanobot.utils.llm_runtime import LLMRuntime
+from mason.agent.tools.context import RequestContext, request_context
+from mason.agent.tools.cron import CronTool
+from mason.agent.tools.message import MessageTool
+from mason.agent.tools.spawn import SpawnTool
+from mason.cron.service import CronService
+from mason.providers.base import GenerationSettings, LLMProvider
+from mason.runtime_context import RUNTIME_CONTEXT_INPUT_META, RuntimeContextBlock
+from mason.session.keys import UNIFIED_SESSION_KEY
+from mason.utils.llm_runtime import LLMRuntime
 
 
 def _runtime(model: str = "test-model") -> LLMRuntime:

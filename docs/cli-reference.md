@@ -6,108 +6,108 @@ Use this page when you know what you want to run and need the command shape. For
 
 | Goal | Command | Notes |
 |---|---|---|
-| Check the install | `nanobot --version` | If this fails, try `python -m nanobot --version` |
-| Create or refresh config | `nanobot onboard` | Creates `~/.nanobot/config.json` and `~/.nanobot/workspace/` |
-| Refresh config non-interactively | `nanobot onboard --refresh` | Preserves existing values and adds missing default fields without prompting |
-| Use guided setup | `nanobot onboard --wizard` | Best when you prefer prompts over hand-editing JSON |
-| Check readiness without calling a model | `nanobot status` | Summarizes config/workspace and validates the active provider/model configuration |
-| Send one test message | `nanobot -m "Hello!"` | First proof that install, config, provider, model, and workspace all work |
-| Chat in the terminal | `nanobot` | Interactive local chat; `nanobot agent` remains an explicit alias |
-| Run the gateway directly | `nanobot gateway` | Service/ops command for chat apps, cron, and heartbeat |
-| Deliver a local trigger | `nanobot trigger <id> "message"` | Created first with `/trigger <name>` in the target chat/session |
-| Serve an OpenAI-compatible API | `nanobot serve` | Starts `/v1/chat/completions`, `/v1/models`, and `/health` |
-| Check chat channel setup | `nanobot channels status` | Useful before starting `nanobot gateway` |
-| Manage optional features | `nanobot plugins list` | Shows channels and optional capabilities you can turn on |
-| Log in to QR/OAuth-style channels | `nanobot channels login <channel>` | Used by channels such as WhatsApp and WeChat |
-| Complete a browser authorization for a channel | `nanobot channels connect <channel>` | Used by Linear |
-| Authorize an OAuth MCP server | `nanobot mcp login <server>` | Stores tokens outside `config.json` |
-| Log in to OAuth model providers | `nanobot provider login <provider>` | Used by OpenAI Codex, xAI subscription, and GitHub Copilot providers |
+| Check the install | `mason --version` | If this fails, try `python -m mason --version` |
+| Create or refresh config | `mason onboard` | Creates `~/.mason/config.json` and `~/.mason/workspace/` |
+| Refresh config non-interactively | `mason onboard --refresh` | Preserves existing values and adds missing default fields without prompting |
+| Use guided setup | `mason onboard --wizard` | Best when you prefer prompts over hand-editing JSON |
+| Check readiness without calling a model | `mason status` | Summarizes config/workspace and validates the active provider/model configuration |
+| Send one test message | `mason -m "Hello!"` | First proof that install, config, provider, model, and workspace all work |
+| Chat in the terminal | `mason` | Interactive local chat; `mason agent` remains an explicit alias |
+| Run the gateway directly | `mason gateway` | Service/ops command for chat apps, cron, and heartbeat |
+| Deliver a local trigger | `mason trigger <id> "message"` | Created first with `/trigger <name>` in the target chat/session |
+| Serve an OpenAI-compatible API | `mason serve` | Starts `/v1/chat/completions`, `/v1/models`, and `/health` |
+| Check chat channel setup | `mason channels status` | Useful before starting `mason gateway` |
+| Manage optional features | `mason plugins list` | Shows channels and optional capabilities you can turn on |
+| Log in to QR/OAuth-style channels | `mason channels login <channel>` | Used by channels such as WhatsApp and WeChat |
+| Complete a browser authorization for a channel | `mason channels connect <channel>` | Used by Linear |
+| Authorize an OAuth MCP server | `mason mcp login <server>` | Stores tokens outside `config.json` |
+| Log in to OAuth model providers | `mason provider login <provider>` | Used by OpenAI Codex, xAI subscription, and GitHub Copilot providers |
 
 ## Global
 
 ```bash
-nanobot --help
-nanobot --version
-python -m nanobot --help
-python -m nanobot --version
+mason --help
+mason --version
+python -m mason --help
+python -m mason --version
 ```
 
-`python -m nanobot ...` is useful when the package is installed but the `nanobot` script is not on `PATH`.
+`python -m mason ...` is useful when the package is installed but the `mason` script is not on `PATH`.
 
 ## Common Patterns
 
 Most day-to-day commands use the default config and workspace. Advanced or multi-instance runs usually pass both paths explicitly:
 
 ```bash
-nanobot agent --config ./bot-a/config.json --workspace ./bot-a/workspace -m "Hello"
-nanobot gateway --config ./bot-a/config.json --workspace ./bot-a/workspace
-nanobot serve --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason agent --config ./bot-a/config.json --workspace ./bot-a/workspace -m "Hello"
+mason gateway --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason serve --config ./bot-a/config.json --workspace ./bot-a/workspace
 ```
 
 Use `--verbose` on long-running processes when you need startup or runtime logs:
 
 ```bash
-nanobot gateway --verbose
-nanobot serve --verbose
+mason gateway --verbose
+mason serve --verbose
 ```
 
 Long-running commands keep working until you stop them. Press `Ctrl+C` in that terminal
-to stop foreground `nanobot gateway` or `nanobot serve`. If you started the gateway
-with `--background`, use `nanobot gateway stop`.
+to stop foreground `mason gateway` or `mason serve`. If you started the gateway
+with `--background`, use `mason gateway stop`.
 
 ## Setup
 
 | Command | Description |
 |---|---|
-| `nanobot onboard` | Initialize or refresh the default config and workspace |
-| `nanobot onboard --refresh` | Refresh an existing config without prompting, preserving existing values |
-| `nanobot onboard --wizard` | Use the interactive setup wizard |
-| `nanobot onboard --config <path> --workspace <path>` | Initialize or refresh a specific instance |
+| `mason onboard` | Initialize or refresh the default config and workspace |
+| `mason onboard --refresh` | Refresh an existing config without prompting, preserving existing values |
+| `mason onboard --wizard` | Use the interactive setup wizard |
+| `mason onboard --config <path> --workspace <path>` | Initialize or refresh a specific instance |
 
 Default paths:
 
 | Path | Default |
 |---|---|
-| Config | `~/.nanobot/config.json` |
-| Workspace | `~/.nanobot/workspace/` |
+| Config | `~/.mason/config.json` |
+| Workspace | `~/.mason/workspace/` |
 
 ## Status
 
 | Command | Description |
 |---|---|
-| `nanobot status` | Summarize the default config/workspace and check Agent provider/model readiness |
-| `nanobot status --config <path>` | Check a specific config file |
-| `nanobot status --workspace <path>` | Show status with a workspace override |
+| `mason status` | Summarize the default config/workspace and check Agent provider/model readiness |
+| `mason status --config <path>` | Check a specific config file |
+| `mason status --workspace <path>` | Show status with a workspace override |
 
 Status does not send a model request. On success, run the printed
-`nanobot agent -m "Hello!"` command to verify network access and credentials. On failure,
-follow the printed `nanobot onboard --wizard` route.
+`mason agent -m "Hello!"` command to verify network access and credentials. On failure,
+follow the printed `mason onboard --wizard` route.
 
 ## Agent CLI
 
 | Command | Description |
 |---|---|
-| `nanobot -m "Hello!"` | Send one message and exit |
-| `nanobot` | Start interactive terminal chat |
-| `nanobot --session <id>` | Use a specific saved session |
-| `nanobot --workspace <path>` | Override workspace |
-| `nanobot --config <path>` | Use a specific config file |
-| `nanobot --no-markdown` | Print plain text instead of Markdown |
-| `nanobot --logs` | Show runtime logs while chatting |
+| `mason -m "Hello!"` | Send one message and exit |
+| `mason` | Start interactive terminal chat |
+| `mason --session <id>` | Use a specific saved session |
+| `mason --workspace <path>` | Override workspace |
+| `mason --config <path>` | Use a specific config file |
+| `mason --no-markdown` | Print plain text instead of Markdown |
+| `mason --logs` | Show runtime logs while chatting |
 
 ## Session Storage and Rollback
 
 Session JSONL files live under `<config-dir>/sessions/<workspace-id>/`, outside the
-agent-readable workspace. On the first upgraded start, nanobot safely migrates existing
-`<workspace>/sessions/*.jsonl` files after verifying an atomic copy. Stop every old nanobot
+agent-readable workspace. On the first upgraded start, mason safely migrates existing
+`<workspace>/sessions/*.jsonl` files after verifying an atomic copy. Stop every old mason
 process that uses the workspace before upgrading; old and new binaries must not write the
 same session concurrently.
 
-To prepare a downgrade, stop nanobot and copy the current sessions back to the path understood
+To prepare a downgrade, stop mason and copy the current sessions back to the path understood
 by older releases:
 
 ```bash
-nanobot sessions restore-workspace --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason sessions restore-workspace --config ./bot-a/config.json --workspace ./bot-a/workspace
 ```
 
 The command never deletes the external store and refuses to overwrite a different existing
@@ -119,32 +119,32 @@ workflows stay predictable.
 
 ## Gateway
 
-`nanobot gateway` starts enabled chat channels, cron-backed system jobs such as memory consolidation, memory rollover, and heartbeat, and the health endpoint. By default it runs in the foreground, which keeps existing scripts and terminal workflows unchanged. Use `--background` when you want a local macOS, Linux, or Windows process that you can manage from the CLI.
+`mason gateway` starts enabled chat channels, cron-backed system jobs such as memory consolidation, memory rollover, and heartbeat, and the health endpoint. By default it runs in the foreground, which keeps existing scripts and terminal workflows unchanged. Use `--background` when you want a local macOS, Linux, or Windows process that you can manage from the CLI.
 
 | Command | Description |
 |---|---|
-| `nanobot gateway` | Start the gateway in the foreground with config defaults |
-| `nanobot gateway --verbose` | Show verbose runtime output |
-| `nanobot gateway --port <port>` | Override `gateway.port` for the health endpoint |
-| `nanobot gateway --workspace <path>` | Override workspace |
-| `nanobot gateway --config <path>` | Use a specific config file |
-| `nanobot gateway --background` | Start the gateway as a background process |
-| `nanobot gateway status` | Show PID, foreground/background launch mode, explicit/on-demand lifetime, live client count, state, and logs |
-| `nanobot gateway logs --no-follow` | Print recent background gateway logs and exit |
-| `nanobot gateway logs` | Follow background gateway logs |
-| `nanobot gateway restart` | Restart the recorded background gateway with the current config |
-| `nanobot gateway stop` | Stop the recorded background gateway |
-| `nanobot gateway install-service` | Install a systemd user service or macOS LaunchAgent |
-| `nanobot gateway install-service --dry-run` | Preview the generated service file and system commands |
-| `nanobot gateway uninstall-service` | Remove the installed system service |
+| `mason gateway` | Start the gateway in the foreground with config defaults |
+| `mason gateway --verbose` | Show verbose runtime output |
+| `mason gateway --port <port>` | Override `gateway.port` for the health endpoint |
+| `mason gateway --workspace <path>` | Override workspace |
+| `mason gateway --config <path>` | Use a specific config file |
+| `mason gateway --background` | Start the gateway as a background process |
+| `mason gateway status` | Show PID, foreground/background launch mode, explicit/on-demand lifetime, live client count, state, and logs |
+| `mason gateway logs --no-follow` | Print recent background gateway logs and exit |
+| `mason gateway logs` | Follow background gateway logs |
+| `mason gateway restart` | Restart the recorded background gateway with the current config |
+| `mason gateway stop` | Stop the recorded background gateway |
+| `mason gateway install-service` | Install a systemd user service or macOS LaunchAgent |
+| `mason gateway install-service --dry-run` | Preview the generated service file and system commands |
+| `mason gateway uninstall-service` | Remove the installed system service |
 
 For custom instances, pass the same selector flags to management commands:
 
 ```bash
-nanobot gateway --background --config ./bot-a/config.json --workspace ./bot-a/workspace
-nanobot gateway status --config ./bot-a/config.json --workspace ./bot-a/workspace
-nanobot gateway stop --config ./bot-a/config.json --workspace ./bot-a/workspace
-nanobot gateway install-service --config ./bot-a/config.json --workspace ./bot-a/workspace --name bot-a
+mason gateway --background --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason gateway status --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason gateway stop --config ./bot-a/config.json --workspace ./bot-a/workspace
+mason gateway install-service --config ./bot-a/config.json --workspace ./bot-a/workspace --name bot-a
 ```
 
 `--background` is a lightweight detached process. `install-service` is for
@@ -160,18 +160,18 @@ http://127.0.0.1:18790/health
 
 ## Local Triggers
 
-`nanobot trigger` delivers one local message to a trigger that was created from
+`mason trigger` delivers one local message to a trigger that was created from
 a chat/session with `/trigger <name>`.
 
 ```bash
-nanobot trigger trg_8K4P2Q9X "Review PR #4502"
+mason trigger trg_8K4P2Q9X "Review PR #4502"
 ```
 
-Keep `nanobot gateway` running so the message can be delivered to the linked
+Keep `mason gateway` running so the message can be delivered to the linked
 chat/session. The message is recorded as an automation turn in that session,
 not as a normal chat message typed by the user.
 
-The command writes to a workspace-local durable queue. If `nanobot gateway` is
+The command writes to a workspace-local durable queue. If `mason gateway` is
 not running yet, the message waits in that workspace. If the target session is
 already running a turn, the trigger waits for that session to become idle. If the
 gateway exits after claiming a delivery but before the linked turn completes,
@@ -185,20 +185,20 @@ workspace; this local queue is not a distributed multi-consumer queue.
 Use stdin when another local process generates the message:
 
 ```bash
-generate-report | nanobot trigger trg_8K4P2Q9X
+generate-report | mason trigger trg_8K4P2Q9X
 ```
 
 Options:
 
 | Command | Description |
 |---|---|
-| `nanobot trigger <id> "message"` | Deliver one message through a trigger |
-| `nanobot trigger <id>` | Read the message from stdin |
-| `nanobot trigger --config <path> <id> "message"` | Use the workspace from a specific config |
-| `nanobot trigger --workspace <path> <id> "message"` | Use a specific workspace |
+| `mason trigger <id> "message"` | Deliver one message through a trigger |
+| `mason trigger <id>` | Read the message from stdin |
+| `mason trigger --config <path> <id> "message"` | Use the workspace from a specific config |
+| `mason trigger --workspace <path> <id> "message"` | Use a specific workspace |
 
 For webhooks or other external systems, run your own small service and have it
-call this CLI after it decides what message nanobot should receive.
+call this CLI after it decides what message mason should receive.
 
 See [Automations](./automations.md) for the broader automation model and delivery
 behavior.
@@ -207,13 +207,13 @@ behavior.
 
 | Command | Description |
 |---|---|
-| `nanobot serve` | Start `/v1/chat/completions`, `/v1/models`, and `/health` |
-| `nanobot serve --host <host>` | Override API bind host |
-| `nanobot serve --port <port>` | Override API port |
-| `nanobot serve --timeout <seconds>` | Override per-request timeout |
-| `nanobot serve --verbose` | Show runtime logs |
-| `nanobot serve --workspace <path>` | Override workspace |
-| `nanobot serve --config <path>` | Use a specific config file |
+| `mason serve` | Start `/v1/chat/completions`, `/v1/models`, and `/health` |
+| `mason serve --host <host>` | Override API bind host |
+| `mason serve --port <port>` | Override API port |
+| `mason serve --timeout <seconds>` | Override per-request timeout |
+| `mason serve --verbose` | Show runtime logs |
+| `mason serve --workspace <path>` | Override workspace |
+| `mason serve --config <path>` | Use a specific config file |
 
 Default API endpoint:
 
@@ -228,37 +228,37 @@ See [`openai-api.md`](./openai-api.md) for request examples.
 ## Status
 
 ```bash
-nanobot status
+mason status
 ```
 
 Shows the config path, workspace path, active model, and provider summary without calling a model.
 
 | Command | Description |
 |---|---|
-| `nanobot status` | Inspect the default instance |
-| `nanobot status --config <path>` | Inspect a specific config |
-| `nanobot status --config <path> --workspace <path>` | Inspect a specific config with a workspace override |
+| `mason status` | Inspect the default instance |
+| `mason status --config <path>` | Inspect a specific config |
+| `mason status --config <path> --workspace <path>` | Inspect a specific config with a workspace override |
 
 ## Channels
 
 | Command | Description |
 |---|---|
-| `nanobot channels status` | Show configured channel status |
-| `nanobot channels status --config <path>` | Show channel status for a specific config |
-| `nanobot channels login <channel>` | Run interactive login for supported channels |
-| `nanobot channels login <channel> --force` | Re-authenticate even if credentials already exist |
-| `nanobot channels login <channel> --config <path>` | Use a specific config file |
-| `nanobot channels connect <channel>` | Complete a browser authorization and store the result |
-| `nanobot channels connect <channel> --config <path>` | Use a specific config file |
-| `nanobot plugins list --config <path>` | Show plugin/channel enabled state for a specific config |
+| `mason channels status` | Show configured channel status |
+| `mason channels status --config <path>` | Show channel status for a specific config |
+| `mason channels login <channel>` | Run interactive login for supported channels |
+| `mason channels login <channel> --force` | Re-authenticate even if credentials already exist |
+| `mason channels login <channel> --config <path>` | Use a specific config file |
+| `mason channels connect <channel>` | Complete a browser authorization and store the result |
+| `mason channels connect <channel> --config <path>` | Use a specific config file |
+| `mason plugins list --config <path>` | Show plugin/channel enabled state for a specific config |
 
 Examples:
 
 ```bash
-nanobot channels login whatsapp
-nanobot channels login weixin
-nanobot channels connect linear
-nanobot channels status
+mason channels login whatsapp
+mason channels login weixin
+mason channels connect linear
+mason channels status
 ```
 
 See [`chat-apps.md`](./chat-apps.md) for channel-specific setup.
@@ -267,26 +267,26 @@ See [`chat-apps.md`](./chat-apps.md) for channel-specific setup.
 
 | Command | Description |
 |---|---|
-| `nanobot mcp login <server>` | Authorize an OAuth-protected remote MCP server |
-| `nanobot mcp login <server> --config <path>` | Use a specific config file |
-| `nanobot mcp logout <server>` | Remove stored OAuth credentials for one server |
+| `mason mcp login <server>` | Authorize an OAuth-protected remote MCP server |
+| `mason mcp login <server> --config <path>` | Use a specific config file |
+| `mason mcp logout <server>` | Remove stored OAuth credentials for one server |
 
-The server must already be configured under `tools.mcpServers` with `"auth": "oauth"`. The command prints the authorization URL, then asks you to paste the full callback URL from the browser address bar. Tokens are stored in the nanobot data directory under `auth/mcp.json`, not in `config.json`. Use `nanobot mcp logout <server>` to remove them.
+The server must already be configured under `tools.mcpServers` with `"auth": "oauth"`. The command prints the authorization URL, then asks you to paste the full callback URL from the browser address bar. Tokens are stored in the mason data directory under `auth/mcp.json`, not in `config.json`. Use `mason mcp logout <server>` to remove them.
 
 ## Optional Features
 
-Use these commands when you want nanobot to add or remove a built-in capability
+Use these commands when you want mason to add or remove a built-in capability
 without hand-editing JSON. Enabling may install the support package first.
 Disabling is for channels such as Telegram, Matrix, or Slack; it keeps your
 saved settings and turns the channel off.
 
 The `plugins` command name is retained for compatibility, but these entries are
-nanobot runtime support packages rather than user-invokable tools. They cannot be
+mason runtime support packages rather than user-invokable tools. They cannot be
 attached to a chat turn with `@`.
 
 | Feature name | What it enables |
 |---|---|
-| `api` | Dependencies required by the OpenAI-compatible `nanobot serve` process |
+| `api` | Dependencies required by the OpenAI-compatible `mason serve` process |
 | `azure` | Azure identity support for Azure-hosted models |
 | `bedrock` | AWS Bedrock model provider support |
 | `langfuse` | Langfuse tracing support for OpenAI-compatible providers |
@@ -295,37 +295,37 @@ attached to a chat turn with `@`.
 
 | Command | Description |
 |---|---|
-| `nanobot plugins list` | Show available channels and optional capabilities |
-| `nanobot plugins enable <name>` | Install missing support and enable the feature or channel |
-| `nanobot plugins enable <name> --logs` | Show package install logs while enabling |
-| `nanobot plugins disable <channel>` | Turn off a channel without deleting its saved settings |
-| `nanobot plugins list --config <path>` | Read a specific config file |
-| `nanobot plugins enable <name> --config <path>` | Update a specific config file |
-| `nanobot plugins disable <channel> --config <path>` | Turn off a channel in a specific config file |
+| `mason plugins list` | Show available channels and optional capabilities |
+| `mason plugins enable <name>` | Install missing support and enable the feature or channel |
+| `mason plugins enable <name> --logs` | Show package install logs while enabling |
+| `mason plugins disable <channel>` | Turn off a channel without deleting its saved settings |
+| `mason plugins list --config <path>` | Read a specific config file |
+| `mason plugins enable <name> --config <path>` | Update a specific config file |
+| `mason plugins disable <channel> --config <path>` | Turn off a channel in a specific config file |
 
 Document and PDF reading are included in the standard installation. The old
-`nanobot plugins enable documents` and `nanobot plugins enable pdf` commands
+`mason plugins enable documents` and `mason plugins enable pdf` commands
 remain accepted as no-op compatibility aliases.
 
 ## Provider OAuth
 
 | Command | Description |
 |---|---|
-| `nanobot provider login openai-codex --set-main` | Authenticate Codex and select its current default model |
-| `nanobot provider login xai-grok --set-main` | Authenticate an eligible X Premium / Grok subscription and select Grok 4.6; hosted X Search is enabled for models that advertise support |
-| `nanobot provider login github-copilot --set-main` | Authenticate GitHub Copilot and select its current default model |
-| `nanobot provider logout openai-codex` | Remove OpenAI Codex OAuth state |
-| `nanobot provider logout xai-grok --config <path>` | Remove the selected nanobot instance's xAI OAuth state |
-| `nanobot provider logout github-copilot` | Remove GitHub Copilot OAuth state |
+| `mason provider login openai-codex --set-main` | Authenticate Codex and select its current default model |
+| `mason provider login xai-grok --set-main` | Authenticate an eligible X Premium / Grok subscription and select Grok 4.6; hosted X Search is enabled for models that advertise support |
+| `mason provider login github-copilot --set-main` | Authenticate GitHub Copilot and select its current default model |
+| `mason provider logout openai-codex` | Remove OpenAI Codex OAuth state |
+| `mason provider logout xai-grok --config <path>` | Remove the selected mason instance's xAI OAuth state |
+| `mason provider logout github-copilot` | Remove GitHub Copilot OAuth state |
 
 See [`providers.md`](./providers.md#oauth-providers) for when OAuth providers need explicit provider/model selection.
 
 ## Useful First Checks
 
 ```bash
-nanobot --version
-nanobot status
-nanobot agent -m "Hello!"
+mason --version
+mason status
+mason agent -m "Hello!"
 ```
 
 If these fail, use [`troubleshooting.md`](./troubleshooting.md) before debugging chat apps, Docker, systemd, or SDK integrations.

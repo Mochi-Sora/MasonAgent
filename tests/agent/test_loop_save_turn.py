@@ -8,21 +8,21 @@ import pytest
 from loguru import logger
 
 from agent.session_helpers import run_session
-from nanobot.agent.context import ContextBuilder, TranscriptInput
-from nanobot.agent.loop import AgentLoop
-from nanobot.agent.runner import AgentRunResult
-from nanobot.agent.tools.context import RequestContext, request_context
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.outbound_events import (
+from mason.agent.context import ContextBuilder, TranscriptInput
+from mason.agent.loop import AgentLoop
+from mason.agent.runner import AgentRunResult
+from mason.agent.tools.context import RequestContext, request_context
+from mason.bus.events import InboundMessage
+from mason.bus.outbound_events import (
     StreamDeltaEvent,
     StreamedResponseEvent,
     StreamEndEvent,
 )
-from nanobot.bus.queue import MessageBus
-from nanobot.cron.session_turns import CRON_HISTORY_META, CRON_TRIGGER_META
-from nanobot.providers.base import LLMProvider, LLMResponse, LLMUsage, ProviderConversationState
-from nanobot.providers.factory import ProviderSnapshot
-from nanobot.runtime_context import (
+from mason.bus.queue import MessageBus
+from mason.cron.session_turns import CRON_HISTORY_META, CRON_TRIGGER_META
+from mason.providers.base import LLMProvider, LLMResponse, LLMUsage, ProviderConversationState
+from mason.providers.factory import ProviderSnapshot
+from mason.runtime_context import (
     RUNTIME_CONTEXT_HISTORY_META,
     RUNTIME_CONTEXT_MESSAGE_META,
     RUNTIME_CONTEXT_TAG,
@@ -30,14 +30,14 @@ from nanobot.runtime_context import (
     append_runtime_context,
     public_history_message,
 )
-from nanobot.session.automation_turns import AUTOMATION_HISTORY_META
-from nanobot.session.goal_state import GOAL_STATE_KEY
-from nanobot.session.keys import (
+from mason.session.automation_turns import AUTOMATION_HISTORY_META
+from mason.session.goal_state import GOAL_STATE_KEY
+from mason.session.keys import (
     LAST_CHANNEL_METADATA_KEY,
     UNIFIED_SESSION_KEY,
 )
-from nanobot.session.manager import Session
-from nanobot.session.recovery import (
+from mason.session.manager import Session
+from mason.session.recovery import (
     PENDING_FOLLOWUP_ID_KEY,
     PENDING_FOLLOWUPS_KEY,
     PROVIDER_STATE_CHECKPOINT_VERSION,
@@ -45,14 +45,14 @@ from nanobot.session.recovery import (
     RUNTIME_CHECKPOINT_KEY,
     restore_runtime_checkpoint,
 )
-from nanobot.session.summary import (
+from mason.session.summary import (
     SUMMARY_CONTINUATION_TEXT,
     SessionSummaryCheckpoint,
 )
-from nanobot.session.turn_continuation import (
+from mason.session.turn_continuation import (
     INTERNAL_CONTINUATION_META,
 )
-from nanobot.triggers.local_session_turns import LOCAL_TRIGGER_META
+from mason.triggers.local_session_turns import LOCAL_TRIGGER_META
 
 
 def _agent_run_result(
@@ -81,7 +81,7 @@ def _assembled_messages(
 
 def _mk_loop() -> AgentLoop:
     loop = AgentLoop.__new__(AgentLoop)
-    from nanobot.config.schema import AgentDefaults
+    from mason.config.schema import AgentDefaults
 
     loop.max_tool_result_chars = AgentDefaults().max_tool_result_chars
     return loop
@@ -266,7 +266,7 @@ async def test_new_with_bot_suffix_does_not_persist_command(tmp_path: Path) -> N
             channel="websocket",
             sender_id="user",
             chat_id="chat-1",
-            content="/new@nanobot_bot",
+            content="/new@mason_bot",
         )
     )
 
@@ -1452,7 +1452,7 @@ async def test_process_message_uses_explicit_session_for_goal_context(
 async def test_run_agent_loop_continuation_reads_latest_goal_metadata(
     tmp_path: Path,
 ) -> None:
-    from nanobot.agent.runner import AgentRunResult
+    from mason.agent.runner import AgentRunResult
 
     loop = _make_full_loop(tmp_path)
     session = loop.sessions.get_or_create("websocket:late-goal")
@@ -1595,8 +1595,8 @@ async def test_next_turn_after_crash_closes_pending_user_turn_before_new_input(t
 
 @pytest.mark.asyncio
 async def test_stop_preserves_runtime_checkpoint_for_next_turn(tmp_path: Path) -> None:
-    from nanobot.command.builtin import cmd_stop
-    from nanobot.command.router import CommandContext
+    from mason.command.builtin import cmd_stop
+    from mason.command.router import CommandContext
 
     loop = _make_full_loop(tmp_path)
 

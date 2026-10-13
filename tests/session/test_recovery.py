@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from nanobot.bus.events import InboundMessage
-from nanobot.bus.outbound_events import RecoveryStateEvent, SessionUpdatedEvent
-from nanobot.bus.queue import MessageBus
-from nanobot.session.manager import Session, SessionManager
-from nanobot.session.recovery import (
+from mason.bus.events import InboundMessage
+from mason.bus.outbound_events import RecoveryStateEvent, SessionUpdatedEvent
+from mason.bus.queue import MessageBus
+from mason.session.manager import Session, SessionManager
+from mason.session.recovery import (
     PENDING_FOLLOWUPS_KEY,
     PENDING_USER_TURN_KEY,
     RECOVERY_METADATA_KEY,

@@ -1,7 +1,7 @@
 """Tests for CLI Apps loop helpers."""
 
-from nanobot.apps.cli.service import CliAppManager
-from nanobot.apps.cli.utils import runtime_lines_for_request, session_extra
+from mason.apps.cli.service import CliAppManager
+from mason.apps.cli.utils import runtime_lines_for_request, session_extra
 
 
 def test_session_extra_returns_cli_apps_only_when_present() -> None:
@@ -13,7 +13,7 @@ def test_session_extra_returns_cli_apps_only_when_present() -> None:
 
 def test_cli_app_mentions_inject_runtime_metadata(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
-    monkeypatch.setattr("nanobot.apps.cli.service.get_runtime_subdir", lambda _name: data_dir)
+    monkeypatch.setattr("mason.apps.cli.service.get_runtime_subdir", lambda _name: data_dir)
     manager = CliAppManager(workspace=tmp_path)
     manager._save_installed(
         {
