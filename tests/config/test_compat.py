@@ -24,29 +24,52 @@ def test_migrate_legacy_env_is_a_no_op_without_legacy_names() -> None:
     assert env == {"MASON_VENV": "/venv", "PATH": "/bin"}
 
 
-def test_migrate_legacy_data_dir_renames_once(tmp_path: Path, monkeypatch) -> None:
+def test_migrate_legacy_data_dir_moves_data_and_keeps_install(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     monkeypatch.setattr(compat, "_data_dir_checked", False)
     legacy = tmp_path / ".nanobot"
-    legacy.mkdir()
+    (legacy / "workspace").mkdir(parents=True)
     (legacy / "config.json").write_text("{}", encoding="utf-8")
+    (legacy / "src").mkdir()
+    (legacy / "venv").mkdir()
 
     moved = compat.migrate_legacy_data_dir()
 
     assert moved == tmp_path / ".mason"
     assert (tmp_path / ".mason" / "config.json").read_text(encoding="utf-8") == "{}"
-    assert not legacy.exists()
-    # Once the legacy directory is gone the migration stays a no-op.
+    assert (tmp_path / ".mason" / "workspace").is_dir()
+    # The checkout and virtualenv stay where the install expects them.
+    assert (legacy / "src").is_dir()
+    assert (legacy / "venv").is_dir()
+    assert not (legacy / "config.json").exists()
+    # Once moved, the migration stays a no-op.
     monkeypatch.setattr(compat, "_data_dir_checked", False)
     assert compat.migrate_legacy_data_dir() is None
+
+
+def test_migrate_legacy_data_dir_ignores_an_install_only_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(compat, "_data_dir_checked", False)
+    (tmp_path / ".nanobot" / "src").mkdir(parents=True)
+    (tmp_path / ".nanobot" / "venv").mkdir()
+
+    assert compat.migrate_legacy_data_dir() is None
+
+    assert not (tmp_path / ".mason").exists()
+    assert (tmp_path / ".nanobot" / "src").is_dir()
 
 
 def test_migrate_legacy_data_dir_never_overwrites_existing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     monkeypatch.setattr(compat, "_data_dir_checked", False)
-    (tmp_path / ".nanobot").mkdir()
+    (tmp_path / ".nanobot" / "config.json").parent.mkdir(parents=True)
+    (tmp_path / ".nanobot" / "config.json").write_text("legacy", encoding="utf-8")
     (tmp_path / ".mason").mkdir()
 
     assert compat.migrate_legacy_data_dir() is None
 
-    assert (tmp_path / ".nanobot").exists()
+    assert (tmp_path / ".nanobot" / "config.json").exists()

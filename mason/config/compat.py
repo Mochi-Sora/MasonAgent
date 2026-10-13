@@ -20,6 +20,10 @@ LEGACY_DATA_DIR_NAME = ".nanobot"
 ENV_PREFIX = "MASON_"
 LEGACY_ENV_PREFIX = "NANOBOT_"
 
+# Install artifacts that must not move: relocating a checkout invalidates the
+# editable install, and a virtualenv bakes in absolute paths (it would break).
+LEGACY_KEEP_NAMES = frozenset({"src", "venv", ".venv", ".git", "node_modules"})
+
 _data_dir_checked = False
 
 
@@ -53,11 +57,13 @@ def migrate_legacy_env(environ: dict[str, str] | None = None) -> list[str]:
 
 
 def migrate_legacy_data_dir() -> Path | None:
-    """Rename ``~/.nanobot`` to ``~/.mason`` once; returns the new path if moved.
+    """Move runtime data from ``~/.nanobot`` to ``~/.mason`` once.
 
-    Runs at most once per process, and never overwrites an existing ``~/.mason``
-    (if both exist the install is left alone and the caller keeps using the new
-    directory).
+    Only runtime entries move. A checkout (``src/``) and a virtualenv stay put
+    because moving them breaks the editable install and the venv's absolute
+    paths; the legacy directory is left in place holding just those. Never
+    overwrites an existing ``~/.mason`` entry. Returns the new data dir when
+    anything moved, otherwise ``None``.
     """
     global _data_dir_checked
     if _data_dir_checked:
@@ -66,14 +72,30 @@ def migrate_legacy_data_dir() -> Path | None:
 
     target = data_dir()
     source = legacy_data_dir()
-    if target.exists() or not source.exists():
+    if target.exists() or not source.is_dir():
         return None
-    try:
-        shutil.move(str(source), str(target))
-    except OSError:
-        logger.exception("Could not migrate {} to {}", source, target)
+    movable = [entry for entry in source.iterdir() if entry.name not in LEGACY_KEEP_NAMES]
+    if not movable:
         return None
-    logger.info("Migrated legacy data directory {} to {}", source, target)
+    target.mkdir(parents=True, exist_ok=True)
+    moved = False
+    for entry in movable:
+        destination = target / entry.name
+        if destination.exists():
+            continue
+        try:
+            shutil.move(str(entry), str(destination))
+            moved = True
+        except OSError:
+            logger.exception("Could not migrate {} to {}", entry, destination)
+    if not moved:
+        return None
+    logger.info(
+        "Migrated runtime data from {} to {}; left {} in place",
+        source,
+        target,
+        ", ".join(sorted(LEGACY_KEEP_NAMES)),
+    )
     return target
 
 
