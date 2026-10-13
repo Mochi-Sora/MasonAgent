@@ -49,6 +49,7 @@ from mason.cli.gateway import create_gateway_app  # noqa: E402
 from mason.cli.gateway_runtime import _run_gateway  # noqa: E402
 from mason.cli.log_control import _set_mason_logs  # noqa: E402
 from mason.cli.mcp import mcp_app  # noqa: E402
+from mason.cli.pairing import pairing_app  # noqa: E402
 from mason.cli.process_identity import set_cli_process_identity  # noqa: E402
 from mason.cli.provider import provider_app  # noqa: E402
 from mason.cli.runtime_config import (  # noqa: E402
@@ -814,6 +815,7 @@ def status(
 
 app.add_typer(provider_app, name="provider")
 app.add_typer(mcp_app, name="mcp")
+app.add_typer(pairing_app, name="pairing")
 
 
 if __name__ == "__main__":
