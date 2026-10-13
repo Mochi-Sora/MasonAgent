@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from mason.config import compat
@@ -63,13 +64,60 @@ def test_migrate_legacy_data_dir_ignores_an_install_only_directory(
     assert (tmp_path / ".nanobot" / "src").is_dir()
 
 
-def test_migrate_legacy_data_dir_never_overwrites_existing(tmp_path: Path, monkeypatch) -> None:
+def test_migrate_never_overwrites_an_existing_entry(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     monkeypatch.setattr(compat, "_data_dir_checked", False)
-    (tmp_path / ".nanobot" / "config.json").parent.mkdir(parents=True)
-    (tmp_path / ".nanobot" / "config.json").write_text("legacy", encoding="utf-8")
+    legacy = tmp_path / ".nanobot"
+    legacy.mkdir()
+    (legacy / "config.json").write_text("legacy", encoding="utf-8")
+    target = tmp_path / ".mason"
+    target.mkdir()
+    (target / "config.json").write_text("current", encoding="utf-8")
+
+    compat.migrate_legacy_data_dir()
+
+    # The entry that already exists in the new directory is never overwritten.
+    assert (target / "config.json").read_text(encoding="utf-8") == "current"
+    assert (legacy / "config.json").exists()
+
+
+def test_migrate_runs_when_target_exists_without_the_entry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A partially-created ~/.mason must not block migrating missing entries."""
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(compat, "_data_dir_checked", False)
     (tmp_path / ".mason").mkdir()
+    legacy = tmp_path / ".nanobot"
+    legacy.mkdir()
+    (legacy / "config.json").write_text("{}", encoding="utf-8")
 
-    assert compat.migrate_legacy_data_dir() is None
+    assert compat.migrate_legacy_data_dir() == tmp_path / ".mason"
 
-    assert (tmp_path / ".nanobot" / "config.json").exists()
+    assert (tmp_path / ".mason" / "config.json").exists()
+    assert not (legacy / "config.json").exists()
+
+
+def test_migrate_repoints_a_legacy_workspace_path(tmp_path: Path, monkeypatch) -> None:
+    """A stored workspace path must follow the data directory."""
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(compat, "_data_dir_checked", False)
+    legacy = tmp_path / ".nanobot"
+    legacy.mkdir()
+    (legacy / "config.json").write_text(
+        json.dumps(
+            {
+                "agents": {"defaults": {"workspace": "~/.nanobot/workspace"}},
+                "absolute": str(legacy / "workspace"),
+                "unrelated": "/var/log/mason.log",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    compat.migrate_legacy_data_dir()
+
+    config = json.loads((tmp_path / ".mason" / "config.json").read_text(encoding="utf-8"))
+    assert config["agents"]["defaults"]["workspace"] == "~/.mason/workspace"
+    assert config["absolute"] == str(tmp_path / ".mason" / "workspace")
+    assert config["unrelated"] == "/var/log/mason.log"

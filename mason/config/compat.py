@@ -9,9 +9,11 @@ environment variables are mirrored onto their new names.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
+from typing import cast
 
 from loguru import logger
 
@@ -56,6 +58,57 @@ def migrate_legacy_env(environ: dict[str, str] | None = None) -> list[str]:
     return migrated
 
 
+def _rewrite_legacy_paths(value: object) -> tuple[object, int]:
+    """Rewrite strings that point into the legacy data directory."""
+    if isinstance(value, str):
+        rewritten = value.replace(f"~/{LEGACY_DATA_DIR_NAME}", f"~/{DATA_DIR_NAME}")
+        rewritten = rewritten.replace(str(legacy_data_dir()), str(data_dir()))
+        return (rewritten, 1) if rewritten != value else (value, 0)
+    if isinstance(value, dict):
+        source = cast("dict[object, object]", value)
+        result: dict[object, object] = {}
+        count = 0
+        for key, item in source.items():
+            new_item, item_count = _rewrite_legacy_paths(item)
+            result[key] = new_item
+            count += item_count
+        return result, count
+    if isinstance(value, list):
+        result_list: list[object] = []
+        count = 0
+        for item in cast("list[object]", value):
+            new_item, item_count = _rewrite_legacy_paths(item)
+            result_list.append(new_item)
+            count += item_count
+        return result_list, count
+    return value, 0
+
+
+def rewrite_migrated_config(path: Path) -> int:
+    """Repoint config values that still reference ``~/.nanobot``.
+
+    A stored ``workspace`` path would otherwise keep pointing at the old
+    location, so the agent would start with a fresh, empty workspace while the
+    real one sits unused under ``~/.mason``.
+    """
+    try:
+        payload: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    rewritten, count = _rewrite_legacy_paths(cast(object, payload))
+    if not count:
+        return 0
+    try:
+        path.write_text(json.dumps(rewritten, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        logger.exception("Could not rewrite migrated config {}", path)
+        return 0
+    logger.info("Repointed {} legacy path(s) in {}", count, path)
+    return count
+
+
 def migrate_legacy_data_dir() -> Path | None:
     """Move runtime data from ``~/.nanobot`` to ``~/.mason`` once.
 
@@ -72,7 +125,7 @@ def migrate_legacy_data_dir() -> Path | None:
 
     target = data_dir()
     source = legacy_data_dir()
-    if target.exists() or not source.is_dir():
+    if not source.is_dir():
         return None
     movable = [entry for entry in source.iterdir() if entry.name not in LEGACY_KEEP_NAMES]
     if not movable:
@@ -88,6 +141,9 @@ def migrate_legacy_data_dir() -> Path | None:
             moved = True
         except OSError:
             logger.exception("Could not migrate {} to {}", entry, destination)
+    config_path = target / "config.json"
+    if config_path.is_file():
+        rewrite_migrated_config(config_path)
     if not moved:
         return None
     logger.info(
