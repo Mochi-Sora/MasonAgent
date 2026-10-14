@@ -104,6 +104,8 @@ If `mason channels status` does not show the channel as enabled, the config snip
 | **Mochat** | Claw token (auto-setup available) |
 | **Signal** | signal-cli daemon + phone number |
 | **Linear** | Private OAuth app + public HTTPS callback and webhook URLs |
+| **Mattermost** | Server URL + bot token |
+| **MasonDesk** | MasonDesk app; approve its pairing code (or enable `trustLocalhost`) |
 
 <details id="linear">
 <summary><b>Linear</b></summary>
@@ -266,22 +268,22 @@ That's it — mason handles the rest!
 
 If you prefer to configure manually, add the following to `~/.mason/config.json`:
 
-> Keep `claw_token` private. It should only be sent in `X-Claw-Token` header to your Mochat API endpoint.
+> Keep `clawToken` private. It should only be sent in the `X-Claw-Token` header of requests to your Mochat API endpoint.
 
 ```json
 {
   "channels": {
     "mochat": {
       "enabled": true,
-      "base_url": "https://mochat.io",
-      "socket_url": "https://mochat.io",
-      "socket_path": "/socket.io",
-      "claw_token": "claw_xxx",
-      "agent_user_id": "6982abcdef",
+      "baseUrl": "https://mochat.io",
+      "socketUrl": "https://mochat.io",
+      "socketPath": "/socket.io",
+      "clawToken": "claw_xxx",
+      "agentUserId": "6982abcdef",
       "sessions": ["*"],
       "panels": ["*"],
-      "reply_delay_mode": "non-mention",
-      "reply_delay_ms": 120000
+      "replyDelayMode": "non-mention",
+      "replyDelayMs": 120000
     }
   }
 }
@@ -994,6 +996,53 @@ mason gateway
 </details>
 
 <details>
+<summary><b>Mattermost</b></summary>
+
+Uses **WebSocket events** for inbound messages and the Mattermost REST API for replies.
+
+**1. Create a bot**
+
+In Mattermost, create a bot account (or a personal access token) and copy its token. Add the bot to the teams and channels it should serve.
+
+**2. Configure**
+
+```json
+{
+  "channels": {
+    "mattermost": {
+      "enabled": true,
+      "serverUrl": "https://mattermost.example.com",
+      "token": "YOUR_MATTERMOST_TOKEN",
+      "teamId": "YOUR_TEAM_ID",
+      "groupPolicy": "mention",
+      "groupPolicyInThread": "open",
+      "replyInThread": true,
+      "dm": {
+        "policy": "allowlist"
+      }
+    }
+  }
+}
+```
+
+> - `serverUrl` and `token` are required. `teamId` scopes the channel to one Mattermost team.
+> - `groupPolicy`: `"mention"` (default), `"open"`, or `"allowlist"` for channel messages. `groupPolicyInThread` controls replies inside threads and defaults to inheriting `groupPolicy`; set it explicitly to change only thread behavior.
+> - `dm.policy`: DMs are open by default; set it to `"allowlist"` so new DM senders receive a pairing code instead. `dm.allowFrom` lists pre-approved DM senders.
+> - `replyInThread` (default `true`) answers inside the triggering thread; `includeThreadContext` (default `true`) adds recent thread messages as context, capped by `threadContextLimit` (default `20`).
+> - `allowFrom` and `groupAllowFrom` are the user and channel allowlists; `allowFromMatchMode` chooses whether `allowFrom` entries match `"id"` (default), `"username"`, or `"email"`.
+> - `streaming` (default `true`), `sendProgress`, `sendToolHints`, `reactEmoji` (default `eyes`), and `doneEmoji` (default `white_check_mark`) work like other channels.
+
+**3. Run**
+
+```bash
+mason gateway
+```
+
+See the [Mattermost guide](./guides/mattermost-ai-agent.md) for a full walkthrough.
+
+</details>
+
+<details>
 <summary><b>Signal</b></summary>
 
 Uses **signal-cli** daemon in HTTP mode — receive messages via SSE, send via JSON-RPC.
@@ -1056,5 +1105,41 @@ mason gateway
 > [!TIP]
 > The channel automatically reconnects to the signal-cli daemon with exponential backoff if the connection drops.
 > Markdown in bot replies is automatically converted to Signal text styles (bold, italic, code, etc.).
+
+</details>
+
+<details>
+<summary><b>MasonDesk (desktop)</b></summary>
+
+The `desktop` channel serves the [MasonDesk](https://github.com/Mochi-Sora/MasonDesk) desktop client over a local WebSocket connection. It is disabled by default.
+
+Pairing works like any other channel: an unpaired client receives a pairing code to show in the app, and you approve it from a trusted surface with `mason pairing approve <code>` (or `/pairing approve <code>` in chat). With `trustLocalhost` enabled, loopback connections auto-approve, which makes a purely local gateway plug and play.
+
+**1. Configure**
+
+```json
+{
+  "channels": {
+    "desktop": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 8765,
+      "trustLocalhost": false
+    }
+  }
+}
+```
+
+> - `host` / `port`: where the channel listens (default `127.0.0.1:8765`); the MasonDesk connection profile points at this address.
+> - `trustLocalhost`: default `false`. Only enable it when every local process may act as the client; it skips pairing entirely for loopback connections.
+> - `allowFrom`: optional allowlist of approved device IDs.
+> - `streaming`, `sendProgress`, `sendToolHints`, and `showReasoning` (all default `true`) control what the desktop client receives.
+
+**2. Run**
+
+```bash
+mason gateway
+mason pairing list
+```
 
 </details>
