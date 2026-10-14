@@ -40,13 +40,11 @@ shape of the work can be discussed before the implementation grows too large.
 
 ### Starting Work
 
-Mason lives at `Mochi-Sora/MasonAgent` and tracks upstream `HKUDS/nanobot` as a second
-remote. Set up both once:
+Mason lives at `Mochi-Sora/MasonAgent`. Clone it:
 
 ```bash
 git clone https://github.com/Mochi-Sora/MasonAgent.git
 cd MasonAgent
-git remote add upstream https://github.com/HKUDS/nanobot.git
 ```
 
 Before making changes, sync your checkout and create a topic branch:
@@ -165,28 +163,30 @@ The project ships as a single platform-neutral Python package. Publish in this o
 The source distribution remains platform-neutral. Do not upload artifacts that were not built
 from the tagged commit.
 
-## Fork Maintenance
+## Upstream Relationship
 
-The public repository is <https://github.com/Mochi-Sora/MasonAgent>. Several files
-still identify the upstream `HKUDS/nanobot` project; update them when the package and
-documentation locations are decided, so the fork stops presenting upstream's identity:
+Mason began as a derivative of the MIT-licensed `HKUDS/nanobot` and is now an independent
+project: upstream is no longer tracked and is not a merge target. The credit in
+[`README.md`](./README.md) and the MIT notice in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)
+are intentional and must be preserved.
+
+Project-owned identity strings point at this repository:
 
 | Location | What it controls |
 |---|---|
 | `mason/agent/tools/mcp_oauth.py` (`_CLIENT_URI`, `_LOGO_URI`, `software_id`) | Identity sent to remote MCP OAuth servers during dynamic client registration |
 | `mason/providers/openai_compat_provider.py`, `mason/providers/image_generation.py` (`HTTP-Referer`) | Attribution header sent to OpenRouter-compatible gateways |
-| `pyproject.toml` (`[project.urls]`, when added) | Package metadata on PyPI |
-| Community links in `.github/ISSUE_TEMPLATE/config.yml` and `COMMUNICATION.md` | Upstream Discussions and chat groups |
+| Community links in `.github/ISSUE_TEMPLATE/config.yml` and `COMMUNICATION.md` | Issues and contact routes |
+| Installer defaults (`default_git_url` in `scripts/install.sh`, `$DefaultGitUrl` in `scripts/install.ps1`) | Clone URL for one-line installs |
+| `pyproject.toml` (`[project.urls]`, when added) | Package metadata on PyPI — point it at this repository |
 
-The installers already point at `Mochi-Sora/MasonAgent` (`default_git_url` in
-`scripts/install.sh`, `$DefaultGitUrl` in `scripts/install.ps1`), and clone commands in
-these docs use the fork. Some upstream identity strings are asserted by tests
-(`tests/tools/test_mcp_oauth.py`, `tests/providers/test_litellm_kwargs.py`); update them
-in the same change.
+When one of these locations changes, update the tests that assert it
+(`tests/tools/test_mcp_oauth.py`, `tests/providers/test_litellm_kwargs.py`). The installers
+install the checkout they run from, or clone the URL passed with `--git` / `MASON_INSTALL_GIT`.
 
-The installers themselves need no changes: they install the checkout they run from, or clone
-whatever URL is passed with `--git` / `MASON_INSTALL_GIT`. `README.md` keeps its credit
-link to upstream nanobot; that is intentional.
+The `nanobot` references in the compatibility layers describe this project's own pre-rename
+history and must stay: the `~/.nanobot` migration in `mason/config/compat.py`, `NANOBOT_*`
+environment variables, and legacy `dev.nanobot` plugin metadata keys.
 
 ## Questions?
 
@@ -196,6 +196,6 @@ Please open an [issue](https://github.com/Mochi-Sora/MasonAgent/issues) on this
 repository. For private questions, email **tammochi23@gmail.com**.
 
 Upstream nanobot has its own community, listed in the credit section of the
-README; this fork is not affiliated with it.
+README; Mason is not affiliated with it.
 
 Thank you for spending your time and care on mason. We would love for more people to participate in this community, and we genuinely welcome contributions of all sizes.

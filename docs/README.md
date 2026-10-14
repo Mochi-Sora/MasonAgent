@@ -2,7 +2,7 @@
 
 Use these docs to get a working agent first, then open a task guide only when you need the next capability. Source-level design and extension details are kept in the contributor section.
 
-Repository docs follow the current source tree. Upstream nanobot's published documentation lives at [nanobot.wiki](https://nanobot.wiki/docs/latest/getting-started/nanobot-overview) and may describe features that differ from this fork.
+Repository docs follow the current source tree. Mason is an independent project derived from nanobot: upstream's published documentation at [nanobot.wiki](https://nanobot.wiki/docs/latest/getting-started/nanobot-overview) describes a different codebase.
 
 ## Start Here
 

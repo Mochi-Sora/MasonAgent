@@ -149,10 +149,9 @@ memory) defaults to `~/.mason/workspace/`.
 
 ## Status
 
-Mason is a work in progress and is derived from **nanobot**. Upstream has moved on since this
-line of development was cut, so the next chunk of work is re-converging with it and rebuilding
-the pieces that were intentionally dropped along the way (the WebUI and TUI were removed on
-purpose; the agent core, memory system, tool layer and channels are the living parts).
+Mason is a work in progress and an independent project. It began as a derivative of the
+MIT-licensed **nanobot** but no longer tracks upstream; development continues in this
+repository, and the agent core, memory system, tool layer, and channels are the living parts.
 
 Bug reports and design discussion are welcome.
 
@@ -186,6 +185,6 @@ under AGPL-3.0-or-later — see
 ## Maintainer notes
 
 Mason installs from a local checkout: `scripts/install.sh` and `scripts/install.ps1` install
-the repository they run from in editable mode (`--git` clones a remote first). A short checklist
-of the files that still point at upstream nanobot — and the tests that assert them — is in
-[`CONTRIBUTING.md` § Fork Maintenance](./CONTRIBUTING.md#fork-maintenance).
+the repository they run from in editable mode (`--git` clones a remote first). The upstream
+relationship — including the MIT credit that must be preserved — is documented in
+[`CONTRIBUTING.md` § Upstream Relationship](./CONTRIBUTING.md#upstream-relationship).
