@@ -49,6 +49,8 @@ the focused guides first and come back here for exact fields and defaults.
 | Control access and pairing | [Pairing](#pairing) |
 | Manage long-term memory and consolidation | [Memory](#memory) |
 | Tune on-demand tool and skill loading | [Tool and Skill Discovery](#tool-and-skill-discovery) |
+| Configure the OpenAI-compatible API server | [API Server](#api-server) |
+| Tune core agent defaults (model, limits, identity) | [Agent Defaults](#agent-defaults) |
 | Tune gateway jobs, sessions, and tools | [Gateway Heartbeat](#gateway-heartbeat), [Auto Compact](#auto-compact), [Unified Session](#unified-session), [Tool Hint Max Length](#tool-hint-max-length) |
 
 ## Where a Setting Lives
@@ -2211,6 +2213,40 @@ mason agent -m "/pairing approve ABCD-EFGH"
 ```
 
 
+## API Server
+
+`mason serve` exposes the agent through an OpenAI-compatible HTTP API. The endpoints, authentication flows, and client examples live in the [OpenAI-compatible API page](./openai-api.md); these are the config keys behind it.
+
+```json
+{
+  "api": {
+    "host": "127.0.0.1",
+    "port": 8900,
+    "timeout": 120,
+    "apiKey": "${MASON_API_KEY}"
+  }
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `api.host` | `127.0.0.1` | Bind address. Binding to `0.0.0.0` or `::` requires `api.apiKey`; mason refuses to start without it. |
+| `api.port` | `8900` | Listen port. |
+| `api.timeout` | `120` | Per-request timeout in seconds; timed-out requests return HTTP 504. |
+| `api.apiKey` | `""` | When set, API routes require it as a Bearer token. The health endpoint stays unauthenticated. |
+
+`mason serve --host`, `--port`, and `--timeout` override these values for one process.
+
+## Gateway
+
+`mason gateway` keeps enabled channels and other background services running and serves the local health endpoint.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `gateway.host` | `127.0.0.1` | Bind address for the health endpoint. Keep the default unless you intentionally expose the gateway. |
+| `gateway.port` | `18790` | Port for the health endpoint (`http://127.0.0.1:18790/health`); `mason gateway --port` overrides it. |
+| `gateway.restartMode` | `auto` | Restart strategy for `/restart`: `auto` uses `spawn` on Windows foreground runs and `exec` elsewhere. Use `exit` with Windows service wrappers such as WinSW or nssm so the service manager owns the restart. |
+
 ## Gateway Heartbeat
 
 The gateway can run a protected heartbeat cron job that periodically checks `HEARTBEAT.md` in the active workspace. This is enabled by default when you run `mason gateway`.
@@ -2220,8 +2256,7 @@ The gateway can run a protected heartbeat cron job that periodically checks `HEA
   "gateway": {
     "heartbeat": {
       "enabled": true,
-      "intervalS": 1800,
-      "keepRecentMessages": 8
+      "intervalS": 1800
     }
   }
 }
@@ -2237,12 +2272,32 @@ The heartbeat job is backed by the same cron service as user-created reminders. 
 |--------|---------|-------------|
 | `gateway.heartbeat.enabled` | `true` | Register the built-in heartbeat cron job on gateway startup. |
 | `gateway.heartbeat.intervalS` | `1800` | Seconds between heartbeat checks. |
-| `gateway.heartbeat.keepRecentMessages` | `8` | Number of recent heartbeat-session messages to retain after each run. |
-| `gateway.restartMode` | `auto` | Restart strategy for `/restart`: `auto` uses `spawn` on Windows foreground runs and `exec` elsewhere. Use `exit` with Windows service wrappers such as WinSW or nssm so the service manager owns the restart. |
 
 ### Custom heartbeat evaluator prompt
 
 The notification gate runs on a built-in system prompt. Advanced users can override it, but you rarely need to — it's strongly advised to first read the evaluator code and the default `evaluator.md`. To override, drop your prompt at `<workspace>/prompts/evaluator.md`. It must still instruct the model to call the `evaluate_notification` tool; otherwise the gate fails closed and stays silent.
+
+
+## Agent Defaults
+
+Core `agents.defaults.*` fields that do not have their own section on this page. When `agents.defaults.modelPreset` is set, the named preset supplies model, provider, and generation values and takes precedence over these fields; without it, they form the implicit `default` preset described in [Model Presets](#model-presets).
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `agents.defaults.workspace` | `~/.mason/workspace` | Directory the agent works in: its identity files (`AGENTS.md`, `SOUL.md`, `USER.md`), `memory/`, `skills/`, and `cron/` live here, and relative file paths resolve against it. |
+| `agents.defaults.model` | `anthropic/claude-opus-4-5` | Model for the implicit `default` preset. |
+| `agents.defaults.provider` | `"auto"` | Provider name such as `deepseek` or `openrouter`, or `"auto"` to detect the provider from the model name. |
+| `agents.defaults.maxTokens` | `8192` | Maximum completion/output tokens per model call. |
+| `agents.defaults.contextWindowTokens` | `200000` | Context window size used for prompt budgeting and compaction decisions. |
+| `agents.defaults.temperature` | `0.1` | Sampling temperature. |
+| `agents.defaults.maxToolIterations` | `200` | Maximum model/tool iterations in a single turn before the run stops. |
+| `agents.defaults.maxToolResultChars` | `16000` | Maximum characters of a single tool result kept in context; longer results are truncated. |
+| `agents.defaults.providerRetryMode` | `"standard"` | `standard` retries transient provider errors a bounded number of times; `persistent` keeps retrying with capped backoff, for long unattended runs. |
+| `agents.defaults.reasoningEffort` | unset | Reasoning/thinking hint: `low`, `medium`, `high`, `xhigh`, `max`, `adaptive`, or `none`. Provider support varies; unset keeps the provider default. |
+| `agents.defaults.botName` | `"mason"` | Display name shown in CLI prompts. |
+| `agents.defaults.botIcon` | `"🐈"` | Icon shown next to the bot name in the CLI; set to `""` to omit it. |
+
+The remaining `agents.defaults.*` keys have topic sections on this page: `modelPreset` and `fallbackModels` under [Model Presets](#model-presets), `maxConcurrentSubagents` under [Subagent Concurrency](#subagent-concurrency), `sessionReplay` and `sessionReplayMaxTokens` under [Session Replay Budget](#session-replay-budget), `idleCompactAfterMinutes`, `idleCompactCheckIntervalSeconds`, and `sessionTtlMinutes` under [Auto Compact](#auto-compact), `memory.*` under [Memory](#memory), `timezone` and `timezoneMode` under [Timezone](#timezone), `unifiedSession` under [Unified Session](#unified-session), `disabledSkills` under [Disabled Skills](#disabled-skills), and `toolHintMaxLength` under [Tool Hint Max Length](#tool-hint-max-length).
 
 
 ## Subagent Concurrency
@@ -2374,7 +2429,7 @@ On upgrade, a customized `memory/MEMORY.md` is imported into long-term memory on
 
 Time is context. Context should be precise.
 
-By default, mason uses `UTC` for runtime time context. If you want the agent to think in your local time, set `agents.defaults.timezone` to a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones):
+By default, mason detects the host machine's timezone at startup and uses it for runtime time context (`timezoneMode: "auto"`; detection falls back to `UTC`). To pin a fixed timezone, set `agents.defaults.timezone` to a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) — setting it explicitly switches `timezoneMode` to `"manual"`:
 
 ```json
 {
@@ -2385,6 +2440,11 @@ By default, mason uses `UTC` for runtime time context. If you want the agent to 
   }
 }
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `agents.defaults.timezone` | detected host timezone | IANA timezone used for runtime time context and as the default for cron schedules and one-shot times. |
+| `agents.defaults.timezoneMode` | `"auto"` | `auto` re-detects the host timezone on every startup, replacing a stored `timezone`; `manual` keeps the configured `timezone` unchanged. A config that sets `timezone` without `timezoneMode` is treated as `manual`. |
 
 This affects runtime time strings shown to the model, such as runtime context. It also becomes the default timezone for cron schedules when a cron expression omits `tz`, and for one-shot `at` times when the ISO datetime has no explicit offset.
 
