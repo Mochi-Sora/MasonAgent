@@ -25,7 +25,7 @@ from mason.security.network import (
 from mason.utils.helpers import detect_image_mime
 
 _OPENROUTER_ATTRIBUTION_HEADERS = {
-    "HTTP-Referer": "https://github.com/HKUDS/nanobot",
+    "HTTP-Referer": "https://github.com/Mochi-Sora/MasonAgent",
     "X-OpenRouter-Title": "mason",
     "X-OpenRouter-Categories": "cli-agent,personal-agent",
 }

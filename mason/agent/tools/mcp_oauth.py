@@ -41,10 +41,10 @@ _STORE_VERSION = 1
 _STORE_LOCK_TIMEOUT_S = 15
 _REFRESH_LOCK_TIMEOUT_S = 60
 _DEFAULT_REDIRECT_URI = f"http://127.0.0.1{MCP_OAUTH_CALLBACK_PATH}"
-_CLIENT_URI = AnyHttpUrl("https://github.com/HKUDS/nanobot")
+_CLIENT_URI = AnyHttpUrl("https://github.com/Mochi-Sora/MasonAgent")
 _LOGO_URI = AnyHttpUrl(
-    "https://raw.githubusercontent.com/HKUDS/nanobot/main/"
-    "webui/public/brand/nanobot_apple_touch.png"
+    "https://raw.githubusercontent.com/Mochi-Sora/MasonAgent/main/"
+    "images/mason_logo.png"
 )
 
 
@@ -861,7 +861,7 @@ async def create_mcp_oauth_auth(
         client_name="mason",
         client_uri=_CLIENT_URI,
         logo_uri=_LOGO_URI,
-        software_id="https://github.com/HKUDS/nanobot",
+        software_id="https://github.com/Mochi-Sora/MasonAgent",
     )
     return _RefreshingOAuthClientProvider(
         server_url,
