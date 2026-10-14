@@ -30,6 +30,7 @@ class ProgressEvent(AgentEvent):
     stream_id: str | None = None
     tool_events: list[dict[str, Any]] | None = None
     file_edit_events: list[dict[str, Any]] | None = None
+    turn_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class FileEditEvent(ProgressEvent):
 class StreamDeltaEvent(AgentEvent):
     content: str = ""
     stream_id: str | None = None
+    turn_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ class StreamEndEvent(AgentEvent):
     stream_id: str | None = None
     resuming: bool = False
     merge_next: bool = False
+    turn_id: str | None = None
 
 
 @dataclass(frozen=True)

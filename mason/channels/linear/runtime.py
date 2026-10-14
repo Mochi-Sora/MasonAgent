@@ -230,6 +230,7 @@ class LinearChannel(BaseChannel):
         metadata: dict[str, Any] | None = None,
         *,
         stream_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         if not self.config.show_reasoning:
             return
@@ -242,6 +243,7 @@ class LinearChannel(BaseChannel):
         metadata: dict[str, Any] | None = None,
         *,
         stream_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         key = (chat_id, stream_id or "default")
         body = "".join(self._reasoning.pop(key, [])).strip()
@@ -258,6 +260,8 @@ class LinearChannel(BaseChannel):
         chat_id: str,
         edits: list[dict[str, Any]],
         metadata: dict[str, Any] | None = None,
+        *,
+        turn_id: str | None = None,
     ) -> None:
         for index, edit in enumerate(edits):
             path = str(edit.get("path") or edit.get("file") or "file")

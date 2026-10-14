@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from mason.bus.events import InboundMessage, OutboundMessage
 from mason.bus.notification_delivery import notification_is_deliverable
 from mason.bus.outbound_events import (
+    ProgressEvent,
     RetryStatusEvent,
     StreamDeltaEvent,
     StreamedResponseEvent,
@@ -199,6 +200,7 @@ class TurnDelivery:
     input_message: InboundMessage
     session_key: str
     route: TurnRoute
+    turn_id: str = ""
     enable_stream: bool = False
     delivery_message: InboundMessage = field(init=False)
     lifecycle_message: InboundMessage = field(init=False)
@@ -252,6 +254,7 @@ class TurnDelivery:
             await self.runtime_event_publisher.session_turn_started(
                 self.delivery_message,
                 self.session_key,
+                turn_id=self.turn_id or None,
             )
 
     async def running(self, *, started_at: float) -> None:
@@ -261,6 +264,7 @@ class TurnDelivery:
                 self.session_key,
                 "running",
                 started_at=started_at,
+                turn_id=self.turn_id or None,
             )
 
     async def runtime_admitted(self, runtime: LLMRuntime) -> None:
@@ -270,6 +274,7 @@ class TurnDelivery:
                 self.delivery_message,
                 self.session_key,
                 runtime,
+                turn_id=self.turn_id or None,
             )
             return
         self.runtime_event_publisher.record_turn_runtime(self.session_key, runtime)
@@ -357,6 +362,7 @@ class TurnDelivery:
                 chat_id=completed_chat_id,
                 session_key=self.session_key,
                 metadata=self.lifecycle_message.metadata,
+                turn_id=self.turn_id or None,
                 outcome=outcome,
                 failure_kind=failure_kind,
                 failure_error_kind=(self._failure_error_kind or (
@@ -382,6 +388,7 @@ class TurnDelivery:
                 chat_id=self.lifecycle_message.chat_id,
                 session_key=self.session_key,
                 metadata=self.lifecycle_message.metadata,
+                turn_id=self.turn_id or None,
                 outcome="failed",
                 failure_kind="internal",
             )
@@ -391,6 +398,7 @@ class TurnDelivery:
             self.lifecycle_message,
             self.session_key,
             "idle",
+            turn_id=self.turn_id or None,
         )
         self.runtime_event_publisher.clear_turn(self.session_key)
 
@@ -409,7 +417,11 @@ class TurnDelivery:
         if isinstance(event, StreamDeltaEvent | StreamEndEvent):
             if not self.streaming:
                 return
-            event = dataclasses.replace(event, stream_id=self._stream_id())
+            event = dataclasses.replace(
+                event,
+                stream_id=self._stream_id(),
+                turn_id=self.turn_id or None,
+            )
             if isinstance(event, StreamDeltaEvent) and event.content:
                 source = self._response_source
                 if (
@@ -433,6 +445,8 @@ class TurnDelivery:
                     metadata=metadata,
                 )
         elif self._routed_events.publish is not None:
+            if isinstance(event, ProgressEvent) and self.turn_id:
+                event = dataclasses.replace(event, turn_id=self.turn_id)
             await self._routed_events.publish(event)
         if isinstance(event, StreamDeltaEvent):
             self._stream_open = True

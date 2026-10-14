@@ -551,6 +551,7 @@ class MattermostChannel(BaseChannel):
         stream_end: bool = False,
         resuming: bool = False,
         merge_next: bool = False,
+        turn_id: str | None = None,
     ) -> None:
         if not self._http_client:
             return

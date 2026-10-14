@@ -559,6 +559,7 @@ class DiscordChannel(BaseChannel):
         stream_end: bool = False,
         resuming: bool = False,
         merge_next: bool = False,
+        turn_id: str | None = None,
     ) -> None:
         """Progressive Discord delivery: send once, then edit until the stream ends."""
         client = self._client

@@ -50,7 +50,11 @@ class MockChannel(BaseChannel):
         stream_end=False,
         resuming=False,
         merge_next=False,
+        turn_id=None,
     ):
+        kwargs = {}
+        if turn_id is not None:
+            kwargs["turn_id"] = turn_id
         return await self._send_delta_mock(
             chat_id,
             delta,
@@ -59,6 +63,7 @@ class MockChannel(BaseChannel):
             stream_end=stream_end,
             resuming=resuming,
             merge_next=merge_next,
+            **kwargs,
         )
 
 
@@ -80,11 +85,17 @@ def manager(config, bus):
     return manager
 
 
-def _delta(content: str, *, chat_id: str = "chat1", stream_id: str | None = None):
+def _delta(
+    content: str,
+    *,
+    chat_id: str = "chat1",
+    stream_id: str | None = None,
+    turn_id: str | None = None,
+):
     return outbound_message_for_event(
         channel="mock",
         chat_id=chat_id,
-        event=StreamDeltaEvent(content=content, stream_id=stream_id),
+        event=StreamDeltaEvent(content=content, stream_id=stream_id, turn_id=turn_id),
     )
 
 
@@ -156,6 +167,23 @@ class TestDeltaCoalescing:
             stream_end=False,
             resuming=False,
             merge_next=False,
+        )
+
+    @pytest.mark.asyncio
+    async def test_stream_turn_id_is_forwarded_to_the_channel(self, manager, bus):
+        msg = _delta("Hel", turn_id="turn-9")
+        event = msg.event
+        assert isinstance(event, StreamDeltaEvent)
+        await ChannelManager._send_stream_event(manager.channels["mock"], msg, event)
+        manager.channels["mock"]._send_delta_mock.assert_called_once_with(
+            "chat1",
+            "Hel",
+            {},
+            stream_id=None,
+            stream_end=False,
+            resuming=False,
+            merge_next=False,
+            turn_id="turn-9",
         )
 
     @pytest.mark.asyncio

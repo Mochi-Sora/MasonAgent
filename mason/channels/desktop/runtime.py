@@ -90,6 +90,7 @@ from mason.config.schema import Base
 from mason.pairing import PAIRING_CODE_META_KEY, approve_code, generate_code, is_approved
 from mason.session.access import SessionAccess
 from mason.session.keys import is_internal_session
+from mason.session.turn_metadata import TURN_ID_METADATA_KEY
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import Server, ServerConnection
@@ -580,7 +581,7 @@ class DesktopChannel(BaseChannel):
                 sender_id=token,
                 chat_id=session_id,
                 content=text,
-                metadata={},
+                metadata={TURN_ID_METADATA_KEY: turn_id},
                 session_key=session_id,
             )
         except Exception:
@@ -779,12 +780,18 @@ class DesktopChannel(BaseChannel):
         event = msg.event
         if isinstance(event, ProgressEvent):
             if event.file_edit_events:
-                await self.send_file_edit_events(msg.chat_id, event.file_edit_events, msg.metadata)
+                await self.send_file_edit_events(
+                    msg.chat_id, event.file_edit_events, msg.metadata, turn_id=event.turn_id,
+                )
                 return
             if event.tool_events:
-                await self._send_tool_events(msg.chat_id, event.tool_events)
+                await self._send_tool_events(
+                    msg.chat_id, event.tool_events, turn_id=event.turn_id,
+                )
             if event.content:
-                await self._send_progress_line(msg.chat_id, event.content, event.tool_hint)
+                await self._send_progress_line(
+                    msg.chat_id, event.content, event.tool_hint, turn_id=event.turn_id,
+                )
             return
         if event is not None:
             self.logger.debug(
@@ -823,6 +830,7 @@ class DesktopChannel(BaseChannel):
         stream_end: bool = False,
         resuming: bool = False,
         merge_next: bool = False,
+        turn_id: str | None = None,
     ) -> None:
         """Stream assistant text; the accumulated segment ends as one message.
 
@@ -831,6 +839,7 @@ class DesktopChannel(BaseChannel):
         reasoning deltas (which may not carry a stream id) attached to the
         same user-visible message.
         """
+        turn_id = turn_id or self._active_turns.get(chat_id)
         connection = self._session_owners.get(chat_id)
         state = self._outbound_streams.get(chat_id)
         if delta:
@@ -842,7 +851,7 @@ class DesktopChannel(BaseChannel):
                         "delta",
                         {
                             "session_id": chat_id,
-                            "turn_id": self._active_turns.get(chat_id),
+                            "turn_id": turn_id,
                             "message_id": state.message_id,
                             "text_delta": delta,
                         },
@@ -860,8 +869,9 @@ class DesktopChannel(BaseChannel):
         if state is None:
             return
         if connection is not None:
-            await self._flush_stream(chat_id, state, connection)
+            await self._flush_stream(chat_id, state, connection, turn_id=turn_id)
         self._outbound_streams.pop(chat_id, None)
+        return
 
     async def send_reasoning_delta(
         self,
@@ -870,9 +880,11 @@ class DesktopChannel(BaseChannel):
         metadata: dict[str, Any] | None = None,
         *,
         stream_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         if not delta:
             return
+        turn_id = turn_id or self._active_turns.get(chat_id)
         connection = self._session_owners.get(chat_id)
         if connection is None:
             return
@@ -882,7 +894,7 @@ class DesktopChannel(BaseChannel):
                 "reasoning_delta",
                 {
                     "session_id": chat_id,
-                    "turn_id": self._active_turns.get(chat_id),
+                    "turn_id": turn_id,
                     "message_id": state.message_id,
                     "text_delta": delta,
                 },
@@ -895,7 +907,9 @@ class DesktopChannel(BaseChannel):
         metadata: dict[str, Any] | None = None,
         *,
         stream_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
+        turn_id = turn_id or self._active_turns.get(chat_id)
         connection = self._session_owners.get(chat_id)
         state = self._outbound_streams.get(chat_id)
         if connection is None or state is None:
@@ -905,7 +919,7 @@ class DesktopChannel(BaseChannel):
                 "reasoning_end",
                 {
                     "session_id": chat_id,
-                    "turn_id": self._active_turns.get(chat_id),
+                    "turn_id": turn_id,
                     "message_id": state.message_id,
                 },
             )
@@ -916,7 +930,10 @@ class DesktopChannel(BaseChannel):
         chat_id: str,
         edits: list[dict[str, Any]],
         metadata: dict[str, Any] | None = None,
+        *,
+        turn_id: str | None = None,
     ) -> None:
+        turn_id = turn_id or self._active_turns.get(chat_id)
         connection = self._session_owners.get(chat_id)
         if connection is None:
             return
@@ -932,7 +949,7 @@ class DesktopChannel(BaseChannel):
                     "file_edit",
                     {
                         "session_id": chat_id,
-                        "turn_id": self._active_turns.get(chat_id),
+                        "turn_id": turn_id,
                         "path": path,
                         "phase": phase,
                         "ok": True if phase == "end" else None,
@@ -949,8 +966,14 @@ class DesktopChannel(BaseChannel):
         return state
 
     async def _flush_stream(
-        self, chat_id: str, state: _StreamState, connection: _Connection
+        self,
+        chat_id: str,
+        state: _StreamState,
+        connection: _Connection,
+        *,
+        turn_id: str | None = None,
     ) -> None:
+        turn_id = turn_id or self._active_turns.get(chat_id)
         if not state.text:
             return
         await connection.send_frame(
@@ -958,7 +981,7 @@ class DesktopChannel(BaseChannel):
                 "message",
                 {
                     "session_id": chat_id,
-                    "turn_id": self._active_turns.get(chat_id),
+                    "turn_id": turn_id,
                     "message_id": state.message_id,
                     "role": "assistant",
                     "text": state.text,
@@ -967,7 +990,15 @@ class DesktopChannel(BaseChannel):
             )
         )
 
-    async def _send_progress_line(self, chat_id: str, text: str, tool_hint: bool) -> None:
+    async def _send_progress_line(
+        self,
+        chat_id: str,
+        text: str,
+        tool_hint: bool,
+        *,
+        turn_id: str | None = None,
+    ) -> None:
+        turn_id = turn_id or self._active_turns.get(chat_id)
         connection = self._session_owners.get(chat_id)
         if connection is None:
             return
@@ -976,14 +1007,21 @@ class DesktopChannel(BaseChannel):
                 "progress",
                 {
                     "session_id": chat_id,
-                    "turn_id": self._active_turns.get(chat_id),
+                    "turn_id": turn_id,
                     "kind": "tool_hint" if tool_hint else "progress",
                     "text": text,
                 },
             )
         )
 
-    async def _send_tool_events(self, chat_id: str, events: list[dict[str, Any]]) -> None:
+    async def _send_tool_events(
+        self,
+        chat_id: str,
+        events: list[dict[str, Any]],
+        *,
+        turn_id: str | None = None,
+    ) -> None:
+        turn_id = turn_id or self._active_turns.get(chat_id)
         connection = self._session_owners.get(chat_id)
         if connection is None:
             return
@@ -999,7 +1037,7 @@ class DesktopChannel(BaseChannel):
                     "tool",
                     {
                         "session_id": chat_id,
-                        "turn_id": self._active_turns.get(chat_id),
+                        "turn_id": turn_id,
                         "tool_call_id": call_id,
                         "name": name,
                         "phase": phase,
@@ -1042,7 +1080,7 @@ class DesktopChannel(BaseChannel):
         connection = self._session_owners.get(session_key)
         if state is not None and connection is not None:
             with contextlib.suppress(Exception):
-                await self._flush_stream(session_key, state, connection)
+                await self._flush_stream(session_key, state, connection, turn_id=turn_id)
         await self._emit_to_session(
             session_key,
             "turn.end",

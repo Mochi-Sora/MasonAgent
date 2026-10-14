@@ -51,14 +51,17 @@ class _MockChannel(BaseChannel):
     async def send(self, msg):
         return await self._send_mock(msg)
 
-    async def send_reasoning_delta(self, chat_id, delta, metadata=None, *, stream_id=None):
-        return await self._delta_mock(chat_id, delta, metadata, stream_id=stream_id)
+    async def send_reasoning_delta(self, chat_id, delta, metadata=None, *, stream_id=None, turn_id=None):
+        kwargs = {"turn_id": turn_id} if turn_id is not None else {}
+        return await self._delta_mock(chat_id, delta, metadata, stream_id=stream_id, **kwargs)
 
-    async def send_reasoning_end(self, chat_id, metadata=None, *, stream_id=None):
-        return await self._end_mock(chat_id, metadata, stream_id=stream_id)
+    async def send_reasoning_end(self, chat_id, metadata=None, *, stream_id=None, turn_id=None):
+        kwargs = {"turn_id": turn_id} if turn_id is not None else {}
+        return await self._end_mock(chat_id, metadata, stream_id=stream_id, **kwargs)
 
-    async def send_file_edit_events(self, chat_id, edits, metadata=None):
-        return await self._file_edit_mock(chat_id, edits, metadata)
+    async def send_file_edit_events(self, chat_id, edits, metadata=None, *, turn_id=None):
+        kwargs = {"turn_id": turn_id} if turn_id is not None else {}
+        return await self._file_edit_mock(chat_id, edits, metadata, **kwargs)
 
 
 @pytest.fixture
@@ -113,6 +116,25 @@ async def test_one_shot_reasoning_expands_to_delta_plus_end(manager):
     await manager._send_once(channel, msg)
     channel._delta_mock.assert_awaited_once()
     channel._end_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reasoning_and_file_edit_forward_the_turn_id(manager):
+    channel = manager.channels["mock"]
+    await manager._send_once(channel, outbound_message_for_event(
+        channel="mock",
+        chat_id="c1",
+        event=ProgressEvent(content="step", reasoning_delta=True, stream_id="r1", turn_id="turn-3"),
+    ))
+    assert channel._delta_mock.await_args.kwargs["turn_id"] == "turn-3"
+
+    edits = [{"version": 1, "phase": "start", "path": "src/app.py"}]
+    await manager._send_once(channel, outbound_message_for_event(
+        channel="mock",
+        chat_id="c1",
+        event=ProgressEvent(file_edit_events=edits, turn_id="turn-4"),
+    ))
+    assert channel._file_edit_mock.await_args.kwargs["turn_id"] == "turn-4"
 
 
 @pytest.mark.asyncio

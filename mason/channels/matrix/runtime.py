@@ -656,6 +656,7 @@ class MatrixChannel(BaseChannel):
         stream_end: bool = False,
         resuming: bool = False,
         merge_next: bool = False,
+        turn_id: str | None = None,
     ) -> None:
         relates_to = self._build_outbound_relates_to(metadata)
 

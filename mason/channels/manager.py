@@ -8,6 +8,7 @@ import inspect
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from contextlib import suppress
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -66,6 +67,36 @@ def _default_channel_config(name: str) -> dict[str, Any] | None:
     if not plugin.default_enabled:
         return None
     return channel_default_config(plugin)
+
+
+def _keyword_accepted(method: object, name: str) -> bool:
+    """Return whether *method* accepts the keyword argument *name*.
+
+    Channels are third-party extension points; optional keyword plumbing added
+    after a channel shipped (``merge_next``, ``turn_id``) must not break an
+    implementation that predates it.
+    """
+    function = getattr(method, "__func__", method)
+    accepted = _accepted_keyword_names(function)
+    return name in accepted or "*" in accepted
+
+
+@lru_cache(maxsize=None)
+def _accepted_keyword_names(function: object) -> frozenset[str]:
+    """Return keyword names *function* accepts; ``"*"`` means ``**kwargs``."""
+    try:
+        parameters = inspect.signature(
+            cast("Callable[..., object]", function)
+        ).parameters
+    except (TypeError, ValueError):
+        return frozenset()
+    names = set(parameters)
+    if any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    ):
+        names.add("*")
+    return frozenset(names)
 
 
 class ChannelManager:
@@ -785,11 +816,14 @@ class ChannelManager:
         msg: OutboundMessage,
         event: ProgressEvent,
     ) -> None:
+        kwargs: dict[str, Any] = {"stream_id": event.stream_id}
+        if event.turn_id and _keyword_accepted(channel.send_reasoning_delta, "turn_id"):
+            kwargs["turn_id"] = event.turn_id
         await channel.send_reasoning_delta(
             msg.chat_id,
             msg.content,
             msg.metadata,
-            stream_id=event.stream_id,
+            **kwargs,
         )
 
     @staticmethod
@@ -798,10 +832,13 @@ class ChannelManager:
         msg: OutboundMessage,
         event: ProgressEvent,
     ) -> None:
+        kwargs: dict[str, Any] = {"stream_id": event.stream_id}
+        if event.turn_id and _keyword_accepted(channel.send_reasoning_end, "turn_id"):
+            kwargs["turn_id"] = event.turn_id
         await channel.send_reasoning_end(
             msg.chat_id,
             msg.metadata,
-            stream_id=event.stream_id,
+            **kwargs,
         )
 
     @staticmethod
@@ -815,19 +852,14 @@ class ChannelManager:
             "stream_end": isinstance(event, StreamEndEvent),
             "resuming": event.resuming if isinstance(event, StreamEndEvent) else False,
         }
-        if isinstance(event, StreamEndEvent) and event.merge_next:
-            try:
-                signature = inspect.signature(channel.send_delta)
-                if (
-                    "merge_next" in signature.parameters
-                    or any(
-                        parameter.kind is inspect.Parameter.VAR_KEYWORD
-                        for parameter in signature.parameters.values()
-                    )
-                ):
-                    kwargs["merge_next"] = True
-            except (TypeError, ValueError):
-                pass
+        if (
+            isinstance(event, StreamEndEvent)
+            and event.merge_next
+            and _keyword_accepted(channel.send_delta, "merge_next")
+        ):
+            kwargs["merge_next"] = True
+        if event.turn_id is not None and _keyword_accepted(channel.send_delta, "turn_id"):
+            kwargs["turn_id"] = event.turn_id
         await channel.send_delta(
             msg.chat_id,
             msg.content,
@@ -848,10 +880,14 @@ class ChannelManager:
             # end pair so plugins only implement the streaming primitives.
             await channel.send_reasoning(msg)
         elif isinstance(event, ProgressEvent) and event.file_edit_events:
+            kwargs: dict[str, Any] = {}
+            if event.turn_id and _keyword_accepted(channel.send_file_edit_events, "turn_id"):
+                kwargs["turn_id"] = event.turn_id
             await channel.send_file_edit_events(
                 msg.chat_id,
                 event.file_edit_events,
                 msg.metadata,
+                **kwargs,
             )
         elif isinstance(event, StreamDeltaEvent):
             await ChannelManager._send_stream_event(channel, msg, event)

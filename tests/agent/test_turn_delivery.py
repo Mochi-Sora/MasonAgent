@@ -3,7 +3,7 @@ import pytest
 
 from mason.agent.turn_delivery import TurnDeliveryFactory
 from mason.bus.events import InboundMessage, OutboundMessage
-from mason.bus.outbound_events import ContextCompactionEvent
+from mason.bus.outbound_events import ContextCompactionEvent, ProgressEvent, StreamDeltaEvent
 from mason.bus.queue import MessageBus
 from mason.bus.runtime_events import TurnCompleted
 from mason.events import RetryStatusEvent
@@ -251,4 +251,45 @@ async def test_next_model_request_clears_exhaustion_within_the_same_turn() -> No
     await delivery.complete(None, publish_completion=True)
     assert completed[0].failure_error_kind == "billing"
     assert completed[0].failure_attempts is None
+
+
+@pytest.mark.asyncio
+async def test_stream_and_completion_events_carry_the_turn_id() -> None:
+    bus = MessageBus()
+    completed: list[TurnCompleted] = []
+    bus.subscribe(completed.append, TurnCompleted)
+    msg = InboundMessage(
+        channel="desktop",
+        sender_id="device",
+        chat_id="desktop:1",
+        content="hi",
+        metadata={"_wants_stream": True},
+    )
+    delivery = TurnDeliveryFactory(bus).create(msg, "desktop:1", enable_stream=True)
+    delivery.turn_id = "turn-42"
+
+    await delivery.events.emit(StreamDeltaEvent(content="Hel"))
+    delta = bus.outbound.get_nowait()
+    assert isinstance(delta.event, StreamDeltaEvent)
+    assert delta.event.turn_id == "turn-42"
+    assert delta.event.stream_id is not None
+
+    await delivery.complete(None, publish_completion=True)
+    assert len(completed) == 1
+    assert completed[0].context.turn_id == "turn-42"
+
+
+@pytest.mark.asyncio
+async def test_progress_events_carry_the_turn_id() -> None:
+    bus = MessageBus()
+    delivery = TurnDeliveryFactory(bus).create(
+        InboundMessage(channel="telegram", sender_id="u", chat_id="c", content="hi"),
+        "telegram:c",
+    )
+    delivery.turn_id = "turn-7"
+
+    await delivery.events.emit(ProgressEvent(content="working…"))
+    outbound = bus.outbound.get_nowait()
+    assert isinstance(outbound.event, ProgressEvent)
+    assert outbound.event.turn_id == "turn-7"
 

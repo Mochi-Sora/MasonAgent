@@ -1308,6 +1308,7 @@ class TelegramChannel(BaseChannel):
         stream_end: bool = False,
         resuming: bool = False,
         merge_next: bool = False,
+        turn_id: str | None = None,
     ) -> None:
         """Stream a rich draft in private chats, then persist the final message."""
         app = await self._wait_for_app()

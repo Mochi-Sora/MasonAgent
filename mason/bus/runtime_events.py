@@ -23,6 +23,7 @@ class RuntimeEventContext:
     session_key: str
     metadata: dict[str, Any] = field(default_factory=dict)
     attributes: dict[str, Any] = field(default_factory=dict)
+    turn_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,7 @@ class RuntimeEventPublisher:
         session_key: str,
         metadata: dict[str, Any] | None,
         attributes: dict[str, Any] | None = None,
+        turn_id: str | None = None,
     ) -> RuntimeEventContext:
         return RuntimeEventContext(
             channel=channel,
@@ -127,6 +129,7 @@ class RuntimeEventPublisher:
             session_key=session_key,
             metadata=dict(metadata or {}),
             attributes=dict(attributes or {}),
+            turn_id=turn_id,
         )
 
     def record_turn_runtime(self, session_key: str, runtime: LLMRuntime) -> None:
@@ -164,6 +167,8 @@ class RuntimeEventPublisher:
         self,
         msg: InboundMessage,
         session_key: str,
+        *,
+        turn_id: str | None = None,
     ) -> None:
         await self.bus.publish(
             UserInputAccepted(
@@ -172,6 +177,7 @@ class RuntimeEventPublisher:
                     chat_id=msg.chat_id,
                     session_key=session_key,
                     metadata=msg.metadata,
+                    turn_id=turn_id,
                 ),
                 content=msg.content,
             )
@@ -181,6 +187,8 @@ class RuntimeEventPublisher:
         self,
         msg: InboundMessage,
         session_key: str,
+        *,
+        turn_id: str | None = None,
     ) -> None:
         await self.bus.publish(
             SessionTurnStarted(
@@ -189,6 +197,7 @@ class RuntimeEventPublisher:
                     chat_id=msg.chat_id,
                     session_key=session_key,
                     metadata=msg.metadata,
+                    turn_id=turn_id,
                 ),
             )
         )
@@ -198,6 +207,8 @@ class RuntimeEventPublisher:
         msg: InboundMessage,
         session_key: str,
         runtime: LLMRuntime,
+        *,
+        turn_id: str | None = None,
     ) -> None:
         """Record and publish the runtime selected for one turn."""
         self.record_turn_runtime(session_key, runtime)
@@ -208,6 +219,7 @@ class RuntimeEventPublisher:
                     chat_id=msg.chat_id,
                     session_key=session_key,
                     metadata=msg.metadata,
+                    turn_id=turn_id,
                 ),
                 runtime=runtime,
             )
@@ -220,6 +232,7 @@ class RuntimeEventPublisher:
         status: str,
         *,
         started_at: float | None = None,
+        turn_id: str | None = None,
     ) -> None:
         await self.bus.publish(
             TurnRunStatusChanged(
@@ -228,6 +241,7 @@ class RuntimeEventPublisher:
                     chat_id=msg.chat_id,
                     session_key=session_key,
                     metadata=msg.metadata,
+                    turn_id=turn_id,
                 ),
                 status=status,
                 started_at=started_at,
@@ -250,6 +264,7 @@ class RuntimeEventPublisher:
                     session_key=session_key,
                     metadata=msg.metadata,
                     attributes=attributes,
+                    turn_id=turn_id,
                 ),
                 turn_id=turn_id,
                 sender_id=msg.sender_id,
@@ -267,6 +282,7 @@ class RuntimeEventPublisher:
         failure_kind: str | None = None,
         failure_error_kind: str | None = None,
         failure_attempts: int | None = None,
+        turn_id: str | None = None,
     ) -> None:
         await self.bus.publish(
             TurnCompleted(
@@ -275,6 +291,7 @@ class RuntimeEventPublisher:
                     chat_id=chat_id,
                     session_key=session_key,
                     metadata=metadata,
+                    turn_id=turn_id,
                 ),
                 latency_ms=self._turn_latency_ms.pop(session_key, None),
                 runtime=self._turn_runtime.pop(session_key, None),

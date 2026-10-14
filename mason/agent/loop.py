@@ -100,6 +100,7 @@ from mason.session.summary import (
     SessionSummary,
     SessionSummaryCheckpoint,
 )
+from mason.session.turn_metadata import supplied_turn_id
 from mason.triggers.local_turns import LocalTriggerTurnCoordinator
 from mason.utils.cancellation import task_is_cancelling
 from mason.utils.document import reference_non_image_attachments
@@ -1800,11 +1801,12 @@ class AgentLoop:
         elif delivery.session_key != key:
             raise ValueError("turn delivery session does not match the processing session")
         t0 = time.time()
+        turn_id = supplied_turn_id(msg.metadata) or f"{key}:{time.time_ns()}"
         ctx = TurnContext(
             msg=msg,
             session=None,
             session_key=key,
-            turn_id=f"{key}:{time.time_ns()}",
+            turn_id=turn_id,
             runtime=runtime,
             kind=kind,
             delivery=delivery,
@@ -1834,6 +1836,7 @@ class AgentLoop:
             tools=tools,
             attributes=dict(attributes or {}),
         )
+        delivery.turn_id = turn_id
         # A streaming callback may be present even when the final text comes from a
         # non-streaming recovery. Only the last completed segment can suppress the
         # regular outbound message.

@@ -143,6 +143,56 @@ async def test_tool_progress_and_file_edit_frames(tmp_path: Path) -> None:
             await ws.close()
 
 
+async def test_event_turn_ids_are_forwarded_to_frames(tmp_path: Path) -> None:
+    """Ids carried by events win over channel-side bookkeeping."""
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        ws, session_id, turn_id = await _paired_session(harness)
+        try:
+            await harness.channel.send_delta(
+                session_id, "Hel", {}, stream_id="s:0", turn_id="turn-event"
+            )
+            delta = await next_event(ws, "delta")
+            assert delta["event"]["turn_id"] == "turn-event"
+
+            await harness.channel.send_reasoning_delta(
+                session_id, "hmm", {}, turn_id="turn-reason"
+            )
+            reasoning = await next_event(ws, "reasoning_delta")
+            assert reasoning["event"]["turn_id"] == "turn-reason"
+            await harness.channel.send_reasoning_end(session_id, {}, turn_id="turn-reason")
+            reasoning_end = await next_event(ws, "reasoning_end")
+            assert reasoning_end["event"]["turn_id"] == "turn-reason"
+
+            event = ProgressEvent(content="working…", tool_hint=True, turn_id="turn-event-2")
+            await harness.channel.send(
+                OutboundMessage(
+                    channel="desktop", chat_id=session_id, content=event.content, event=event
+                )
+            )
+            progress = await next_event(ws, "progress")
+            assert progress["event"]["turn_id"] == "turn-event-2"
+
+            await harness.channel.send_file_edit_events(
+                session_id,
+                [{"path": "a.py", "phase": "start"}],
+                {},
+                turn_id="turn-event-3",
+            )
+            edit = await next_event(ws, "file_edit")
+            assert edit["event"]["turn_id"] == "turn-event-3"
+
+            # Without an event id, frames fall back to the ack id of the active turn.
+            await harness.channel.send_delta(
+                session_id, "lo", {}, stream_id="s:0", stream_end=True
+            )
+            second = await next_event(ws, "delta")
+            final = await next_event(ws, "message")
+            assert second["event"]["turn_id"] == turn_id
+            assert final["event"]["turn_id"] == turn_id
+        finally:
+            await ws.close()
+
+
 def _session_payload() -> dict[str, Any]:
     return {
         "key": "desktop:abc",

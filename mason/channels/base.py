@@ -148,6 +148,7 @@ class BaseChannel(ABC):
         stream_end: bool = False,
         resuming: bool = False,
         merge_next: bool = False,
+        turn_id: str | None = None,
     ) -> None:
         """Deliver a streaming text chunk.
 
@@ -169,6 +170,12 @@ class BaseChannel(ABC):
         * ``resuming=True, merge_next=False`` — the segment will be regenerated
           by a recovery retry. Discard the buffer so the text is not rendered
           twice.
+
+        ``turn_id`` identifies the turn in the origin surface's terms. It is
+        populated for every chunk of a turn; a channel that handed out the id
+        before the turn started (the desktop protocol's ``chat.send``
+        acknowledgement) receives the same id back here and in
+        :meth:`send` events for that turn.
         """
         pass
 
@@ -179,6 +186,7 @@ class BaseChannel(ABC):
         metadata: dict[str, Any] | None = None,
         *,
         stream_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         """Stream a chunk of model reasoning/thinking content.
 
@@ -198,6 +206,7 @@ class BaseChannel(ABC):
         metadata: dict[str, Any] | None = None,
         *,
         stream_id: str | None = None,
+        turn_id: str | None = None,
     ) -> None:
         """Mark the end of a reasoning stream segment.
 
@@ -212,6 +221,8 @@ class BaseChannel(ABC):
         chat_id: str,
         edits: list[dict[str, Any]],
         metadata: dict[str, Any] | None = None,
+        *,
+        turn_id: str | None = None,
     ) -> None:
         """Deliver structured live file-edit events.
 
@@ -232,16 +243,19 @@ class BaseChannel(ABC):
         if not msg.content:
             return
         stream_id = getattr(msg.event, "stream_id", None)
+        turn_id = getattr(msg.event, "turn_id", None)
         await self.send_reasoning_delta(
             msg.chat_id,
             msg.content,
             msg.metadata,
             stream_id=stream_id,
+            turn_id=turn_id,
         )
         await self.send_reasoning_end(
             msg.chat_id,
             msg.metadata,
             stream_id=stream_id,
+            turn_id=turn_id,
         )
 
     @property
