@@ -34,7 +34,7 @@ Remember that I prefer concise release notes.
 ```
 
 The agent records it in the working state with `update_state`, and the turn is
-captured verbatim in today's backup. A consolidation pass runs every two hours
+captured verbatim in the backup. A consolidation pass runs every two hours
 by default and promotes worthwhile entries from the backup into long-term memory.
 
 In a later session, ask about it:
@@ -55,8 +55,8 @@ active workspace, usually under `~/.mason/workspace/`.
   if consolidation should not use the main model.
 - Back up the workspace's `memory/` directory, including `memory.db` and
   `state.md`.
-- The backup tier covers the current day only; keep session history or your own
-  exports when you need exact older transcripts.
+- The backup tier keeps a rolling window (`memory.backup_retention_days`, default 2
+days); keep your own exports when you need exact older transcripts.
 - The memory subsystem is SQLite-based and does not support Windows.
 
 ## Security notes
@@ -69,7 +69,7 @@ active workspace, usually under `~/.mason/workspace/`.
 ## Troubleshooting
 
 - If memory feels stale, remember consolidation is periodic; the agent can still
-  search today's backup with `recall_backup`.
+  search the recent backup with `recall_backup`.
 - If a fact must survive, ask the agent to remember it; consolidation decides
   what is promoted from the backup.
 - If a new session lacks context, confirm it uses the same workspace.

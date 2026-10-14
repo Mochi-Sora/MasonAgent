@@ -2332,7 +2332,7 @@ mason keeps long-term memory in SQLite under `<workspace>/memory/memory.db`. Mem
 |---------|----------|----------|
 | Working state | `memory/state.md` | A compact scratchpad (about 2 KB) injected into the system prompt. The agent rewrites it with the `update_state` tool; the daily rollover empties it in place. |
 | Long-term memory | `memory/memory.db` | Curated memories and links between related memories, searched with `recall_memory`. Only consolidation writes it; the agent never writes it directly. |
-| Backup | `memory/memory.db` | Every turn of every conversation captured verbatim as day-scoped episodes, searched with `recall_backup`; an empty query lists the latest turns. Entries are discarded when the day rolls over. |
+| Backup | `memory/memory.db` | Every turn of every conversation captured verbatim, searched with `recall_backup`; an empty query lists the latest turns. Kept for `memory.backup_retention_days` (default 2, so today and yesterday); older entries are discarded at rollover. |
 
 Consolidation is the periodic LLM pass that curates long-term memory: it promotes worthwhile backup entries, merges duplicates, rewrites vague entries, links related memories, and writes small generated skills under `skills/<name>/SKILL.md`. It runs on a cron system job and once more right before the daily rollover.
 

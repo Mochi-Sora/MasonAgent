@@ -263,6 +263,24 @@ mason channels status
 
 See [`chat-apps.md`](./chat-apps.md) for channel-specific setup.
 
+## Pairing
+
+Approve or revoke the devices that connect to a channel. The desktop channel uses
+this; any channel that gates on pairing can.
+
+```bash
+mason pairing list                    # pending codes + already-approved devices
+mason pairing approve ABCD-EFGH       # admit a device
+mason pairing deny ABCD-EFGH          # reject a pending code
+mason pairing revoke device-1f2e      # revoke one device
+mason pairing revoke --all            # revoke every device on a channel
+```
+
+A client that is not paired yet receives a code and shows it to the user, so the
+first device can be approved without any other channel being reachable. Codes are
+accepted in any case, with or without the hyphen. Use `--channel` to target a
+channel other than the default (`desktop`).
+
 ## MCP
 
 | Command | Description |

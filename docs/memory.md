@@ -17,7 +17,13 @@ deserve different tools:
 |---------|-----------|----------|------------|-----------|
 | Working state | `memory/state.md` (~2 KB) | Cleared at each daily rollover | The model | Injected into the system prompt every turn |
 | Long-term memory | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
-| Today's backup | `memory/memory.db` | Discarded at the daily rollover | Every turn, verbatim | `recall_backup` |
+| Recent backup | `memory/memory.db` | Rolling window (`memory.backup_retention_days`, default 2 days) | Every turn, verbatim | `recall_backup` |
+
+Two more surfaces sit alongside them: `memory/DATES.md` holds dated commitments
+(searched on demand with `search_dates`, because a date is the whole point and
+curation favors timeless facts), and `memory/state_history.md` keeps the last 20
+working-state versions so an overwrite can be undone. Daily snapshots of the
+database live in `memory/backups/`.
 
 ### Working state
 
@@ -188,7 +194,7 @@ Older installs kept durable memory in `memory/MEMORY.md` and compressed history 
 
 - a customized `memory/MEMORY.md` is imported into long-term memory, chunked into
   individual memories;
-- existing `memory/history.jsonl` entries are imported into today's backup;
+- existing `memory/history.jsonl` entries are imported into the backup tier;
 - both files are then moved to `memory/legacy/`, and an untouched bundled
   `MEMORY.md` template is skipped instead of imported;
 - old Dream cursors and Dream sessions are cleaned up by the gateway.

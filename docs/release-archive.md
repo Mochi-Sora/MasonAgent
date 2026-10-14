@@ -2,7 +2,11 @@
 
 This page keeps release and daily update history outside the README so the project homepage can stay focused on what nanobot is, what it can do, and how to start.
 
-For tagged releases, see [GitHub Releases](https://github.com/HKUDS/nanobot/releases).
+> **Upstream history.** This archive lists releases of **nanobot**, the upstream project
+> Mason is derived from — not Mason's own releases. Mason has not shipped a tagged
+> release yet; when it does, it belongs here too.
+
+For upstream tagged releases, see [GitHub Releases](https://github.com/HKUDS/nanobot/releases).
 
 ## Highlights
 

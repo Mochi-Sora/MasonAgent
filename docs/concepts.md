@@ -14,7 +14,7 @@ mason has one small core loop and several ways to enter it:
 | Providers | LLM backends such as OpenRouter, Anthropic, OpenAI, Bedrock, Ollama, vLLM, and other OpenAI-compatible APIs |
 | Channels | User-facing transports such as CLI, Telegram, Discord, Slack, Feishu, WeChat, Email, Mattermost, and others |
 | Tools | Capabilities the model may call, including files, shell, web search/fetch, MCP, cron, image generation, and subagents |
-| Memory | Working state, SQLite long-term memory, today's backup, and session history |
+| Memory | Working state, SQLite long-term memory, the recent verbatim backup, and the dated-events file |
 | Gateway | Long-running process that connects enabled channels and serves the health endpoint |
 
 The simplest path is `mason agent -m "Hello!"`: one inbound message goes through the agent loop and prints the reply in your terminal. The long-running path is `mason gateway`: channels receive messages from chat apps, publish them to the same agent loop, and send replies back to the originating channel.
