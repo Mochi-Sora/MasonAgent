@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from loguru import logger
 
@@ -31,6 +31,10 @@ class BaseChannel(ABC):
     send_progress: bool = True
     send_tool_hints: bool = True
     show_reasoning: bool = True
+    #: Delivery-policy capabilities this channel declares (see
+    #: :mod:`mason.channels.capabilities`).  Empty by default: a channel only
+    #: opts into specialized notices, never inherits them.
+    capabilities: ClassVar[frozenset[str]] = frozenset()
 
     def __init__(self, config: Any, bus: MessageBus):
         """

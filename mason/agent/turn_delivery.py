@@ -20,6 +20,7 @@ from mason.bus.outbound_events import (
 )
 from mason.bus.queue import MessageBus
 from mason.bus.runtime_events import RuntimeEventPublisher
+from mason.channels.capabilities import SESSION_NOTIFICATIONS, channel_supports
 from mason.channels.notification_routes import notification_metadata
 from mason.events import (
     AgentEvent,
@@ -160,7 +161,11 @@ class TurnDeliveryFactory:
                 if session_key == UNIFIED_SESSION_KEY
                 else tuple(session_key.split(":", 1))
             )
-            if not route or len(route) != 2 or route[0] not in {"websocket", "cli"}:
+            if (
+                not route
+                or len(route) != 2
+                or not channel_supports(route[0], SESSION_NOTIFICATIONS)
+            ):
                 return EventSink()
             channel, chat_id = route
             metadata = {}

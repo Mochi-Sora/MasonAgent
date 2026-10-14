@@ -31,6 +31,9 @@ Design notes
   optional so a standalone channel still serves chat.
 * 'approve' / 'deny' answer 'no_approval' for now: the framework has no tool
   approval flow to resolve, so no 'approval' event is ever emitted.
+* Retry / recovery / response-source notices are 'interactive' notifications
+  (a channel capability, see mason.channels.capabilities); protocol v1 has no
+  frames for them yet, so this channel does not declare the capability.
 * Non-loopback binds are plaintext ws://; put a TLS terminator in front and
   rely on device tokens (the protocol forbids plaintext off-loopback).
 """

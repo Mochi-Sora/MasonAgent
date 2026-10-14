@@ -26,6 +26,7 @@ from mason.bus.outbound_events import (
 from mason.bus.queue import MessageBus
 from mason.channels._setup import channel_setup_spec
 from mason.channels.base import BaseChannel
+from mason.channels.capabilities import declare_channel_capabilities
 from mason.channels.contracts import (
     channel_default_config,
     channel_instance_specs,
@@ -182,10 +183,14 @@ class ChannelManager:
         section: Any,
         *,
         runtime_name: str | None = None,
+        plugin_capabilities: frozenset[str] = frozenset(),
     ) -> BaseChannel:
         channel = cls(section, self.bus)
         if runtime_name and runtime_name != channel.name:
             channel.name = runtime_name
+        declare_channel_capabilities(
+            channel.name, plugin_capabilities | channel.capabilities,
+        )
         progress_default, tool_hints_default = channel.progress_transport_defaults() or (
             self.config.channels.send_progress,
             self.config.channels.send_tool_hints,
@@ -268,6 +273,7 @@ class ChannelManager:
                             cls,
                             spec.config,
                             runtime_name=runtime_name,
+                            plugin_capabilities=plugin.capabilities,
                         ),
                     )
                     for runtime_name, spec in runtime_specs
@@ -520,6 +526,7 @@ class ChannelManager:
                         cls,
                         spec.config,
                         runtime_name=runtime_name,
+                        plugin_capabilities=plugin.capabilities,
                     ),
                 )
                 for runtime_name, spec in runtime_specs

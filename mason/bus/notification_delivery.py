@@ -9,6 +9,7 @@ from mason.bus.outbound_events import (
     StreamDeltaEvent,
     StreamEndEvent,
 )
+from mason.channels.capabilities import INTERACTIVE_NOTIFICATIONS, channel_supports
 from mason.events import (
     AgentEvent,
     ContextCompactionEvent,
@@ -42,7 +43,7 @@ def notification_is_deliverable(
     if audience == "lifecycle":
         return publish_lifecycle
     if audience == "interactive":
-        return channel == "websocket" and (
+        return channel_supports(channel, INTERACTIVE_NOTIFICATIONS) and (
             event_type is not RetryStatusEvent or publish_lifecycle
         )
     return True
