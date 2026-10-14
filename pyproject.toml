@@ -6,10 +6,10 @@ readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0-or-later"}
 authors = [
-    {name = "Mochi-Sora", email = "tammochi23@gmail.com"}
+    {name = "Mochi-Sora", email = "mochi0216@proton.me"}
 ]
 maintainers = [
-    {name = "Mochi-Sora", email = "tammochi23@gmail.com"}
+    {name = "Mochi-Sora", email = "mochi0216@proton.me"}
 ]
 keywords = ["ai", "agent", "chatbot"]
 classifiers = [

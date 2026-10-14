@@ -19,7 +19,7 @@ please be patient if a response takes a little while.
 |------------|------|
 | [@Mochi-Sora](https://github.com/Mochi-Sora) | Maintainer; reviews and merges, releases, security reports |
 
-Contact: **tammochi23@gmail.com**. For anything security related, prefer the private
+Contact: **mochi0216@proton.me**. For anything security related, prefer the private
 channel described in [`SECURITY.md`](./SECURITY.md).
 
 ## Contribution Flow
@@ -193,7 +193,7 @@ environment variables, and legacy `dev.nanobot` plugin metadata keys.
 If you have questions, ideas, or half-formed insights, you are warmly welcome here.
 
 Please open an [issue](https://github.com/Mochi-Sora/MasonAgent/issues) on this
-repository. For private questions, email **tammochi23@gmail.com**.
+repository. For private questions, email **mochi0216@proton.me**.
 
 Upstream nanobot has its own community, listed in the credit section of the
 README; Mason is not affiliated with it.
