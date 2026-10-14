@@ -15,7 +15,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Collection, Generator, Protocol, TypedDict, cast
+from typing import Any, Callable, Collection, Generator, Iterable, Protocol, TypedDict, cast
 from weakref import WeakValueDictionary
 
 from filelock import FileLock
@@ -96,6 +96,23 @@ def _archive_offset(data: dict[str, Any]) -> int:
 def _is_provider_state_record_line(line: str) -> bool:
     """Recognize the canonical private record without decoding its opaque payload."""
     return _PROVIDER_STATE_RECORD_PREFIX_RE.match(line) is not None
+
+
+def _stored_message_count(data: dict[str, Any]) -> int | None:
+    """Read a persisted transcript count from a metadata record, if valid."""
+    value = data.get("message_count")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _count_message_records(lines: Iterable[str]) -> int:
+    """Count transcript records the way ``read()`` would, without parsing them."""
+    return sum(
+        1
+        for line in lines
+        if line.strip() and not _is_provider_state_record_line(line)
+    )
 
 
 def _sanitize_assistant_replay_text(content: str) -> str:
@@ -392,6 +409,7 @@ class SessionMetadataPayload(TypedDict):
     created_at: str | None
     updated_at: str | None
     metadata: dict[str, Any]
+    message_count: int
 
 
 class SessionInfo(TypedDict):
@@ -401,6 +419,7 @@ class SessionInfo(TypedDict):
     title: str
     preview: str
     path: str
+    message_count: int
 
 
 @dataclass(frozen=True)
@@ -1212,6 +1231,9 @@ class JsonlSessionStore:
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "metadata": session.metadata,
+            # Served from the metadata record so session listings and
+            # single-session updates never read the transcript for a count.
+            "message_count": len(session.messages),
             "last_archived": session.last_archived,
             # Keep old mason releases able to read sessions written
             # during the field-name migration.
@@ -1381,6 +1403,11 @@ class JsonlSessionStore:
                     key_value = cast(object, data.get("key"))
                     created_at_value = cast(object, data.get("created_at"))
                     updated_at_value = cast(object, data.get("updated_at"))
+                    message_count = _stored_message_count(data)
+                    if message_count is None:
+                        # Legacy record: count once here; the session's next
+                        # save persists the field and removes this scan.
+                        message_count = _count_message_records(f)
                     return {
                         "key": key_value if isinstance(key_value, str) and key_value else key,
                         "created_at": (
@@ -1394,20 +1421,22 @@ class JsonlSessionStore:
                             if isinstance(metadata_value, dict)
                             else {}
                         ),
+                        "message_count": message_count,
                     }
             return None
         except _SESSION_DATA_ERRORS as e:
             logger.warning("Failed to read session metadata {}: {}", key, e)
             repaired = self._repair_unlocked(key, path=path)
-            if repaired is not None:
-                logger.info("Recovered read-only session metadata {} from corrupt file", key)
-                return {
-                    "key": repaired.key,
-                    "created_at": repaired.created_at.isoformat(),
-                    "updated_at": repaired.updated_at.isoformat(),
-                    "metadata": repaired.metadata,
-                }
-            return None
+            if repaired is None:
+                return None
+            logger.info("Recovered read-only session metadata {} from corrupt file", key)
+            return {
+                "key": repaired.key,
+                "created_at": repaired.created_at.isoformat(),
+                "updated_at": repaired.updated_at.isoformat(),
+                "metadata": repaired.metadata,
+                "message_count": len(repaired.messages),
+            }
 
     def list_sessions(self) -> list[SessionInfo]:
         with self._session_files_lock:
@@ -1435,6 +1464,18 @@ class JsonlSessionStore:
                             )
                             metadata = cast(object, data.get("metadata", {}))
                             title = _metadata_title(metadata)
+                            stored_count = _stored_message_count(data)
+                            if stored_count is None:
+                                # Legacy file: read the metadata record's own
+                                # fallback scan once; the next save persists the
+                                # field.  The bounded preview scan below is
+                                # unchanged either way.
+                                metadata_payload = self._read_metadata_unlocked(key)
+                                stored_count = (
+                                    metadata_payload["message_count"]
+                                    if metadata_payload is not None
+                                    else 0
+                                )
                             preview = ""
                             fallback_preview = ""
                             scanned_records = 0
@@ -1486,6 +1527,7 @@ class JsonlSessionStore:
                                     "title": title,
                                     "preview": preview,
                                     "path": str(path),
+                                    "message_count": stored_count,
                                 }
                             )
             except FileNotFoundError:
@@ -1508,6 +1550,7 @@ class JsonlSessionStore:
                                 "",
                             ),
                             "path": str(path),
+                            "message_count": len(repaired.messages),
                         }
                     )
                 continue
