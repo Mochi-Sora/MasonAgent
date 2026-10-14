@@ -86,6 +86,8 @@ If `mason channels status` does not show the channel as enabled, the config snip
 
 > `allowFrom: ["*"]` bypasses pairing and allows anyone who can reach that channel to talk to the bot. Use it only when that is intentional, or temporarily while testing in a private sandbox.
 
+All channels share `enabled` and the common delivery settings (`sendProgress`, `sendToolHints`, `showReasoning`, `sendMaxRetries`); they are documented under [Channel Settings](./configuration.md#channel-settings). The sections below cover what each platform needs on top of those.
+
 | Channel | What you need |
 |---------|---------------|
 | **Telegram** | Bot token from @BotFather |
@@ -126,6 +128,22 @@ credentials under `channels.linear` in `config.json`, then authorize a
 workspace with `mason channels connect linear`. OAuth requests `read`,
 `write`, `app:mentionable`, and `app:assignable`; a task still begins with an
 explicit @mention or delegation.
+
+```json
+{
+  "channels": {
+    "linear": {
+      "enabled": true,
+      "clientId": "YOUR_LINEAR_CLIENT_ID",
+      "clientSecret": "YOUR_LINEAR_CLIENT_SECRET",
+      "webhookSigningSecret": "YOUR_LINEAR_WEBHOOK_SIGNING_SECRET",
+      "publicBaseUrl": "https://mason.example.com"
+    }
+  }
+}
+```
+
+The four fields above are required. `host`/`port` (default `0.0.0.0:3979`), `webhookPath` (default `/linear/webhook`), and `oauthCallbackPath` (default `/linear/oauth/callback`) only need setting when you run behind a custom reverse proxy; `allowFrom` restricts who can start tasks.
 
 See the [native Linear agent guide](./guides/linear-agent.md) for the complete
 setup, tunnel examples, security model, and troubleshooting.
