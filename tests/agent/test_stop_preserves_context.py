@@ -32,9 +32,9 @@ def _make_provider():
     return provider
 
 
-def _make_loop(tmp_path: Path) -> AgentLoop:
+def _make_loop(tmp_path: Path, bus: MessageBus | None = None) -> AgentLoop:
     """Create a real AgentLoop with mocked provider — avoids patching __init__."""
-    bus = MessageBus()
+    bus = bus or MessageBus()
     provider = _make_provider()
     with patch("mason.agent.loop.ContextBuilder"), \
          patch("mason.agent.loop.SessionManager"), \
@@ -149,3 +149,51 @@ async def test_dispatch_cancellation_keeps_checkpoint_for_gateway_shutdown(tmp_p
 
     assert session.metadata[checkpoint_key] == checkpoint
     assert session.messages == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_cancellation_publishes_exactly_one_interrupted_completion(
+    tmp_path: Path,
+) -> None:
+    """A cancelled turn owes its channels exactly one terminal signal.
+
+    The loop publishes ``TurnCompleted(outcome="interrupted")`` when the turn is
+    cancelled, and the idle transition that follows must not emit a second
+    completion for the same turn.
+    """
+    from mason.bus.events import InboundMessage
+    from mason.bus.queue import MessageBus as _MessageBus
+    from mason.bus.runtime_events import TurnCompleted, TurnRunStatusChanged
+
+    bus = _MessageBus()
+    completions: list[TurnCompleted] = []
+    status_changes: list[TurnRunStatusChanged] = []
+    bus.subscribe(completions.append, TurnCompleted)
+    bus.subscribe(status_changes.append, TurnRunStatusChanged)
+
+    loop = _make_loop(tmp_path, bus=bus)
+    session = SimpleNamespace(
+        key="test:c1",
+        metadata={},
+        messages=[{"role": "user", "content": "work"}],
+        provider_state=None,
+    )
+    loop.sessions.get_or_create = MagicMock(return_value=session)
+    loop.sessions.save = MagicMock()
+
+    async def _cancel(*_args: object, **_kwargs: object) -> None:
+        raise asyncio.CancelledError()
+
+    loop._process_message = _cancel  # type: ignore[method-assign]
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_session(
+            loop,
+            InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="work"),
+        )
+
+    assert [(event.outcome, event.failure_kind) for event in completions] == [
+        ("interrupted", None)
+    ]
+    assert completions[0].context.session_key == "test:c1"
+    assert [event.status for event in status_changes] == ["idle"]

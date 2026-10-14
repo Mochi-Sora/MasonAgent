@@ -1055,12 +1055,16 @@ class DesktopChannel(BaseChannel):
         turn_id = self._active_turns.pop(session_key, None)
         if turn_id is None:
             return
+        status = {
+            "completed": "completed",
+            "interrupted": "interrupted",
+        }.get(event.outcome, "error")
         payload: dict[str, Any] = {
             "session_id": session_key,
             "turn_id": turn_id,
-            "status": "completed" if event.outcome == "completed" else "error",
+            "status": status,
         }
-        if payload["status"] == "error":
+        if status == "error":
             detail = event.failure_error_kind or event.failure_kind
             if detail:
                 payload["error"] = detail
@@ -1073,9 +1077,10 @@ class DesktopChannel(BaseChannel):
         turn_id = self._active_turns.pop(session_key, None)
         if turn_id is None:
             return
-        # No TurnCompleted arrived for this turn: it was cancelled (for example
-        # by /stop).  Commit any pending stream text before announcing the end
-        # so the client always sees the partial reply first.
+        # Fallback only: cancelled turns publish their own completed-with-
+        # interrupted signal.  A turn that ends without any completion still
+        # owes the client a turn.end, so commit pending stream text before
+        # announcing the end so the client always sees the partial reply first.
         state = self._outbound_streams.pop(session_key, None)
         connection = self._session_owners.get(session_key)
         if state is not None and connection is not None:

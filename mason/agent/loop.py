@@ -1636,6 +1636,19 @@ class AgentLoop:
                             "Could not close stream for cancelled session {}",
                             session_key,
                         )
+                    if not completion_published:
+                        try:
+                            # Publish the interrupted turn before the idle
+                            # transition so channels get a terminal signal
+                            # instead of deriving it from a side effect.
+                            await delivery.interrupted()
+                            completion_published = True
+                        except Exception:
+                            logger.opt(exception=log_content).debug(
+                                "Could not publish the interrupted-turn completion "
+                                "for session {}",
+                                session_key,
+                            )
                     # An explicit turn stop materializes partial context so
                     # the next prompt can see completed tool results.  Gateway
                     # shutdown keeps the durable checkpoint untouched instead,
@@ -1676,8 +1689,18 @@ class AgentLoop:
                     if not turn_continuation.internal_continuation_pending(msg.metadata):
                         await delivery.idle()
         except asyncio.CancelledError:
-            if not completion_published and normalize_command_text(msg.content).lower() == "/compact":
-                await delivery.complete(None, publish_completion=True)
+            if not completion_published:
+                # Cancellations that never reached the inner handler (for example
+                # a stop while the turn waited on the session lock) still owe
+                # the client exactly one terminal signal.
+                try:
+                    await delivery.interrupted()
+                except Exception:
+                    logger.opt(exception=log_content).debug(
+                        "Could not publish the interrupted-turn completion for "
+                        "session {}",
+                        session_key,
+                    )
             raise
         finally:
             if (

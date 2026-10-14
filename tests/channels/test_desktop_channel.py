@@ -164,11 +164,20 @@ async def test_chat_send_inbound_busy_and_interrupt(tmp_path: Path) -> None:
             assert stop.session_key == session_id
 
             await harness.bus.publish(
-                TurnRunStatusChanged(context=_context(session_id), status="idle")
+                TurnCompleted(context=_context(session_id), outcome="interrupted")
             )
             end = await next_event(ws, "turn.end")
             assert end["event"]["status"] == "interrupted"
             assert end["event"]["turn_id"] == turn_id
+            assert "error" not in end["event"]
+
+            # The idle transition that follows the terminal signal is a
+            # no-op fallback: no duplicate turn.end for the same turn.
+            await harness.bus.publish(
+                TurnRunStatusChanged(context=_context(session_id), status="idle")
+            )
+            with pytest.raises(asyncio.TimeoutError):
+                await next_frame(ws, timeout=0.2)
 
             again = await _send_chat(ws, "c3", "fresh turn", session_id=session_id)
             assert again["ok"] is True

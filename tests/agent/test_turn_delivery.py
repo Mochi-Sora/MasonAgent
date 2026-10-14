@@ -1,7 +1,7 @@
 
 import pytest
 
-from mason.agent.turn_delivery import TurnDeliveryFactory
+from mason.agent.turn_delivery import TurnDeliveryFactory, _turn_outcome
 from mason.bus.events import InboundMessage, OutboundMessage
 from mason.bus.outbound_events import ContextCompactionEvent, ProgressEvent, StreamDeltaEvent
 from mason.bus.queue import MessageBus
@@ -292,4 +292,37 @@ async def test_progress_events_carry_the_turn_id() -> None:
     outbound = bus.outbound.get_nowait()
     assert isinstance(outbound.event, ProgressEvent)
     assert outbound.event.turn_id == "turn-7"
+
+
+@pytest.mark.parametrize(("stop_reason", "expected"), [
+    ("cancelled", ("interrupted", None)),
+    ("error", ("failed", "model")),
+    ("tool_error", ("failed", "tool")),
+    (None, ("completed", None)),
+])
+def test_turn_outcome_mapping(stop_reason, expected) -> None:
+    assert _turn_outcome(stop_reason) == expected
+
+
+@pytest.mark.asyncio
+async def test_interrupted_publishes_one_terminal_signal_with_the_turn_id() -> None:
+    bus = MessageBus()
+    completed: list[TurnCompleted] = []
+    bus.subscribe(completed.append, TurnCompleted)
+    msg = InboundMessage(
+        channel="desktop",
+        sender_id="device",
+        chat_id="desktop:1",
+        content="hi",
+    )
+    delivery = TurnDeliveryFactory(bus).create(msg, "desktop:1")
+    delivery.turn_id = "turn-9"
+
+    await delivery.interrupted()
+
+    assert [(event.outcome, event.failure_kind) for event in completed] == [
+        ("interrupted", None)
+    ]
+    assert completed[0].context.turn_id == "turn-9"
+    assert completed[0].context.session_key == "desktop:1"
 

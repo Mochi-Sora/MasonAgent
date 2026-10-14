@@ -17,7 +17,6 @@ from mason.events import ContextCompactionEvent as ContextCompactionEvent
 from mason.events import RecoveryStateEvent as RecoveryStateEvent
 from mason.events import RetryStatusEvent as RetryStatusEvent
 from mason.events import RetryWaitEvent as RetryWaitEvent
-from mason.providers.base import LLMUsage
 
 
 @dataclass(frozen=True)
@@ -57,20 +56,6 @@ class StreamEndEvent(AgentEvent):
 @dataclass(frozen=True)
 class StreamedResponseEvent(AgentEvent):
     pass
-
-
-@dataclass(frozen=True)
-class TurnEndEvent(AgentEvent):
-    latency_ms: int | None = None
-    goal_state: dict[str, Any] | None = None
-    usage: LLMUsage | None = None
-    round_usages: tuple[LLMUsage, ...] = ()
-    context_window_tokens: int | None = None
-    outcome: str = "completed"
-    failure_kind: str | None = None
-    failure_error_kind: str | None = None
-    failure_attempts: int | None = None
-    failure_message: str | None = None
 
 
 @dataclass(frozen=True)

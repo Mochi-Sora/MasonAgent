@@ -82,6 +82,8 @@ def _turn_outcome(stop_reason: object) -> tuple[str, str | None]:
         return "failed", "model"
     if stop_reason == "tool_error":
         return "failed", "tool"
+    if stop_reason == "cancelled":
+        return "interrupted", None
     return "completed", None
 
 
@@ -392,6 +394,17 @@ class TurnDelivery:
                 outcome="failed",
                 failure_kind="internal",
             )
+
+    async def interrupted(self) -> None:
+        """Publish the single terminal signal for a cancelled turn."""
+        await self.runtime_event_publisher.turn_completed(
+            channel=self.lifecycle_message.channel,
+            chat_id=self.lifecycle_message.chat_id,
+            session_key=self.session_key,
+            metadata=self.lifecycle_message.metadata,
+            turn_id=self.turn_id or None,
+            outcome="interrupted",
+        )
 
     async def idle(self) -> None:
         await self.runtime_event_publisher.run_status_changed(

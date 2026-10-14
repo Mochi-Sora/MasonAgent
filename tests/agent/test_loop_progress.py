@@ -18,7 +18,6 @@ from mason.bus.outbound_events import (
     StreamDeltaEvent,
     StreamedResponseEvent,
     StreamEndEvent,
-    TurnEndEvent,
 )
 from mason.bus.queue import MessageBus
 from mason.providers.base import LLMResponse, ToolCallRequest
@@ -506,7 +505,7 @@ class TestToolEventProgress:
         final = [
             m for m in outbound
             if not isinstance(m.event, StreamDeltaEvent | StreamEndEvent)
-            and not isinstance(m.event, TurnEndEvent | GoalStatusEvent)
+            and not isinstance(m.event, GoalStatusEvent)
         ]
 
         assert [m.content for m in deltas] == ["Hel", "lo"]
@@ -815,7 +814,7 @@ class TestToolEventProgress:
         final = [
             m for m in outbound
             if not isinstance(m.event, StreamDeltaEvent | StreamEndEvent)
-            and not isinstance(m.event, TurnEndEvent | GoalStatusEvent)
+            and not isinstance(m.event, GoalStatusEvent)
         ]
 
         assert [m.content for m in deltas] == ["partial", "full retry response"]
