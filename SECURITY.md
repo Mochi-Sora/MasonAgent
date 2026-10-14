@@ -5,7 +5,7 @@
 If you discover a security vulnerability in mason, please report it by:
 
 1. **DO NOT** open a public GitHub issue
-2. Create a private security advisory on GitHub or contact the repository maintainers (xubinrencs@gmail.com)
+2. Create a private security advisory on GitHub or contact the maintainer (tammochi23@gmail.com)
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce

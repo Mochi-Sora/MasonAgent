@@ -12,12 +12,15 @@ software together: with care, clarity, and respect for the next person reading t
 
 ## Maintainers
 
-Maintainers are community stewards who help review, organize, and maintain the project. The list below describes each maintainer's current open-source project responsibilities.
+Mason is maintained by a single person. Reviews and merges are handled by them;
+please be patient if a response takes a little while.
 
 | Maintainer | Role |
 |------------|------|
-| [@re-bin](https://github.com/re-bin) | Project lead; reviews community PRs and handles merges |
-| [@chengyongru](https://github.com/chengyongru) | Reviews community PRs and may approve them; merges are handled by the project lead |
+| [@Mochi-Sora](https://github.com/Mochi-Sora) | Maintainer; reviews and merges, releases, security reports |
+
+Contact: **tammochi23@gmail.com**. For anything security related, prefer the private
+channel described in [`SECURITY.md`](./SECURITY.md).
 
 ## Contribution Flow
 
@@ -172,7 +175,7 @@ documentation locations are decided, so the fork stops presenting upstream's ide
 |---|---|
 | `mason/agent/tools/mcp_oauth.py` (`_CLIENT_URI`, `_LOGO_URI`, `software_id`) | Identity sent to remote MCP OAuth servers during dynamic client registration |
 | `mason/providers/openai_compat_provider.py`, `mason/providers/image_generation.py` (`HTTP-Referer`) | Attribution header sent to OpenRouter-compatible gateways |
-| `scripts/update_readme_contributors.py` (`REPOSITORY`, `MAINTAINERS`) | Contributor-wall sync; the rewritten README has no contributor markers yet, so the script currently has no target |
+| `scripts/update_readme_contributors.py` (`REPOSITORY`, `MAINTAINERS`) | Contributor-wall sync. Unused: Mason has a single maintainer, and the README carries no contributor markers |
 | `pyproject.toml` (`[project.urls]`, when added) | Package metadata on PyPI |
 | Community links in `.github/ISSUE_TEMPLATE/config.yml` and `COMMUNICATION.md` | Upstream Discussions and chat groups |
 
@@ -190,10 +193,10 @@ link to upstream nanobot; that is intentional.
 
 If you have questions, ideas, or half-formed insights, you are warmly welcome here.
 
-Please feel free to open an [issue](https://github.com/Mochi-Sora/MasonAgent/issues) on this repository, or reach out to the upstream nanobot community:
+Please open an [issue](https://github.com/Mochi-Sora/MasonAgent/issues) on this
+repository. For private questions, email **tammochi23@gmail.com**.
 
-- [Discord](https://discord.gg/MnCvHqpUGB)
-- [Feishu/WeChat](./COMMUNICATION.md)
-- Email: Xubin Ren (@Re-bin) — <xubinrencs@gmail.com>
+Upstream nanobot has its own community, listed in the credit section of the
+README; this fork is not affiliated with it.
 
 Thank you for spending your time and care on mason. We would love for more people to participate in this community, and we genuinely welcome contributions of all sizes.

@@ -1,5 +1,13 @@
-We provide QR codes for joining the HKUDS discussion groups on **WeChat** and **Feishu**.
+# Contact
 
-You can join by scanning the QR codes below:
+Mason is maintained by a single person, **Mochi-Sora**.
 
-<img src="https://github.com/HKUDS/.github/blob/main/profile/QR.png" alt="WeChat QR Code" width="400"/>
+- **Bugs and feature requests** — open an
+  [issue](https://github.com/Mochi-Sora/MasonAgent/issues) on this repository.
+- **Security reports** — use a private GitHub security advisory; see
+  [`SECURITY.md`](./SECURITY.md). Please do not open a public issue for those.
+- **Everything else** — email **tammochi23@gmail.com**.
+
+There are no chat groups or community servers for this fork. Upstream **nanobot** has its
+own community; it is credited in the [README](./README.md) and is not affiliated with
+this project.

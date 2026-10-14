@@ -10,6 +10,9 @@ authors = [
     {name = "Xubin Ren"},
     {name = "the nanobot contributors"}
 ]
+maintainers = [
+    {name = "Mochi-Sora", email = "tammochi23@gmail.com"}
+]
 keywords = ["ai", "agent", "chatbot"]
 classifiers = [
     "Development Status :: 3 - Alpha",
