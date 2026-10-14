@@ -31,6 +31,33 @@ class FakeSessionManager:
     def list_sessions(self) -> list[dict[str, Any]]:
         return list(self.rows)
 
+    def list_session_page(
+        self,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+        channel: str | None = None,
+    ) -> SimpleNamespace:
+        rows = [
+            row
+            for row in self.rows
+            if row.get("key") != "heartbeat"
+        ]
+        rows.sort(key=lambda row: (str(row.get("updated_at", "")), str(row.get("key", ""))), reverse=True)
+        if cursor is not None:
+            index = next(
+                (i for i, row in enumerate(rows) if row.get("key") == cursor), None,
+            )
+            rows = [] if index is None else rows[index + 1 :]
+        if limit is None or limit <= 0:
+            return SimpleNamespace(sessions=list(rows), next_cursor=None)
+        if len(rows) > limit:
+            return SimpleNamespace(
+                sessions=list(rows[:limit]),
+                next_cursor=str(rows[limit - 1]["key"]),
+            )
+        return SimpleNamespace(sessions=list(rows), next_cursor=None)
+
     def read_session_file(self, key: str) -> dict[str, Any] | None:
         return self.sessions.get(key)
 

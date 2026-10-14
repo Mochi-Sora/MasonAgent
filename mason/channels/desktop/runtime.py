@@ -102,7 +102,6 @@ from mason.channels.desktop.protocol import (
 from mason.config.schema import Base
 from mason.pairing import PAIRING_CODE_META_KEY, approve_code, generate_code, is_approved
 from mason.session.access import SessionAccess
-from mason.session.keys import is_internal_session
 from mason.session.turn_metadata import TURN_ID_METADATA_KEY
 
 if TYPE_CHECKING:
@@ -643,28 +642,28 @@ class DesktopChannel(BaseChannel):
             )
             return
         limit = _clamp_int(request.body.get("limit"), DEFAULT_LIST_LIMIT, 1, MAX_LIST_LIMIT)
+        cursor = optional_text(request.body.get("cursor"))
         try:
-            rows = manager.list_sessions()
+            page = manager.list_session_page(limit=limit, cursor=cursor)
         except Exception:
             self.logger.exception("desktop: failed to list sessions")
             await connection.send_frame(
                 error_response(request.id, ERROR_INTERNAL, "failed to list sessions")
             )
             return
-        sessions: list[dict[str, Any]] = []
-        for row in rows:
-            key = row.get("key")
-            if not isinstance(key, str) or not key or is_internal_session(key):
-                continue
-            sessions.append(self._session_meta(manager, row, key))
-            if len(sessions) >= limit:
-                break
+        sessions = [
+            self._session_meta(manager, row, row["key"])
+            for row in page.sessions
+        ]
         await connection.send_frame(
-            ok_response(request.id, {"sessions": sessions, "next_cursor": None})
+            ok_response(
+                request.id,
+                {"sessions": sessions, "next_cursor": page.next_cursor},
+            )
         )
 
     def _session_meta(
-        self, manager: SessionManager, row: dict[str, Any], key: str
+        self, manager: SessionManager, row: Mapping[str, Any], key: str
     ) -> dict[str, Any]:
         stored_count = row.get("message_count")
         if isinstance(stored_count, int) and not isinstance(stored_count, bool) and stored_count >= 0:

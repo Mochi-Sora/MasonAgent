@@ -2,7 +2,7 @@
 
 import asyncio
 import signal
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, cast
@@ -212,7 +212,7 @@ def _heartbeat_has_active_tasks(content: str) -> bool:
 def _pick_heartbeat_target_from_sessions(
     *,
     enabled_channels: Iterable[str],
-    sessions: Iterable[dict[str, Any]],
+    sessions: Iterable[Mapping[str, Any]],
     unified_session_metadata: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     enabled = set(enabled_channels)
@@ -718,8 +718,8 @@ def _run_gateway(
     with suppress(OSError):
         (agent.context.memory.memory_dir / ".dream_cursor").unlink(missing_ok=True)
     for legacy_session in agent.sessions.list_sessions():
-        legacy_key = legacy_session.get("key", "")
-        if isinstance(legacy_key, str) and legacy_key.startswith("dream:"):
+        legacy_key = legacy_session["key"]
+        if legacy_key.startswith("dream:"):
             agent.sessions.delete_session(legacy_key)
 
     # Register Heartbeat system job (idempotent on restart)

@@ -28,6 +28,7 @@ from mason.runtime_context import (
     public_history_message,
 )
 from mason.session.history_visibility import HIDDEN_HISTORY_META, is_hidden_history_message
+from mason.session.keys import is_internal_session
 from mason.session.model_selection import SESSION_MODEL_PRESET_METADATA_KEY
 from mason.session.summary import SUMMARY_CONTINUATION_TEXT, is_summary_checkpoint
 from mason.utils.helpers import (
@@ -420,6 +421,14 @@ class SessionInfo(TypedDict):
     preview: str
     path: str
     message_count: int
+
+
+@dataclass(frozen=True)
+class SessionPage:
+    """One page of user-visible sessions, newest first."""
+
+    sessions: list[SessionInfo]
+    next_cursor: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1876,5 +1885,46 @@ class SessionManager:
             session.metadata.update(deepcopy(updates))
         return updated
 
-    def list_sessions(self) -> list[dict[str, Any]]:
-        return cast(list[dict[str, Any]], self._store.list_sessions())
+    def list_sessions(self) -> list[SessionInfo]:
+        return self._store.list_sessions()
+
+    def list_session_page(
+        self,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+        channel: str | None = None,
+    ) -> SessionPage:
+        """List user-visible sessions newest first, with cursor pagination.
+
+        Maintenance sessions (:func:`mason.session.keys.is_internal_session`)
+        never appear.  ``cursor`` is the ``key`` of the last session the caller
+        already received; an unknown or deleted cursor ends the listing.
+        """
+        rows = [
+            row
+            for row in self._store.list_sessions()
+            if not is_internal_session(row["key"])
+            and (
+                channel is None
+                or row["key"] == channel
+                or row["key"].startswith(f"{channel}:")
+            )
+        ]
+        # The store sorts by updated_at alone; the key tiebreak keeps cursor
+        # pages stable when several sessions share a timestamp.
+        rows.sort(key=lambda row: (row["updated_at"], row["key"]), reverse=True)
+        if cursor is not None:
+            index = next(
+                (position for position, row in enumerate(rows) if row["key"] == cursor),
+                None,
+            )
+            rows = [] if index is None else rows[index + 1 :]
+        if limit is None or limit <= 0:
+            return SessionPage(sessions=list(rows), next_cursor=None)
+        if len(rows) > limit:
+            return SessionPage(
+                sessions=list(rows[:limit]),
+                next_cursor=rows[limit - 1]["key"],
+            )
+        return SessionPage(sessions=list(rows), next_cursor=None)

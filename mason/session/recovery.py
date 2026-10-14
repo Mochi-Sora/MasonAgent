@@ -512,9 +512,7 @@ class RecoveryCoordinator:
     def _recovery_candidates(self) -> list[str]:
         """Discover sessions that may need recovery, cheaply."""
         candidates = dict.fromkeys(
-            key
-            for item in self.sessions.list_sessions()
-            if isinstance((key := item.get("key")), str)
+            item["key"] for item in self.sessions.list_sessions()
         )
         return list(candidates)
 

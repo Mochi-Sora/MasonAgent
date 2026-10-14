@@ -7,7 +7,7 @@ from typing import Any, TypedDict, cast
 
 from mason.runtime_context import public_history_message
 from mason.session.history_visibility import is_hidden_history_message
-from mason.session.manager import SessionManager
+from mason.session.manager import SessionInfo, SessionManager
 
 _VISIBLE_ROLES = {"user", "assistant"}
 
@@ -116,13 +116,12 @@ class SessionAccess:
         exclude_session_key: str | None = None,
     ) -> list[SessionMatch]:
         needle = query.casefold()
-        rows: list[dict[str, Any]] = []
+        rows: list[SessionInfo] = []
         for row in self._sessions.list_sessions():
-            key = row.get("key")
-            if isinstance(key, str) and key != exclude_session_key:
+            if row["key"] != exclude_session_key:
                 rows.append(row)
         ranked: list[tuple[int, SessionMatch]] = []
-        remaining: list[dict[str, Any]] = []
+        remaining: list[SessionInfo] = []
         for row in rows:
             title = _row_title(row)
             folded = title.casefold()
@@ -135,11 +134,10 @@ class SessionAccess:
             if rank is None:
                 remaining.append(row)
                 continue
-            updated = row.get("updated_at")
             ranked.append((rank, {
-                "session_key": cast(str, row["key"]),
+                "session_key": row["key"],
                 "title": title,
-                "updated_at": updated if isinstance(updated, str) else None,
+                "updated_at": row["updated_at"],
                 "messages": [],
             }))
 
@@ -148,15 +146,14 @@ class SessionAccess:
         for row in remaining:
             if needed <= 0:
                 break
-            key = cast(str, row["key"])
+            key = row["key"]
             matches = self._messages(key, needle=needle, limit=2)
             if not matches:
                 continue
-            updated = row.get("updated_at")
             ranked.append((3, {
                 "session_key": key,
                 "title": _row_title(row),
-                "updated_at": updated if isinstance(updated, str) else None,
+                "updated_at": row["updated_at"],
                 "messages": matches,
             }))
             needed -= 1
