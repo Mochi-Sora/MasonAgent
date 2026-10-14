@@ -18,10 +18,16 @@ from mason.bus.outbound_events import (
     StreamDeltaEvent,
     StreamedResponseEvent,
     StreamEndEvent,
+    TurnEndEvent,
+    outbound_message_for_event,
 )
 from mason.bus.queue import MessageBus
 from mason.bus.runtime_events import RuntimeEventPublisher
-from mason.channels.capabilities import SESSION_NOTIFICATIONS, channel_supports
+from mason.channels.capabilities import (
+    ORDERED_TURN_END,
+    SESSION_NOTIFICATIONS,
+    channel_supports,
+)
 from mason.channels.notification_routes import notification_metadata
 from mason.events import (
     AgentEvent,
@@ -36,6 +42,7 @@ from mason.session.keys import (
     is_internal_session,
     last_channel_from_metadata,
 )
+from mason.session.turn_metadata import TURN_ID_METADATA_KEY
 from mason.utils.helpers import strip_think
 
 if TYPE_CHECKING:
@@ -342,6 +349,13 @@ class TurnDelivery:
         if response is not None:
             completed_channel = response.channel
             completed_chat_id = response.chat_id
+            if self.turn_id:
+                # The final reply carries the turn id the client already knows
+                # so its message frame can be correlated without channel state.
+                response = dataclasses.replace(
+                    response,
+                    metadata={**response.metadata, TURN_ID_METADATA_KEY: self.turn_id},
+                )
             if (
                 self._response_source is not None
                 and self._response_content is not None
@@ -365,6 +379,12 @@ class TurnDelivery:
             )
         if publish_completion:
             outcome, failure_kind = _turn_outcome(stop_reason)
+            failure_error_kind = self._failure_error_kind or (
+                self._retry_status.error_kind if failure_kind == "model" and self._retry_status else None
+            )
+            failure_attempts = (
+                self._retry_status.attempt if failure_kind == "model" and self._retry_status else None
+            )
             await self.runtime_event_publisher.turn_completed(
                 channel=completed_channel,
                 chat_id=completed_chat_id,
@@ -373,12 +393,18 @@ class TurnDelivery:
                 turn_id=self.turn_id or None,
                 outcome=outcome,
                 failure_kind=failure_kind,
-                failure_error_kind=(self._failure_error_kind or (
-                    self._retry_status.error_kind if failure_kind == "model" and self._retry_status else None
-                )),
-                failure_attempts=(
-                    self._retry_status.attempt if failure_kind == "model" and self._retry_status else None
-                ),
+                failure_error_kind=failure_error_kind,
+                failure_attempts=failure_attempts,
+            )
+            status = {
+                "completed": "completed",
+                "interrupted": "interrupted",
+            }.get(outcome, "error")
+            await self._publish_ordered_turn_end(
+                completed_channel,
+                completed_chat_id,
+                status=status,
+                error=(failure_error_kind or failure_kind) if status == "error" else None,
             )
 
     async def fail(self, *, publish_completion: bool) -> None:
@@ -400,6 +426,12 @@ class TurnDelivery:
                 outcome="failed",
                 failure_kind="internal",
             )
+            await self._publish_ordered_turn_end(
+                self.lifecycle_message.channel,
+                self.lifecycle_message.chat_id,
+                status="error",
+                error="internal",
+            )
 
     async def interrupted(self) -> None:
         """Publish the single terminal signal for a cancelled turn."""
@@ -411,6 +443,35 @@ class TurnDelivery:
             turn_id=self.turn_id or None,
             outcome="interrupted",
         )
+        await self._publish_ordered_turn_end(
+            self.lifecycle_message.channel,
+            self.lifecycle_message.chat_id,
+            status="interrupted",
+            error=None,
+        )
+
+    async def _publish_ordered_turn_end(
+        self,
+        channel: str,
+        chat_id: str,
+        *,
+        status: str,
+        error: str | None,
+    ) -> None:
+        """Deliver the terminal signal behind the turn's messages, when asked.
+
+        Protocols that require ``turn.end`` to arrive after every message of
+        the turn declare the ``ORDERED_TURN_END`` capability; the outbound
+        queue preserves that order against the final response published above,
+        unlike the direct runtime-event path.
+        """
+        if not channel_supports(channel, ORDERED_TURN_END):
+            return
+        await self.bus.publish_outbound(outbound_message_for_event(
+            channel=channel,
+            chat_id=chat_id,
+            event=TurnEndEvent(status=status, turn_id=self.turn_id or None, error=error),
+        ))
 
     async def idle(self) -> None:
         await self.runtime_event_publisher.run_status_changed(

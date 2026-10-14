@@ -20,10 +20,11 @@ from desktop_support import (
 )
 from websockets.exceptions import ConnectionClosed
 
+from mason.bus.events import OutboundMessage
+from mason.bus.outbound_events import TurnEndEvent
 from mason.bus.runtime_events import (
     RuntimeEventContext,
     SessionTurnPersisted,
-    TurnCompleted,
     TurnRunStatusChanged,
 )
 from mason.channels.desktop import runtime as desktop_runtime
@@ -169,36 +170,76 @@ async def test_chat_send_inbound_busy_and_interrupt(tmp_path: Path) -> None:
             assert stop.content == "/stop"
             assert stop.session_key == session_id
 
-            await harness.bus.publish(
-                TurnCompleted(context=_context(session_id), outcome="interrupted")
+            await harness.channel.send(
+                OutboundMessage(
+                    channel="desktop",
+                    chat_id=session_id,
+                    content="",
+                    event=TurnEndEvent(status="interrupted", turn_id=turn_id),
+                )
             )
             end = await next_event(ws, "turn.end")
             assert end["event"]["status"] == "interrupted"
             assert end["event"]["turn_id"] == turn_id
             assert "error" not in end["event"]
 
-            # The idle transition that follows the terminal signal is a
-            # no-op fallback: no duplicate turn.end for the same turn.
+            # The idle transition only releases the session; it never emits a
+            # second frame, and the session accepts the next turn again.
             await harness.bus.publish(
                 TurnRunStatusChanged(context=_context(session_id), status="idle")
             )
             with pytest.raises(asyncio.TimeoutError):
                 await next_frame(ws, timeout=0.2)
 
+            # A completed turn and a failed turn both flow through the same
+            # ordered event.
             again = await _send_chat(ws, "c3", "fresh turn", session_id=session_id)
             assert again["ok"] is True
+            await next_event(ws, "message")
             await asyncio.wait_for(harness.bus.consume_inbound(), 2)
 
-            await harness.bus.publish(
-                TurnCompleted(
-                    context=_context(session_id),
-                    outcome="failed",
-                    failure_kind="internal",
+            await harness.channel.send(
+                OutboundMessage(
+                    channel="desktop",
+                    chat_id=session_id,
+                    content="",
+                    event=TurnEndEvent(status="completed", turn_id=again["result"]["turn_id"]),
+                )
+            )
+            completed = await next_event(ws, "turn.end")
+            assert completed["event"]["status"] == "completed"
+            assert completed["event"]["turn_id"] == again["result"]["turn_id"]
+
+            third = await _send_chat(ws, "c4", "final turn", session_id=session_id)
+            assert third["ok"] is True
+            await next_event(ws, "message")
+            await asyncio.wait_for(harness.bus.consume_inbound(), 2)
+            await harness.channel.send(
+                OutboundMessage(
+                    channel="desktop",
+                    chat_id=session_id,
+                    content="",
+                    event=TurnEndEvent(status="error", error="internal"),
                 )
             )
             failure = await next_event(ws, "turn.end")
             assert failure["event"]["status"] == "error"
             assert failure["event"]["error"] == "internal"
+
+            # A turn that ends with no terminal event is released silently:
+            # no invented turn.end, and the session is free for the next turn.
+            fourth = await _send_chat(ws, "c5", "silent turn", session_id=session_id)
+            assert fourth["ok"] is True
+            await next_event(ws, "message")
+            await asyncio.wait_for(harness.bus.consume_inbound(), 2)
+            await harness.bus.publish(
+                TurnRunStatusChanged(context=_context(session_id), status="idle")
+            )
+            with pytest.raises(asyncio.TimeoutError):
+                await next_frame(ws, timeout=0.2)
+
+            fifth = await _send_chat(ws, "c6", "after silent", session_id=session_id)
+            assert fifth["ok"] is True
         finally:
             await ws.close()
 

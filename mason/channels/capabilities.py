@@ -22,6 +22,11 @@ SESSION_NOTIFICATIONS = "session_notifications"
 #: user's approve/deny decision (see :mod:`mason.agent.tools.approvals`).
 TOOL_APPROVALS = "tool_approvals"
 
+#: Receive the terminal turn signal as an outbound event (``TurnEndEvent``),
+#: ordered behind the turn's own messages on the outbound queue.  Channels
+#: whose protocol requires the turn end to arrive last declare this.
+ORDERED_TURN_END = "ordered_turn_end"
+
 #: Opt-ins for clients that are not managed channel plugins.
 _DEFAULT_DECLARATIONS: dict[str, frozenset[str]] = {
     # The terminal CLI renders session notices itself.

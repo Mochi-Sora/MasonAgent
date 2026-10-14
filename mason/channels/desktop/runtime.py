@@ -18,8 +18,9 @@ Design notes
   last sent into that session.
 * Streaming: 'send_delta' / 'send_reasoning_delta' mirror the channel hooks,
   and the accumulated text is committed as one final 'message' event per
-  segment.  'turn.end' combines the bus-level 'TurnCompleted' runtime event
-  with the idle transition that also fires for cancelled turns.
+  segment.  'turn.end' comes from the ordered 'TurnEndEvent' outbound event,
+  so it always follows the turn's messages; the idle transition only releases
+  the session's busy state and commits pending stream text.
 * Live session lists: 'session.updated' is pushed for the owning connection
   whenever a turn is persisted ('SessionTurnPersisted'), carrying the key,
   title, updated_at, and message_count of the stored session record.
@@ -59,15 +60,14 @@ from websockets.exceptions import ConnectionClosed
 from mason import __version__
 from mason.agent.tools.approvals import pending_tool_approvals, resolve_tool_approval
 from mason.bus.events import OutboundMessage
-from mason.bus.outbound_events import ApprovalRequestEvent, ProgressEvent
+from mason.bus.outbound_events import ApprovalRequestEvent, ProgressEvent, TurnEndEvent
 from mason.bus.queue import MessageBus
 from mason.bus.runtime_events import (
     SessionTurnPersisted,
-    TurnCompleted,
     TurnRunStatusChanged,
 )
 from mason.channels.base import BaseChannel
-from mason.channels.capabilities import TOOL_APPROVALS
+from mason.channels.capabilities import ORDERED_TURN_END, TOOL_APPROVALS
 from mason.channels.desktop.devices import DeviceLedger
 from mason.channels.desktop.protocol import (
     CLOSE_HELLO_TIMEOUT,
@@ -182,7 +182,7 @@ class DesktopChannel(BaseChannel):
 
     name = "desktop"
     display_name = "MasonDesk"
-    capabilities: ClassVar[frozenset[str]] = frozenset({TOOL_APPROVALS})
+    capabilities: ClassVar[frozenset[str]] = frozenset({TOOL_APPROVALS, ORDERED_TURN_END})
 
     @classmethod
     def default_config(cls) -> dict[str, Any]:
@@ -279,7 +279,6 @@ class DesktopChannel(BaseChannel):
                 f"desktop: cannot listen on {host}:{port} ({exc}); change channels.desktop.port"
             ) from exc
         self._unsubscribe = [
-            self.bus.subscribe(self._on_turn_completed, TurnCompleted),
             self.bus.subscribe(self._on_turn_status_changed, TurnRunStatusChanged),
             self.bus.subscribe(self._on_session_turn_persisted, SessionTurnPersisted),
         ]
@@ -906,6 +905,9 @@ class DesktopChannel(BaseChannel):
             if isinstance(event, ApprovalRequestEvent):
                 await self._send_approval(msg.chat_id, event)
                 return
+            if isinstance(event, TurnEndEvent):
+                await self._on_turn_end_event(msg.chat_id, event)
+                return
             self.logger.debug(
                 "desktop: ignoring outbound event {} for {}",
                 type(event).__name__,
@@ -923,7 +925,9 @@ class DesktopChannel(BaseChannel):
                 "message",
                 {
                     "session_id": msg.chat_id,
-                    "turn_id": self._active_turns.get(msg.chat_id),
+                    "turn_id": optional_text(
+                        msg.metadata.get(TURN_ID_METADATA_KEY)
+                    ) or self._active_turns.get(msg.chat_id),
                     "message_id": f"msg-{uuid.uuid4().hex[:12]}",
                     "role": "assistant",
                     "text": msg.content,
@@ -1162,47 +1166,36 @@ class DesktopChannel(BaseChannel):
 
     # -- turn lifecycle ---------------------------------------------------------
 
-    async def _on_turn_completed(self, event: TurnCompleted) -> None:
-        session_key = event.context.session_key
-        turn_id = self._active_turns.pop(session_key, None)
+    async def _on_turn_end_event(self, session_key: str, event: TurnEndEvent) -> None:
+        """Render the ordered terminal signal as one ``turn.end`` frame."""
+        active_turn = self._active_turns.pop(session_key, None)
+        turn_id = event.turn_id or active_turn
         if turn_id is None:
             return
-        status = {
-            "completed": "completed",
-            "interrupted": "interrupted",
-        }.get(event.outcome, "error")
         payload: dict[str, Any] = {
             "session_id": session_key,
             "turn_id": turn_id,
-            "status": status,
+            "status": event.status,
         }
-        if status == "error":
-            detail = event.failure_error_kind or event.failure_kind
-            if detail:
-                payload["error"] = detail
+        if event.status == "error" and event.error:
+            payload["error"] = event.error
         await self._emit_to_session(session_key, "turn.end", payload)
 
     async def _on_turn_status_changed(self, event: TurnRunStatusChanged) -> None:
+        """Clean up a finished run; the ordered terminal event owns turn.end."""
         if event.status != "idle":
             return
         session_key = event.context.session_key
         turn_id = self._active_turns.pop(session_key, None)
         if turn_id is None:
             return
-        # Fallback only: cancelled turns publish their own completed-with-
-        # interrupted signal.  A turn that ends without any completion still
-        # owes the client a turn.end, so commit pending stream text before
-        # announcing the end so the client always sees the partial reply first.
+        # Commit any pending stream text so a late flush still lands before
+        # the ordered turn.end frame, and release the session's busy state.
         state = self._outbound_streams.pop(session_key, None)
         connection = self._session_owners.get(session_key)
         if state is not None and connection is not None:
             with contextlib.suppress(Exception):
                 await self._flush_stream(session_key, state, connection, turn_id=turn_id)
-        await self._emit_to_session(
-            session_key,
-            "turn.end",
-            {"session_id": session_key, "turn_id": turn_id, "status": "interrupted"},
-        )
 
     async def _on_session_turn_persisted(self, event: SessionTurnPersisted) -> None:
         """Push a live session-list update once a turn is durably stored."""

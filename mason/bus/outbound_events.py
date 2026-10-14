@@ -45,6 +45,21 @@ class ApprovalRequestEvent(AgentEvent):
 
 
 @dataclass(frozen=True)
+class TurnEndEvent(AgentEvent):
+    """A turn is over, ordered behind the turn's own outbound messages.
+
+    Runtime channels consume the equivalent ``TurnCompleted`` runtime event;
+    this outbound twin exists for clients whose protocol requires the terminal
+    signal to arrive after every message of the turn (declared via the
+    ``ORDERED_TURN_END`` capability).
+    """
+
+    status: str  # completed | interrupted | error
+    turn_id: str | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class FileEditEvent(ProgressEvent):
     """File activity whose snapshot collection requires an interested consumer."""
 
