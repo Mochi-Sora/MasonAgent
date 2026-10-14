@@ -24,9 +24,11 @@ class FakeSessionManager:
         self,
         sessions: dict[str, dict[str, Any]] | None = None,
         rows: list[dict[str, Any]] | None = None,
+        workspace: Path | None = None,
     ) -> None:
         self.sessions = sessions or {}
         self.rows = rows or []
+        self.workspace = workspace
 
     def list_sessions(self) -> list[dict[str, Any]]:
         return list(self.rows)

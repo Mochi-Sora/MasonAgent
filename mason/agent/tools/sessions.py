@@ -217,7 +217,12 @@ class ReadSessionTool(_SessionTool):
             "updated_at": match["updated_at"],
             "query": query_text or None,
             "messages": [
-                {**message, "content": _excerpt(message["content"], needle, _READ_MESSAGE_CHARS)}
+                {
+                    "message_index": message["message_index"],
+                    "role": message["role"],
+                    "timestamp": message["timestamp"],
+                    "content": _excerpt(message["content"], needle, _READ_MESSAGE_CHARS),
+                }
                 for message in match["messages"]
             ],
         }

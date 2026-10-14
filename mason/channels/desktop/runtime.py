@@ -723,14 +723,31 @@ class DesktopChannel(BaseChannel):
         fallback_ts = epoch_ms(match.get("updated_at"))
         messages: list[dict[str, Any]] = []
         for message in match["messages"]:
-            messages.append(
-                {
-                    "message_id": f"{session_id}:{message['message_index']}",
-                    "role": message["role"],
-                    "text": message["content"],
-                    "ts": epoch_ms(message["timestamp"], fallback_ts),
-                }
-            )
+            payload: dict[str, Any] = {
+                "message_id": f"{session_id}:{message['message_index']}",
+                "role": message["role"],
+                "text": message["content"],
+                "ts": epoch_ms(message["timestamp"], fallback_ts),
+            }
+            if message["reasoning"]:
+                payload["reasoning"] = [
+                    {"text": segment} for segment in message["reasoning"]
+                ]
+            if message["tools"]:
+                payload["tools"] = [
+                    {
+                        "name": tool["name"],
+                        "ok": tool["ok"],
+                        **({"summary": tool["summary"]} if tool["summary"] else {}),
+                    }
+                    for tool in message["tools"]
+                ]
+            if message["file_edits"]:
+                payload["file_edits"] = [
+                    {"path": edit["path"], "ok": edit["ok"]}
+                    for edit in message["file_edits"]
+                ]
+            messages.append(payload)
         await connection.send_frame(
             ok_response(
                 request.id,

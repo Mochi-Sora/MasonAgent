@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from mason.runtime_context import public_history_message
 from mason.session.history_visibility import is_hidden_history_message
 from mason.session.manager import SessionInfo, SessionManager
+from mason.utils.file_edit_events import (
+    display_file_edit_path,
+    is_file_edit_tool,
+    resolve_file_edit_paths,
+)
 
 _VISIBLE_ROLES = {"user", "assistant"}
+#: Framework tool errors reach the model as "Error: ..." payloads.
+_ERROR_PREFIX = "error"
+
+
+class HistoryTool(TypedDict):
+    name: str
+    ok: bool
+    summary: str | None
+
+
+class HistoryFileEdit(TypedDict):
+    path: str
+    ok: bool
 
 
 class SessionMessage(TypedDict):
@@ -17,6 +37,9 @@ class SessionMessage(TypedDict):
     role: str
     timestamp: str | int | None
     content: str
+    reasoning: list[str]
+    tools: list[HistoryTool]
+    file_edits: list[HistoryFileEdit]
 
 
 class SessionMatch(TypedDict):
@@ -43,11 +66,105 @@ def _message_text(message: Mapping[str, Any]) -> str:
     return "\n".join(parts).strip()
 
 
-def _visible_messages(raw_messages: object) -> list[SessionMessage]:
+def _tool_results_by_call(raw_messages: list[object]) -> dict[str, str]:
+    """Index tool results by call id so assistant messages can pair with them."""
+    results: dict[str, str] = {}
+    for raw_message in raw_messages:
+        if not isinstance(raw_message, dict):
+            continue
+        message = cast(dict[str, Any], raw_message)
+        call_id = message.get("tool_call_id")
+        content = message.get("content")
+        if (
+            message.get("role") == "tool"
+            and isinstance(call_id, str)
+            and isinstance(content, str)
+        ):
+            results[call_id] = content
+    return results
+
+
+def _reasoning_segments(message: Mapping[str, Any]) -> list[str]:
+    reasoning = message.get("reasoning_content")
+    if isinstance(reasoning, str) and reasoning.strip():
+        return [reasoning.strip()]
+    blocks = message.get("thinking_blocks")
+    if not isinstance(blocks, list):
+        return []
+    segments: list[str] = []
+    for raw_block in cast(list[object], blocks):
+        if not isinstance(raw_block, dict):
+            continue
+        block = cast(dict[str, Any], raw_block)
+        text = block.get("thinking") or block.get("text") or block.get("content")
+        if isinstance(text, str) and text.strip():
+            segments.append(text.strip())
+    return segments
+
+
+def _tool_call_arguments(raw_arguments: object) -> dict[str, Any] | None:
+    if isinstance(raw_arguments, dict):
+        return cast(dict[str, Any], raw_arguments)
+    if not isinstance(raw_arguments, str) or not raw_arguments.strip():
+        return None
+    try:
+        parsed: object = json.loads(raw_arguments)
+    except (TypeError, ValueError):
+        return None
+    return cast(dict[str, Any], parsed) if isinstance(parsed, dict) else None
+
+
+def _tool_activity(
+    message: Mapping[str, Any],
+    tool_results: Mapping[str, str],
+    workspace: Path | None,
+) -> tuple[list[HistoryTool], list[HistoryFileEdit]]:
+    """Pair an assistant message's tool calls with their persisted results."""
+    raw_calls = message.get("tool_calls")
+    if not isinstance(raw_calls, list):
+        return [], []
+    tools: list[HistoryTool] = []
+    file_edits: list[HistoryFileEdit] = []
+    for raw_call in cast(list[object], raw_calls):
+        if not isinstance(raw_call, dict):
+            continue
+        call = cast(dict[str, Any], raw_call)
+        function = call.get("function")
+        if not isinstance(function, dict):
+            continue
+        function_data = cast(dict[str, Any], function)
+        name = function_data.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        call_id = call.get("id")
+        result = tool_results.get(call_id) if isinstance(call_id, str) else None
+        ok = result is None or not result.lstrip().lower().startswith(_ERROR_PREFIX)
+        summary: str | None = None
+        if not ok and result:
+            summary = result.replace("\n", " ").strip()[:120]
+        else:
+            parameters = _tool_call_arguments(function_data.get("arguments"))
+            if is_file_edit_tool(name) and parameters is not None:
+                for path in resolve_file_edit_paths(name, None, workspace, parameters):
+                    file_edits.append({
+                        "path": display_file_edit_path(path, workspace),
+                        "ok": True,
+                    })
+        tools.append({"name": name, "ok": ok, "summary": summary})
+    return tools, file_edits
+
+
+def _visible_messages(
+    raw_messages: object,
+    *,
+    workspace: Path | None = None,
+) -> list[SessionMessage]:
     if not isinstance(raw_messages, list):
         return []
+    typed_messages = cast(list[object], raw_messages)
+    tool_results = _tool_results_by_call(typed_messages)
     visible: list[SessionMessage] = []
-    for index, raw_message in enumerate(cast(list[object], raw_messages)):
+    for index, raw_message in enumerate(typed_messages):
         if not isinstance(raw_message, dict):
             continue
         message = cast(dict[str, Any], raw_message)
@@ -56,7 +173,9 @@ def _visible_messages(raw_messages: object) -> list[SessionMessage]:
             continue
         public = public_history_message(message)
         text = _message_text(public)
-        if not text:
+        reasoning = _reasoning_segments(public)
+        tools, file_edits = _tool_activity(public, tool_results, workspace)
+        if not text and not tools and not file_edits:
             continue
         timestamp = public.get("createdAt", public.get("timestamp"))
         visible.append({
@@ -64,6 +183,9 @@ def _visible_messages(raw_messages: object) -> list[SessionMessage]:
             "role": cast(str, role),
             "timestamp": timestamp if isinstance(timestamp, (str, int)) else None,
             "content": text,
+            "reasoning": reasoning,
+            "tools": tools,
+            "file_edits": file_edits,
         })
     return visible
 
@@ -86,6 +208,7 @@ class SessionAccess:
 
     def __init__(self, sessions: SessionManager) -> None:
         self._sessions = sessions
+        self._workspace = cast("Path | None", getattr(sessions, "workspace", None))
 
     def _metadata(
         self,
@@ -101,7 +224,7 @@ class SessionAccess:
         """Return the newest visible messages, oldest first, with absolute indexes."""
         payload = self._sessions.read_session_file(session_key)
         raw_messages = payload.get("messages") if payload is not None else None
-        visible = _visible_messages(raw_messages)
+        visible = _visible_messages(raw_messages, workspace=self._workspace)
         if needle:
             visible = [
                 message for message in visible if needle in message["content"].casefold()

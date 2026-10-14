@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -207,7 +208,31 @@ def _session_payload() -> dict[str, Any]:
                 "_command": True,
                 "timestamp": "2026-10-13T10:00:02",
             },
-            {"role": "assistant", "content": "Hello!", "timestamp": "2026-10-13T10:00:05"},
+            {
+                "role": "assistant",
+                "content": "Hello!",
+                "timestamp": "2026-10-13T10:00:05",
+                "reasoning_content": "Say hello back.",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "write_file",
+                            "arguments": json.dumps(
+                                {"path": "greeting.txt", "content": "Hello!"}
+                            ),
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "name": "write_file",
+                "content": "Wrote greeting.txt",
+                "timestamp": "2026-10-13T10:00:06",
+            },
         ],
     }
 
@@ -258,6 +283,7 @@ async def test_query_frames_with_services(tmp_path: Path) -> None:
                 session_manager=FakeSessionManager(
                     sessions={"desktop:abc": _session_payload()},
                     rows=_session_rows(),
+                    workspace=tmp_path,
                 ),
                 memory_stats=lambda: {"enabled": True, "memories": 3},
                 cron_service=make_cron_service([job]),
@@ -279,6 +305,12 @@ async def test_query_frames_with_services(tmp_path: Path) -> None:
             assert messages[0]["message_id"] == "desktop:abc:0"
             assert messages[1]["message_id"] == "desktop:abc:2"
             assert messages[1]["role"] == "assistant"
+            assert messages[1]["reasoning"] == [{"text": "Say hello back."}]
+            assert messages[1]["tools"] == [
+                {"name": "write_file", "ok": True},
+            ]
+            assert messages[1]["file_edits"] == [{"path": "greeting.txt", "ok": True}]
+            assert "reasoning" not in messages[0]
 
             memory = await request(ws, "q3", "memory.stats")
             assert memory["result"] == {"enabled": True, "memories": 3}
