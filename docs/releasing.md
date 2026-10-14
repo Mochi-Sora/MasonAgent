@@ -49,8 +49,7 @@ and any remaining release gates. Rebuild and recheck if the packaged source chan
    PyPI publication workflow.
 4. Verify installation from PyPI in a clean environment, including `mason onboard` and one
    real `mason agent -m "Hello!"` reply.
-5. Publish the release announcement and add the dated entry to
-   [Release Archive](./release-archive.md). Complete any coordinated advisory publication and
+5. Publish the release announcement. Complete any coordinated advisory publication and
    reporter notification. Record links and completion status in the release tracking issue.
 
 ## If a gate fails

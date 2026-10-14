@@ -52,7 +52,6 @@ For shorter, outcome-focused walkthroughs, browse the [task guide index](./guide
 | Config, workspace, gateway, sessions, tools, and memory in plain language | [Concepts](./concepts.md) |
 | Provider/model matching and selection | [Providers and Models](./providers.md) |
 | Setup and runtime diagnosis | [Troubleshooting](./troubleshooting.md) |
-| Older development highlights | [Release Archive](./release-archive.md) |
 
 ## Reference
 
