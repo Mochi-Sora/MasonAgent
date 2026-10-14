@@ -132,10 +132,10 @@ curl -fsSL https://raw.githubusercontent.com/Mochi-Sora/MasonAgent/main/scripts/
 # or from a checkout:
 ./scripts/install.sh
 # or, manually:
-# uv sync --all-extras && uv run mason onboard
-# pip install -e . && mason onboard
+# uv sync --all-extras && uv run mason onboard --wizard
+# pip install -e . && mason onboard --wizard
 
-mason onboard            # interactive setup: provider, credentials, model
+mason onboard --wizard   # interactive setup: provider, credentials, model
 mason agent -m "hello"   # one-shot
 mason agent              # interactive terminal session
 mason gateway            # long-running service: channels, cron jobs, heartbeat
@@ -186,7 +186,6 @@ under AGPL-3.0-or-later — see
 ## Maintainer notes
 
 Mason installs from a local checkout: `scripts/install.sh` and `scripts/install.ps1` install
-the repository they run from in editable mode (`--git` clones a remote first). Once this
-project has a public repository, package, and docs URL of its own, a short checklist of the
-files that still point at upstream nanobot — and the tests that assert them — is in
-[`CONTRIBUTING.md` § Publishing This Fork](./CONTRIBUTING.md#publishing-this-fork).
+the repository they run from in editable mode (`--git` clones a remote first). A short checklist
+of the files that still point at upstream nanobot — and the tests that assert them — is in
+[`CONTRIBUTING.md` § Fork Maintenance](./CONTRIBUTING.md#fork-maintenance).

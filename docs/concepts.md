@@ -67,7 +67,7 @@ Most examples are partial snippets. Merge them into the existing file created by
 A normal turn follows this flow:
 
 1. A channel receives a user message and publishes it to the message bus.
-2. The agent loop chooses a session key and builds context from the effective project workspace, agent-owned profile/skills/memory, recent messages, channel metadata, and runtime settings.
+2. The agent loop chooses a session key and builds context from the system prompt (identity files and the working state), agent-owned skills and memory, channel metadata, and runtime settings. Stored conversation history is only replayed to the model when `sessionReplay` enables it.
 3. The provider receives the model request.
 4. If the model asks for tools, the runner executes them and feeds results back to the model.
 5. The final reply is saved to the session and sent back through the channel.
@@ -79,7 +79,7 @@ That flow is the same whether the message starts in the CLI, Telegram, Discord, 
 | Entry point | Command | Use it for |
 |---|---|---|
 | CLI one-shot | `mason agent -m "..."` | First-run checks, scripts, and quick local questions |
-| CLI interactive | `mason agent` | Terminal chat with persistent session history |
+| CLI interactive | `mason agent` | Terminal chat; stored history replays only when `sessionReplay` is enabled |
 | Gateway | `mason gateway` | Chat apps, heartbeat, memory consolidation, and long-running service mode |
 | OpenAI-compatible API | `mason serve` | Programmatic access through `/v1/chat/completions` |
 
@@ -125,7 +125,7 @@ mason separates short-term replay from longer-lived memory:
 
 | Store | Location | Purpose |
 |---|---|---|
-| Sessions | `<config-dir>/sessions/<workspace-id>/*.jsonl` | Recent conversation turns replayed into context |
+| Sessions | `<config-dir>/sessions/<workspace-id>/*.jsonl` | Conversation transcripts; replayed to the model only when `sessionReplay` is `tail` or `full` |
 | Working state | `<workspace>/memory/state.md` | Compact scratchpad (about 2 KB) kept in the system prompt and rewritten with `update_state` |
 | Long-term memory | `<workspace>/memory/memory.db` | Curated facts, preferences, and decisions, searched with `recall_memory` |
 | Backup | `<workspace>/memory/memory.db` | Today's turns captured verbatim, searched with `recall_backup`; discarded at the daily rollover |

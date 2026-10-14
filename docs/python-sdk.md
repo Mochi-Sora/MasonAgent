@@ -101,8 +101,8 @@ print(result.stop_reason) # why the run stopped
 
 ### Continue A Conversation
 
-Use a `session_key` when you want history to carry across turns. Different
-session keys are isolated from each other:
+Use a `session_key` to route several runs into one persistent session; different
+session keys stay isolated from each other:
 
 ```python
 await bot.run("My name is Alice.", session_key="user:alice")
@@ -113,6 +113,12 @@ print(result.content)
 
 This is the SDK equivalent of giving each user, task, eval case, or workflow
 its own conversation thread.
+
+Mason is state-first by default: the session stores every turn, but the raw
+transcript is not replayed to the model unless you enable it. Set
+`agents.defaults.sessionReplay` to `"tail"` or `"full"` in the config the SDK
+loads when the embedded agent should literally re-read recent turns; with the
+default `"none"`, continuity comes from the working state and memory instead.
 
 ### Stream A Long Answer
 
@@ -301,7 +307,7 @@ provider and model work with `mason agent -m "Hello!"` first.
 
 ### Isolate conversations with `session_key`
 
-Different session keys keep independent conversation history:
+Different session keys keep separate sessions — stored transcripts, compaction state, and saved model selection do not leak across keys:
 
 ```python
 await bot.run("hi", session_key="user-alice")
@@ -399,6 +405,11 @@ This is useful for evals, benchmark runners, migrations, and tests.
 Use `bot.sessions.ingest()` when you already have a transcript and want it to
 become mason session history. Ingesting a transcript does not call the model,
 execute tools, update memory, or compact automatically.
+
+Replay rules still apply: the model sees ingested messages only when
+`agents.defaults.sessionReplay` is enabled (`"full"` replays everything since
+the archive boundary), so eval-style flows usually set that in the config the
+SDK loads.
 
 ```python
 await bot.sessions.ingest(
@@ -553,7 +564,7 @@ mutating the instance default. Runs sharing one session key remain serialized.
 | `arguments` | `dict \| None` | Tool arguments when available. |
 | `iteration` | `int \| None` | Agent loop iteration when available. |
 | `resuming` | `bool \| None` | Whether a text segment ended before more tool work. |
-| `usage` | `dict[str, int]` | Token usage on completion events. |
+| `usage` | `LLMUsage \| None` | Token usage on completion events. |
 | `error` | `str \| None` | Error text on failed events. |
 | `metadata` | `dict` | Additional event metadata. |
 
@@ -590,7 +601,7 @@ async with Mason.from_config() as bot:
 | `content` | `str` | The agent's final text response. |
 | `tools_used` | `list[str]` | Tool names used during the run. |
 | `messages` | `list[dict]` | Final message list from the run. |
-| `usage` | `dict[str, int]` | Token usage reported or estimated by the runtime. |
+| `usage` | `LLMUsage \| None` | Token usage reported or estimated by the runtime; import `LLMUsage` from `mason`. |
 | `stop_reason` | `str \| None` | Why the run stopped, such as `"completed"` or `"max_iterations"`. |
 | `error` | `str \| None` | Error text when the run failed inside the agent runtime. |
 | `metadata` | `dict` | Outbound metadata such as latency. |
@@ -640,8 +651,8 @@ through the `recall_memory` and `recall_backup` tools.
 | `workspace` | Current runtime workspace path. |
 | `add_context_provider(provider)` | Register an async per-turn context provider and return an unsubscribe callback. |
 | `on_session_turn_persisted(handler)` | Register a best-effort sync or async callback for locally persisted turns and return an unsubscribe callback. |
-| `await compact_session(session_key)` | Run token-based consolidation for a session. |
-| `await compact_idle_session(session_key, max_suffix=8)` | Run idle-session compaction and return its summary. |
+| `await compact_session(session_key)` | Summarize one session and exclude its archived messages from replay; returns the updated snapshot. |
+| `await compact_idle_session(session_key, max_suffix=0)` | Return a replacement summary for an idle session; `max_suffix` is legacy and no longer retains history. |
 
 ### Host integration context and persisted-turn callbacks
 

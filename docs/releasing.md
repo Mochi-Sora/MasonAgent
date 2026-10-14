@@ -44,7 +44,7 @@ and any remaining release gates. Rebuild and recheck if the packaged source chan
 1. Confirm all pre-tag gates above are complete. Create and push exactly `vX.Y.Z`; do not move
    or reuse a published version tag.
 2. Create the matching GitHub Release. A draft may be used while assembling its attachments.
-3. Upload the checked `mason_ai-X.Y.Z.tar.gz` and `mason_ai-X.Y.Z-py3-none-any.whl` to PyPI.
+3. Upload the checked `mason-X.Y.Z.tar.gz` and `mason-X.Y.Z-py3-none-any.whl` to PyPI.
    Do not upload stale files from a shared `dist/` directory. This repository has no automatic
    PyPI publication workflow.
 4. Verify installation from PyPI in a clean environment, including `mason onboard` and one

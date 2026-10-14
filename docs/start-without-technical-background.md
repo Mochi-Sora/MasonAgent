@@ -131,7 +131,7 @@ Do not configure every feature immediately. Choose one next goal:
 | Add a provider credential | Run `mason onboard --wizard`, or edit the provider block in `~/.mason/config.json` |
 | Connect Telegram, Discord, Slack, Feishu, WeChat, or another chat app | Run `mason onboard --wizard`, choose the channel, then start `mason gateway` |
 | Add a tool integration | Edit `~/.mason/config.json`, then restart the gateway |
-| Schedule a reminder or recurring task | Ask mason in a chat; manage jobs with `/cron` or the `cron` tool |
+| Schedule a reminder or recurring task | Ask mason in a chat; jobs are managed with the `cron` tool |
 | Work with project files | Set the workspace with `--workspace` or `agents.defaults.workspace`, then ask in a chat |
 
 For a chat platform's account, bot, token, or permission prerequisites, use the [Chat Apps guide](./chat-apps.md). For local models and provider-specific recipes, use the [Provider Cookbook](./provider-cookbook.md).

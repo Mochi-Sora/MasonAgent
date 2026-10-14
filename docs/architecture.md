@@ -186,7 +186,7 @@ Security-sensitive code paths include:
 | Shell sandboxing | `mason/agent/tools/shell.py` |
 | SSRF/network checks | `mason/security/network.py`, `mason/agent/tools/web.py` |
 | PTH guard and CLI startup security | `mason/security/` and CLI entrypoints |
-| Channel access control | channel config in `mason/channels/*.py` |
+| Channel access control | channel config in the `mason/channels/<channel>/` packages |
 
 When changing tools, channels, file access, workspace behavior, or network fetching, treat security as part of the functional behavior and update docs if the user-facing boundary changes.
 

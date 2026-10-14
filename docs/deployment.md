@@ -62,7 +62,7 @@ If deployment fails, open the service **Logs** page first. A missing model key f
 > If you get **Permission denied**, fix ownership on the host first: `sudo chown -R 1000:1000 ~/.mason`, or pass `--user $(id -u):$(id -g)` to match your host UID. Podman users can use `--userns=keep-id` instead.
 >
 > [!IMPORTANT]
-> Official Docker usage currently means building from this repository with the included `Dockerfile`. Docker Hub images under third-party namespaces are not maintained or verified by HKUDS/nanobot; do not mount API keys or bot tokens into them unless you trust the publisher.
+> Official Docker usage currently means building from this repository with the included `Dockerfile`. Docker Hub images under third-party namespaces are not maintained or verified by the mason project; do not mount API keys or bot tokens into them unless you trust the publisher.
 
 > [!IMPORTANT]
 > The gateway defaults to `host: "127.0.0.1"` in `config.json` (set in `mason/config/schema.py`). Docker `-p` port forwarding cannot reach a container's loopback interface, so for the host or LAN to reach the health endpoint you must set the bind to `0.0.0.0` in `~/.mason/config.json` before starting the container:

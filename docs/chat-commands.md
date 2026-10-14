@@ -9,9 +9,12 @@ These commands work inside chat channels and interactive agent sessions:
 | `/stop` | Stop the current task |
 | `/restart` | Restart the bot |
 | `/status` | Show bot status |
+| `/history [n]` | Show the last N persisted conversation messages (default `10`, max `50`) |
 | `/model` | Show the current model and available model presets |
 | `/model <preset>` | Switch and persist the model preset for the current session |
 | `/skill` | List enabled skills and their descriptions |
+| `/goal <goal>` | Treat the request as a long-running goal |
+| `/evaluator-prompt [init]` | Customize the heartbeat notification-gate prompt for this workspace |
 | `/trigger` | Show local trigger usage |
 | `/trigger <name>` | Create a named local trigger for the current chat/session |
 | `/pairing` | List pending pairing requests |

@@ -64,7 +64,7 @@ First-run setup creates or updates:
 If the installer did not run the wizard, start it with:
 
 ```bash
-mason onboard
+mason onboard --wizard
 ```
 
 SSH, headless, existing-config, and older-release installs retain the terminal setup path:
@@ -149,14 +149,14 @@ Use one method, then continue at [Configure Your Model](#2-configure-your-model)
 
 ```bash
 uv tool install --editable <checkout>
-mason onboard
+mason onboard --wizard
 ```
 
 **pipx**
 
 ```bash
 pipx install --editable <checkout>
-mason onboard
+mason onboard --wizard
 ```
 
 **pip in a virtual environment**
@@ -165,7 +165,7 @@ mason onboard
 python -m venv .venv
 source .venv/bin/activate     # Windows: .venv\Scripts\Activate.ps1
 python -m pip install --editable <checkout>
-mason onboard
+mason onboard --wizard
 ```
 
 If pip reports `externally-managed-environment`, use the installer, `uv`, `pipx`, or a virtual environment. Do not force a system-wide install.
