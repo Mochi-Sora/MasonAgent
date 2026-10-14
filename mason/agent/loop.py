@@ -372,6 +372,13 @@ class AgentLoop:
         self.tools_config = _tc
         self.web_config = _tc.web
         self.exec_config = _tc.exec
+        approval = _tc.approval
+        self._approval_required: frozenset[str] = (
+            frozenset(name for name in approval.require if name)
+            if approval.enabled
+            else frozenset()
+        )
+        self._approval_timeout_s = approval.timeout_s
         self._image_generation_provider_configs = dict(image_generation_provider_configs or {})
         if (
             image_generation_provider_config is not None
@@ -1281,6 +1288,8 @@ class AgentLoop:
                 ephemeral=ephemeral,
                 run_extra_hooks_for_ephemeral=run_extra_hooks_for_ephemeral,
                 log_content=request_ctx.log_content,
+                approval_required=self._approval_required,
+                approval_timeout_s=self._approval_timeout_s,
             ))
             result = await self.runner.run(AgentRunSpec(
                 initial_messages=None,

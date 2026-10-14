@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from mason.bus.events import InboundMessage, OutboundMessage
 from mason.bus.notification_delivery import notification_is_deliverable
 from mason.bus.outbound_events import (
+    ApprovalRequestEvent,
     ProgressEvent,
     RetryStatusEvent,
     StreamDeltaEvent,
@@ -463,7 +464,7 @@ class TurnDelivery:
                     metadata=metadata,
                 )
         elif self._routed_events.publish is not None:
-            if isinstance(event, ProgressEvent) and self.turn_id:
+            if isinstance(event, ProgressEvent | ApprovalRequestEvent) and self.turn_id:
                 event = dataclasses.replace(event, turn_id=self.turn_id)
             await self._routed_events.publish(event)
         if isinstance(event, StreamDeltaEvent):

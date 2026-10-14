@@ -18,6 +18,10 @@ INTERACTIVE_NOTIFICATIONS = "interactive_notifications"
 #: addressed by the session key when the session has no saved delivery route.
 SESSION_NOTIFICATIONS = "session_notifications"
 
+#: Answer tool-approval requests: render the approval prompt and deliver the
+#: user's approve/deny decision (see :mod:`mason.agent.tools.approvals`).
+TOOL_APPROVALS = "tool_approvals"
+
 #: Opt-ins for clients that are not managed channel plugins.
 _DEFAULT_DECLARATIONS: dict[str, frozenset[str]] = {
     # The terminal CLI renders session notices itself.

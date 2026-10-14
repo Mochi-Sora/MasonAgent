@@ -29,8 +29,9 @@ Design notes
 * Query frames (sessions.list/history, memory.stats, cron.list) use read-only
   services attached by the channel manager ('attach_services'); they are
   optional so a standalone channel still serves chat.
-* 'approve' / 'deny' answer 'no_approval' for now: the framework has no tool
-  approval flow to resolve, so no 'approval' event is ever emitted.
+* Tool approvals: an 'approval' event carries the pending call (tool, summary,
+  args preview, deadline); 'approve' / 'deny' requests resolve it through the
+  framework broker.  Unknown or expired ids answer 'no_approval'.
 * Retry / recovery / response-source notices are 'interactive' notifications
   (a channel capability, see mason.channels.capabilities); protocol v1 has no
   frames for them yet, so this channel does not declare the capability.
@@ -49,15 +50,16 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from ipaddress import ip_address
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from pydantic import Field
 from websockets.asyncio.server import serve as ws_serve
 from websockets.exceptions import ConnectionClosed
 
 from mason import __version__
+from mason.agent.tools.approvals import pending_tool_approvals, resolve_tool_approval
 from mason.bus.events import OutboundMessage
-from mason.bus.outbound_events import ProgressEvent
+from mason.bus.outbound_events import ApprovalRequestEvent, ProgressEvent
 from mason.bus.queue import MessageBus
 from mason.bus.runtime_events import (
     SessionTurnPersisted,
@@ -65,6 +67,7 @@ from mason.bus.runtime_events import (
     TurnRunStatusChanged,
 )
 from mason.channels.base import BaseChannel
+from mason.channels.capabilities import TOOL_APPROVALS
 from mason.channels.desktop.devices import DeviceLedger
 from mason.channels.desktop.protocol import (
     CLOSE_HELLO_TIMEOUT,
@@ -180,6 +183,7 @@ class DesktopChannel(BaseChannel):
 
     name = "desktop"
     display_name = "MasonDesk"
+    capabilities: ClassVar[frozenset[str]] = frozenset({TOOL_APPROVALS})
 
     @classmethod
     def default_config(cls) -> dict[str, Any]:
@@ -204,6 +208,7 @@ class DesktopChannel(BaseChannel):
         self._session_owners: dict[str, _Connection] = {}
         self._active_turns: dict[str, str] = {}
         self._outbound_streams: dict[str, _StreamState] = {}
+        self._pending_approvals: dict[str, str] = {}
         self._unsubscribe: list[Callable[[], None]] = []
         self._handlers: dict[str, RequestHandler] = {
             "hello": self._handle_hello,
@@ -310,6 +315,7 @@ class DesktopChannel(BaseChannel):
         self._session_owners.clear()
         self._active_turns.clear()
         self._outbound_streams.clear()
+        self._pending_approvals.clear()
 
     # -- connection handling ------------------------------------------------
 
@@ -771,20 +777,90 @@ class DesktopChannel(BaseChannel):
             ok_response(request.id, {"jobs": [_cron_job(job) for job in jobs]})
         )
 
+    # -- tool approvals --------------------------------------------------------
+
+    async def _send_approval(self, session_key: str, event: ApprovalRequestEvent) -> None:
+        """Ask the session owner to approve or deny a pending tool call."""
+        connection = self._session_owners.get(session_key)
+        if connection is None:
+            self.logger.debug(
+                "desktop: no client owns session {}; dropping approval {}",
+                session_key,
+                event.approval_id,
+            )
+            return
+        self._prune_approvals()
+        self._pending_approvals[event.approval_id] = session_key
+        payload: dict[str, Any] = {
+            "session_id": session_key,
+            "turn_id": event.turn_id or self._active_turns.get(session_key),
+            "approval_id": event.approval_id,
+            "tool": event.tool,
+            "summary": event.summary,
+        }
+        if event.args_preview:
+            payload["args_preview"] = event.args_preview
+        if event.deadline is not None:
+            payload["deadline"] = epoch_ms(event.deadline)
+        await connection.send_frame(event_frame("approval", payload))
+
+    def _prune_approvals(self) -> None:
+        if not self._pending_approvals:
+            return
+        live = pending_tool_approvals()
+        self._pending_approvals = {
+            approval_id: session_key
+            for approval_id, session_key in self._pending_approvals.items()
+            if approval_id in live
+        }
+
     async def _handle_approve(self, connection: _Connection, request: RequestFrame) -> None:
-        await self._unknown_approval(connection, request)
+        await self._resolve_approval(connection, request, approved=True)
 
     async def _handle_deny(self, connection: _Connection, request: RequestFrame) -> None:
-        await self._unknown_approval(connection, request)
+        await self._resolve_approval(connection, request, approved=False)
 
-    async def _unknown_approval(self, connection: _Connection, request: RequestFrame) -> None:
-        approval_id = optional_text(request.body.get("approval_id")) or "?"
-        await connection.send_frame(
-            error_response(
-                request.id,
-                ERROR_NO_APPROVAL,
-                f"unknown approval {approval_id}: this gateway has no pending approvals",
+    async def _resolve_approval(
+        self,
+        connection: _Connection,
+        request: RequestFrame,
+        *,
+        approved: bool,
+    ) -> None:
+        token = connection.device_token
+        if token is None or not is_approved(self.name, token):
+            await connection.send_frame(
+                error_response(request.id, ERROR_UNAUTHORIZED, "device token is not approved")
             )
+            return
+        approval_id = optional_text(request.body.get("approval_id"))
+        session_key = (
+            self._pending_approvals.pop(approval_id, None) if approval_id else None
+        )
+        if (
+            approval_id is None
+            or session_key is None
+            or self._session_owners.get(session_key) is not connection
+        ):
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_NO_APPROVAL,
+                    f"unknown approval {approval_id or '?'}",
+                )
+            )
+            return
+        if not resolve_tool_approval(approval_id, approved=approved):
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_NO_APPROVAL,
+                    f"approval {approval_id} is no longer pending",
+                )
+            )
+            return
+        await connection.send_frame(
+            ok_response(request.id, {"approval_id": approval_id, "approved": approved})
         )
 
     # -- outbound hooks --------------------------------------------------------
@@ -811,6 +887,9 @@ class DesktopChannel(BaseChannel):
                 )
             return
         if event is not None:
+            if isinstance(event, ApprovalRequestEvent):
+                await self._send_approval(msg.chat_id, event)
+                return
             self.logger.debug(
                 "desktop: ignoring outbound event {} for {}",
                 type(event).__name__,

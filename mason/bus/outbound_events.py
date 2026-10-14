@@ -33,6 +33,18 @@ class ProgressEvent(AgentEvent):
 
 
 @dataclass(frozen=True)
+class ApprovalRequestEvent(AgentEvent):
+    """A tool call is suspended until a human decides approve or deny."""
+
+    approval_id: str
+    tool: str
+    summary: str = ""
+    args_preview: str | None = None
+    deadline: float | None = None  # Epoch seconds; an unanswered request denies
+    turn_id: str | None = None
+
+
+@dataclass(frozen=True)
 class FileEditEvent(ProgressEvent):
     """File activity whose snapshot collection requires an interested consumer."""
 

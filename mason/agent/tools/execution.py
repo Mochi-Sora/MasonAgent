@@ -11,6 +11,7 @@ from typing import Any, cast
 from loguru import logger
 
 from mason.agent.hook import AgentHook, AgentHookContext
+from mason.agent.tools.approvals import ToolApprovalDeniedError
 from mason.agent.tools.context import tool_log_content_allowed
 from mason.agent.tools.file_state import file_read_context
 from mason.agent.tools.registry import ToolRegistry, is_tool_error_result
@@ -163,7 +164,17 @@ async def _execute_tool_call(
             return handled
         return payload, event
 
-    await hook.before_execute_tool(context, tool_call, tool, params)
+    try:
+        await hook.before_execute_tool(context, tool_call, tool, params)
+    except ToolApprovalDeniedError as denial:
+        # An approval gate refused this call; report it to the model as a
+        # recoverable tool error instead of aborting the turn.
+        event = {
+            "name": tool_call.name,
+            "status": "error",
+            "detail": str(denial)[:120],
+        }
+        return _with_retry_hint(f"Error: {denial}"), event
     try:
         with (
             file_read_context(tool_call.id, read_results)

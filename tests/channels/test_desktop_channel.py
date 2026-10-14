@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -262,6 +263,77 @@ async def test_persisted_turn_pushes_session_updated_to_the_owner(tmp_path: Path
             )
             with pytest.raises(asyncio.TimeoutError):
                 await next_frame(ws, timeout=0.2)
+        finally:
+            await ws.close()
+
+
+async def test_tool_approval_round_trip(tmp_path: Path) -> None:
+    from mason.agent.tools.approvals import BROKER
+    from mason.bus.events import OutboundMessage
+    from mason.bus.outbound_events import ApprovalRequestEvent
+
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        ws = await connect_client(harness.url)
+        try:
+            await hello(ws)
+            first = await _send_chat(ws, "c1", "deploy it")
+            session_id = first["result"]["session_id"]
+            turn_id = first["result"]["turn_id"]
+            await next_event(ws, "message")
+            await asyncio.wait_for(harness.bus.consume_inbound(), 2)
+
+            approve_id = BROKER.request()
+            approve_waiter = asyncio.create_task(BROKER.wait(approve_id, timeout_s=5))
+            await harness.channel.send(
+                OutboundMessage(
+                    channel="desktop",
+                    chat_id=session_id,
+                    content="",
+                    event=ApprovalRequestEvent(
+                        approval_id=approve_id,
+                        tool="exec",
+                        summary="exec: rm -rf build/",
+                        args_preview='{"command": "rm -rf build/"}',
+                        deadline=time.time() + 60,
+                    ),
+                )
+            )
+            frame = await next_event(ws, "approval")
+            event = frame["event"]
+            assert event["session_id"] == session_id
+            assert event["turn_id"] == turn_id
+            assert event["approval_id"] == approve_id
+            assert event["tool"] == "exec"
+            assert event["summary"] == "exec: rm -rf build/"
+            assert event["args_preview"] == '{"command": "rm -rf build/"}'
+            assert event["deadline"] > 0
+
+            approved = await request(ws, "a1", "approve", approval_id=approve_id)
+            assert approved["ok"] is True
+            assert approved["result"] == {"approval_id": approve_id, "approved": True}
+            assert await asyncio.wait_for(approve_waiter, 5) is True
+
+            deny_id = BROKER.request()
+            deny_waiter = asyncio.create_task(BROKER.wait(deny_id, timeout_s=5))
+            await harness.channel.send(
+                OutboundMessage(
+                    channel="desktop",
+                    chat_id=session_id,
+                    content="",
+                    event=ApprovalRequestEvent(approval_id=deny_id, tool="exec", summary="exec"),
+                )
+            )
+            await next_event(ws, "approval")
+            denied = await request(ws, "d1", "deny", approval_id=deny_id)
+            assert denied["ok"] is True
+            assert denied["result"] == {"approval_id": deny_id, "approved": False}
+            assert await asyncio.wait_for(deny_waiter, 5) is False
+
+            # Unknown and already-resolved ids answer no_approval.
+            missing = await request(ws, "a2", "approve", approval_id="approval-nope")
+            assert missing["error"]["code"] == "no_approval"
+            again = await request(ws, "a3", "approve", approval_id=approve_id)
+            assert again["error"]["code"] == "no_approval"
         finally:
             await ws.close()
 

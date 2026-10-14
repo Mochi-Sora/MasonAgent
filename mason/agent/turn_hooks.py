@@ -14,6 +14,7 @@ from mason.agent.hook import (
     AgentTurnHookFactory,
     CompositeHook,
 )
+from mason.agent.hooks.tool_approval import ToolApprovalHook
 from mason.agent.progress_hook import AgentProgressHook
 from mason.events import NO_EVENTS, EventSink
 
@@ -39,6 +40,9 @@ class AgentTurnHookSpec:
     run_extra_hooks_for_ephemeral: bool = False
     attributes: dict[str, Any] | None = None
     log_content: bool = True
+    #: Tool names that suspend on a human approval before executing.
+    approval_required: frozenset[str] = frozenset()
+    approval_timeout_s: float = 300.0
 
 
 def build_agent_turn_hook(spec: AgentTurnHookSpec) -> AgentHook:
@@ -66,6 +70,13 @@ def build_agent_turn_hook(spec: AgentTurnHookSpec) -> AgentHook:
         ephemeral=spec.ephemeral,
     )
     hook_chain: list[AgentHook] = [progress_hook]
+    if spec.approval_required:
+        hook_chain.append(ToolApprovalHook(
+            events=spec.events,
+            channel=spec.channel,
+            require=spec.approval_required,
+            timeout_s=spec.approval_timeout_s,
+        ))
 
     for factory in spec.registered_hook_factories:
         try:

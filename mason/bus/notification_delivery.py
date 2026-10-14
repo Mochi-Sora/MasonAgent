@@ -3,6 +3,7 @@
 from typing import Literal
 
 from mason.bus.outbound_events import (
+    ApprovalRequestEvent,
     FileEditEvent,
     ProgressEvent,
     RetryStatusEvent,
@@ -26,6 +27,7 @@ NOTIFICATION_AUDIENCES: dict[type[AgentEvent], NotificationAudience] = {
     StreamDeltaEvent: "channel",
     StreamEndEvent: "channel",
     ContextCompactionEvent: "channel",
+    ApprovalRequestEvent: "channel",
     RetryWaitEvent: "lifecycle",
     RecoveryStateEvent: "interactive",
     RetryStatusEvent: "interactive",

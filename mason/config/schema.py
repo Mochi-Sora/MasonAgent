@@ -99,6 +99,20 @@ class LazyCapabilitiesConfig(Base):
     always_visible: list[str] = Field(default_factory=list)  # Extra tool names kept in every request
 
 
+class ToolApprovalConfig(Base):
+    """Human-in-the-loop approval for tools listed in `require`.
+
+    A gated tool publishes an approval request to the session's channel and
+    waits for an explicit decision; a channel that cannot ask (no approval
+    capability) denies immediately, and the timeout denies when no decision
+    arrives.
+    """
+
+    enabled: bool = False
+    require: list[str] = Field(default_factory=list)  # Tool names that need an explicit approve
+    timeout_s: float = Field(default=300.0, ge=1.0)  # Deny an unanswered request after this long
+
+
 class InlineFallbackConfig(Base):
     """One inline fallback model configuration."""
 
@@ -431,6 +445,7 @@ class ToolsConfig(Base):
     lazy_capabilities: LazyCapabilitiesConfig = Field(
         default_factory=LazyCapabilitiesConfig,
     )
+    approval: ToolApprovalConfig = Field(default_factory=ToolApprovalConfig)
     restrict_to_workspace: bool = False  # policy intent: keep tool access inside workspace when possible
     webui_allow_local_service_access: bool = Field(
         default=True,
