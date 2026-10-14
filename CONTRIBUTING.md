@@ -175,7 +175,6 @@ documentation locations are decided, so the fork stops presenting upstream's ide
 |---|---|
 | `mason/agent/tools/mcp_oauth.py` (`_CLIENT_URI`, `_LOGO_URI`, `software_id`) | Identity sent to remote MCP OAuth servers during dynamic client registration |
 | `mason/providers/openai_compat_provider.py`, `mason/providers/image_generation.py` (`HTTP-Referer`) | Attribution header sent to OpenRouter-compatible gateways |
-| `scripts/update_readme_contributors.py` (`REPOSITORY`, `MAINTAINERS`) | Contributor-wall sync. Unused: Mason has a single maintainer, and the README carries no contributor markers |
 | `pyproject.toml` (`[project.urls]`, when added) | Package metadata on PyPI |
 | Community links in `.github/ISSUE_TEMPLATE/config.yml` and `COMMUNICATION.md` | Upstream Discussions and chat groups |
 
