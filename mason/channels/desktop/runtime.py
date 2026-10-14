@@ -20,6 +20,9 @@ Design notes
   and the accumulated text is committed as one final 'message' event per
   segment.  'turn.end' combines the bus-level 'TurnCompleted' runtime event
   with the idle transition that also fires for cancelled turns.
+* Live session lists: 'session.updated' is pushed for the owning connection
+  whenever a turn is persisted ('SessionTurnPersisted'), carrying the key,
+  title, updated_at, and message_count of the stored session record.
 * 'turn.interrupt' publishes the built-in '/stop' command for the session; the
   agent cancels the active turn and the channel reports
   'turn.end {status: "interrupted"}'.
@@ -53,7 +56,11 @@ from mason import __version__
 from mason.bus.events import OutboundMessage
 from mason.bus.outbound_events import ProgressEvent
 from mason.bus.queue import MessageBus
-from mason.bus.runtime_events import TurnCompleted, TurnRunStatusChanged
+from mason.bus.runtime_events import (
+    SessionTurnPersisted,
+    TurnCompleted,
+    TurnRunStatusChanged,
+)
 from mason.channels.base import BaseChannel
 from mason.channels.desktop.devices import DeviceLedger
 from mason.channels.desktop.protocol import (
@@ -267,6 +274,7 @@ class DesktopChannel(BaseChannel):
         self._unsubscribe = [
             self.bus.subscribe(self._on_turn_completed, TurnCompleted),
             self.bus.subscribe(self._on_turn_status_changed, TurnRunStatusChanged),
+            self.bus.subscribe(self._on_session_turn_persisted, SessionTurnPersisted),
         ]
         self.logger.info("desktop: listening on ws://{}:{}", host, port)
         if self.config.trust_localhost:
@@ -649,14 +657,20 @@ class DesktopChannel(BaseChannel):
     def _session_meta(
         self, manager: SessionManager, row: dict[str, Any], key: str
     ) -> dict[str, Any]:
-        message_count = 0
-        try:
-            payload = manager.read_session_file(key)
-        except Exception:
-            payload = None
-        if isinstance(payload, Mapping):
-            messages = payload.get("messages")
-            message_count = len(cast(list[object], messages)) if isinstance(messages, list) else 0
+        stored_count = row.get("message_count")
+        if isinstance(stored_count, int) and not isinstance(stored_count, bool) and stored_count >= 0:
+            message_count = stored_count
+        else:
+            # Older stores may not persist a count yet; keep the transcript
+            # fallback so listings stay correct during migration.
+            message_count = 0
+            try:
+                payload = manager.read_session_file(key)
+            except Exception:
+                payload = None
+            if isinstance(payload, Mapping):
+                messages = payload.get("messages")
+                message_count = len(cast(list[object], messages)) if isinstance(messages, list) else 0
         title = row.get("title") or row.get("preview") or key
         return {
             "id": key,
@@ -1091,6 +1105,48 @@ class DesktopChannel(BaseChannel):
             "turn.end",
             {"session_id": session_key, "turn_id": turn_id, "status": "interrupted"},
         )
+
+    async def _on_session_turn_persisted(self, event: SessionTurnPersisted) -> None:
+        """Push a live session-list update once a turn is durably stored."""
+        session_key = event.context.session_key
+        if session_key not in self._session_owners:
+            return
+        payload = self._session_update_payload(session_key)
+        if payload is None:
+            return
+        await self._emit_to_session(session_key, "session.updated", payload)
+
+    def _session_update_payload(self, session_key: str) -> dict[str, Any] | None:
+        manager = self._services.session_manager
+        if manager is None:
+            return None
+        try:
+            record = manager.read_session_metadata(session_key)
+        except Exception:
+            self.logger.exception(
+                "desktop: failed to read session metadata for {}", session_key,
+            )
+            return None
+        if not isinstance(record, Mapping):
+            return None
+        payload: dict[str, Any] = {
+            "session_id": session_key,
+            "updated_at": epoch_ms(record.get("updated_at")) or _now_ms(),
+        }
+        metadata = record.get("metadata")
+        if isinstance(metadata, Mapping):
+            metadata_map = cast(Mapping[str, Any], metadata)
+            title = metadata_map.get("title")
+            if isinstance(title, str) and title.strip():
+                payload["title"] = title.strip()
+        message_count = record.get("message_count")
+        if (
+            isinstance(message_count, int)
+            and not isinstance(message_count, bool)
+            and message_count >= 0
+        ):
+            payload["message_count"] = message_count
+        return payload
 
     async def _emit_to_session(
         self, session_key: str, event_type: str, payload: dict[str, Any]

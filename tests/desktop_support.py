@@ -39,7 +39,11 @@ class FakeSessionManager:
         if payload is None:
             return None
         metadata = payload.get("metadata", {})
-        return {"key": key, "metadata": metadata if isinstance(metadata, dict) else {}}
+        record = {"key": key, "metadata": metadata if isinstance(metadata, dict) else {}}
+        for field in ("created_at", "updated_at", "message_count"):
+            if field in payload:
+                record[field] = payload[field]
+        return record
 
 
 def make_cron_service(jobs: list[Any]) -> Any:

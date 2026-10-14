@@ -19,7 +19,12 @@ from desktop_support import (
 )
 from websockets.exceptions import ConnectionClosed
 
-from mason.bus.runtime_events import RuntimeEventContext, TurnCompleted, TurnRunStatusChanged
+from mason.bus.runtime_events import (
+    RuntimeEventContext,
+    SessionTurnPersisted,
+    TurnCompleted,
+    TurnRunStatusChanged,
+)
 from mason.channels.desktop import runtime as desktop_runtime
 from mason.pairing import approve_code, revoke
 
@@ -204,6 +209,59 @@ async def test_interrupt_without_turn_is_rejected(tmp_path: Path) -> None:
             await hello(ws)
             result = await request(ws, "i1", "turn.interrupt", session_id="desktop:x", turn_id="turn-y")
             assert result["error"]["code"] == "no_turn"
+        finally:
+            await ws.close()
+
+
+async def test_persisted_turn_pushes_session_updated_to_the_owner(tmp_path: Path) -> None:
+    from datetime import datetime
+
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        ws = await connect_client(harness.url)
+        try:
+            await hello(ws)
+            first = await _send_chat(ws, "c1", "hello there")
+            session_id = first["result"]["session_id"]
+            await next_event(ws, "message")
+            await asyncio.wait_for(harness.bus.consume_inbound(), 2)
+            harness.channel.attach_services(
+                session_manager=FakeSessionManager(
+                    sessions={
+                        session_id: {
+                            "key": session_id,
+                            "created_at": "2026-10-14T10:00:00",
+                            "updated_at": "2026-10-14T10:05:00",
+                            "metadata": {"title": "Hello there"},
+                            "message_count": 3,
+                            "messages": [],
+                        },
+                    },
+                ),
+            )
+
+            await harness.bus.publish(
+                SessionTurnPersisted(
+                    context=_context(session_id), turn_id="turn-p1", sender_id="loopback",
+                )
+            )
+            frame = await next_event(ws, "session.updated")
+            event = frame["event"]
+            assert event["session_id"] == session_id
+            assert event["title"] == "Hello there"
+            assert event["message_count"] == 3
+            expected_ms = int(datetime(2026, 10, 14, 10, 5, 0).timestamp() * 1000)
+            assert event["updated_at"] == expected_ms
+
+            # Sessions this client does not own are not pushed onto it.
+            await harness.bus.publish(
+                SessionTurnPersisted(
+                    context=_context("desktop:someone-else"),
+                    turn_id="turn-p2",
+                    sender_id="loopback",
+                )
+            )
+            with pytest.raises(asyncio.TimeoutError):
+                await next_frame(ws, timeout=0.2)
         finally:
             await ws.close()
 

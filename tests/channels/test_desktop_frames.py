@@ -221,6 +221,7 @@ def _session_rows() -> list[dict[str, Any]]:
             "title": "Hello there",
             "preview": "Hi",
             "path": "/tmp/session.jsonl",
+            "message_count": 3,
         },
         {
             "key": "heartbeat",
@@ -229,6 +230,7 @@ def _session_rows() -> list[dict[str, Any]]:
             "title": "heartbeat",
             "preview": "",
             "path": "/tmp/heartbeat.jsonl",
+            "message_count": 0,
         },
     ]
 
