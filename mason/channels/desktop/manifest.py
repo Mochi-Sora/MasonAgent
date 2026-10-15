@@ -14,6 +14,7 @@ SETUP_SPEC = ChannelSetupSpec(
         "sendProgress": field("bool", default=True),
         "sendToolHints": field("bool", default=True),
         "trustLocalhost": field("bool", default=False),
+        "maxUploadMb": field("int", default=25),
     },
 )
 

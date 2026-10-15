@@ -1151,6 +1151,7 @@ Pairing works like any other channel: an unpaired client receives a pairing code
 > - `host` / `port`: where the channel listens (default `127.0.0.1:8765`); the MasonDesk connection profile points at this address.
 > - `trustLocalhost`: default `false`. Only enable it when every local process may act as the client; it skips pairing entirely for loopback connections.
 > - `allowFrom`: optional allowlist of approved device IDs.
+> - `maxUploadMb`: default `25`. Upload cap for `media.upload` attachments; larger payloads are rejected with `too_large`.
 > - `streaming`, `sendProgress`, `sendToolHints`, and `showReasoning` (all default `true`) control what the desktop client receives.
 
 **2. Run**

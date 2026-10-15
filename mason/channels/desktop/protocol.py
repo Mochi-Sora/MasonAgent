@@ -30,6 +30,8 @@ ERROR_BUSY = "busy"
 ERROR_NO_SESSION = "no_session"
 ERROR_NO_TURN = "no_turn"
 ERROR_NO_APPROVAL = "no_approval"
+ERROR_NO_ATTACHMENT = "no_attachment"
+ERROR_TOO_LARGE = "too_large"
 ERROR_RATE_LIMITED = "rate_limited"
 ERROR_INTERNAL = "internal"
 

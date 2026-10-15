@@ -33,6 +33,11 @@ Design notes
 * Tool approvals: an 'approval' event carries the pending call (tool, summary,
   args preview, deadline); 'approve' / 'deny' requests resolve it through the
   framework broker.  Unknown or expired ids answer 'no_approval'.
+* Attachments: 'media.upload' decodes a base64 payload into the instance media
+  directory under the connection's device token and returns an opaque 'att-…'
+  id; 'chat.send' resolves ids owned by the sending connection into the turn's
+  media.  Unused uploads expire after UPLOAD_TTL_S and their files are deleted
+  as the registry is pruned.
 * Retry / recovery / response-source notices are 'interactive' notifications
   (a channel capability, see mason.channels.capabilities); protocol v1 has no
   frames for them yet, so this channel does not declare the capability.
@@ -43,8 +48,10 @@ Design notes
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
+import mimetypes
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -77,10 +84,12 @@ from mason.channels.desktop.protocol import (
     ERROR_BUSY,
     ERROR_INTERNAL,
     ERROR_NO_APPROVAL,
+    ERROR_NO_ATTACHMENT,
     ERROR_NO_SESSION,
     ERROR_NO_TURN,
     ERROR_NOT_PAIRED,
     ERROR_PROTOCOL_MISMATCH,
+    ERROR_TOO_LARGE,
     ERROR_UNAUTHORIZED,
     ERROR_UNSUPPORTED,
     FRAME_MAX_BYTES,
@@ -99,10 +108,12 @@ from mason.channels.desktop.protocol import (
     schedule_text,
     tool_summary,
 )
+from mason.config.paths import get_media_dir
 from mason.config.schema import Base
 from mason.pairing import PAIRING_CODE_META_KEY, approve_code, generate_code, is_approved
 from mason.session.access import SessionAccess
 from mason.session.turn_metadata import TURN_ID_METADATA_KEY
+from mason.utils.helpers import safe_filename
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import Server, ServerConnection
@@ -119,6 +130,11 @@ REVALIDATE_INTERVAL_S = 60.0
 DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 200
 DEFAULT_HISTORY_LIMIT = 100
+# Pending uploads expire after this TTL; consumed ids are released by chat.send.
+UPLOAD_TTL_S = 15 * 60.0
+# Slack for the JSON envelope (ids, name, mime) around the base64 payload.
+UPLOAD_FRAME_HEADROOM_BYTES = 64 * 1024
+UPLOAD_KINDS = frozenset({"image", "audio", "video", "file"})
 
 RequestHandler = Callable[["_Connection", RequestFrame], Awaitable[None]]
 
@@ -135,6 +151,7 @@ class DesktopConfig(Base):
     send_progress: bool = True
     send_tool_hints: bool = True
     trust_localhost: bool = False
+    max_upload_mb: int = 25
 
 
 @dataclass
@@ -177,6 +194,20 @@ class _Connection:
             await self.ws.close(code, reason)
 
 
+@dataclass
+class _UploadRecord:
+    """One stored attachment, owned by the connection that uploaded it."""
+
+    attachment_id: str
+    path: Path
+    name: str
+    mime: str
+    kind: str
+    size: int
+    owner: _Connection
+    created_at: float
+
+
 class DesktopChannel(BaseChannel):
     """WebSocket transport for the MasonDesk desktop client."""
 
@@ -208,11 +239,13 @@ class DesktopChannel(BaseChannel):
         self._active_turns: dict[str, str] = {}
         self._outbound_streams: dict[str, _StreamState] = {}
         self._pending_approvals: dict[str, str] = {}
+        self._uploads: dict[str, _UploadRecord] = {}
         self._unsubscribe: list[Callable[[], None]] = []
         self._handlers: dict[str, RequestHandler] = {
             "hello": self._handle_hello,
             "ping": self._handle_ping,
             "chat.send": self._handle_chat_send,
+            "media.upload": self._handle_media_upload,
             "turn.interrupt": self._handle_turn_interrupt,
             "sessions.list": self._handle_sessions_list,
             "sessions.history": self._handle_sessions_history,
@@ -271,7 +304,7 @@ class DesktopChannel(BaseChannel):
                 self._handle_connection,
                 host,
                 port,
-                max_size=FRAME_MAX_BYTES,
+                max_size=self._upload_frame_max_bytes(),
             )
         except OSError as exc:
             self._running = False
@@ -314,6 +347,7 @@ class DesktopChannel(BaseChannel):
         self._active_turns.clear()
         self._outbound_streams.clear()
         self._pending_approvals.clear()
+        self._release_uploads()
 
     # -- connection handling ------------------------------------------------
 
@@ -348,6 +382,7 @@ class DesktopChannel(BaseChannel):
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
         self._connections.discard(connection)
+        self._release_uploads(connection)
         for session_key, owner in list(self._session_owners.items()):
             if owner is connection:
                 self._session_owners.pop(session_key, None)
@@ -540,6 +575,84 @@ class DesktopChannel(BaseChannel):
             )
         )
 
+    # -- media uploads -------------------------------------------------------
+
+    async def _handle_media_upload(
+        self, connection: _Connection, request: RequestFrame
+    ) -> None:
+        token = connection.device_token
+        if token is None or not is_approved(self.name, token):
+            await connection.send_frame(
+                error_response(request.id, ERROR_UNAUTHORIZED, "device token is not approved")
+            )
+            await connection.close(CLOSE_UNAUTHORIZED, "unauthorized")
+            return
+        self._prune_uploads()
+        kind = optional_text(request.body.get("kind")) or ""
+        if kind not in UPLOAD_KINDS:
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_BAD_REQUEST,
+                    "kind must be one of image, audio, video, file",
+                )
+            )
+            return
+        data = request.body.get("data")
+        if not isinstance(data, str) or not data:
+            await connection.send_frame(
+                error_response(request.id, ERROR_BAD_REQUEST, "data is required")
+            )
+            return
+        limit = self._upload_limit_bytes()
+        try:
+            raw = base64.b64decode(data, validate=True)
+        except ValueError:
+            await connection.send_frame(
+                error_response(request.id, ERROR_BAD_REQUEST, "data is not valid base64")
+            )
+            return
+        if len(raw) > limit:
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_TOO_LARGE,
+                    f"upload exceeds the {self.config.max_upload_mb} MB limit",
+                    {"limit_bytes": limit},
+                )
+            )
+            return
+        name = _upload_name(request.body.get("name"))
+        mime = optional_text(request.body.get("mime")) or "application/octet-stream"
+        path = get_media_dir(self.name) / f"{uuid.uuid4().hex}{_upload_extension(name, mime)}"
+        try:
+            path.write_bytes(raw)
+        except OSError:
+            self.logger.exception("desktop: failed to store an upload")
+            await connection.send_frame(
+                error_response(request.id, ERROR_INTERNAL, "failed to store the upload")
+            )
+            return
+        record = _UploadRecord(
+            attachment_id=f"att-{uuid.uuid4().hex[:12]}",
+            path=path,
+            name=name,
+            mime=mime,
+            kind=kind,
+            size=len(raw),
+            owner=connection,
+            created_at=time.monotonic(),
+        )
+        self._uploads[record.attachment_id] = record
+        self.logger.debug(
+            "desktop: stored {} ({} bytes, kind={}) for {}",
+            record.attachment_id,
+            record.size,
+            record.kind,
+            token,
+        )
+        await connection.send_frame(ok_response(request.id, _attachment_payload(record)))
+
     async def _handle_chat_send(self, connection: _Connection, request: RequestFrame) -> None:
         token = connection.device_token
         if token is None or not is_approved(self.name, token):
@@ -549,11 +662,34 @@ class DesktopChannel(BaseChannel):
             await connection.close(CLOSE_UNAUTHORIZED, "unauthorized")
             return
         text = optional_text(request.body.get("text"))
-        if text is None:
+        attachment_ids = _parse_attachment_ids(request.body.get("attachments"))
+        if attachment_ids is None:
+            await connection.send_frame(
+                error_response(
+                    request.id, ERROR_BAD_REQUEST, "attachments must be a list of ids"
+                )
+            )
+            return
+        if text is None and not attachment_ids:
             await connection.send_frame(
                 error_response(request.id, ERROR_BAD_REQUEST, "text is required")
             )
             return
+        text = text or ""
+        self._prune_uploads()
+        attachments: list[_UploadRecord] = []
+        for attachment_id in attachment_ids:
+            record = self._uploads.get(attachment_id)
+            if record is None or record.owner is not connection:
+                await connection.send_frame(
+                    error_response(
+                        request.id,
+                        ERROR_NO_ATTACHMENT,
+                        f"unknown attachment {attachment_id}",
+                    )
+                )
+                return
+            attachments.append(record)
         session_id = optional_text(request.body.get("session_id"))
         if session_id is None:
             session_id = f"{self.name}:{uuid.uuid4().hex[:12]}"
@@ -572,30 +708,34 @@ class DesktopChannel(BaseChannel):
             )
             return
 
+        # Every check passed: consume the uploads and start the turn.
+        for record in attachments:
+            self._uploads.pop(record.attachment_id, None)
         turn_id = f"turn-{uuid.uuid4().hex[:8]}"
         self._active_turns[session_id] = turn_id
         self._session_owners[session_id] = connection
         await connection.send_frame(
             ok_response(request.id, {"session_id": session_id, "turn_id": turn_id})
         )
-        await connection.send_frame(
-            event_frame(
-                "message",
-                {
-                    "session_id": session_id,
-                    "turn_id": turn_id,
-                    "message_id": f"msg-{uuid.uuid4().hex[:12]}",
-                    "role": "user",
-                    "text": text,
-                    "ts": _now_ms(),
-                },
-            )
-        )
+        echo_payload: dict[str, Any] = {
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "message_id": f"msg-{uuid.uuid4().hex[:12]}",
+            "role": "user",
+            "text": text,
+            "ts": _now_ms(),
+        }
+        if attachments:
+            echo_payload["attachments"] = [
+                _attachment_payload(record) for record in attachments
+            ]
+        await connection.send_frame(event_frame("message", echo_payload))
         try:
             await self._handle_message(
                 sender_id=token,
                 chat_id=session_id,
-                content=text,
+                content=await self._attachment_content(text, attachments),
+                media=[str(record.path) for record in attachments],
                 metadata={TURN_ID_METADATA_KEY: turn_id},
                 session_key=session_id,
             )
@@ -1249,6 +1389,75 @@ class DesktopChannel(BaseChannel):
 
     # -- helpers ------------------------------------------------------------------
 
+    def _upload_limit_bytes(self) -> int:
+        """The accepted decoded size for one upload, in bytes."""
+        return max(0, int(self.config.max_upload_mb)) * 1024 * 1024
+
+    def _upload_frame_max_bytes(self) -> int:
+        """Frame size that admits a capped base64 upload plus its JSON envelope."""
+        encoded = 4 * ((self._upload_limit_bytes() + 2) // 3)
+        return max(FRAME_MAX_BYTES, encoded + UPLOAD_FRAME_HEADROOM_BYTES)
+
+    def _prune_uploads(self) -> None:
+        """Drop expired uploads and delete their backing files (lazy)."""
+        if not self._uploads:
+            return
+        cutoff = time.monotonic() - UPLOAD_TTL_S
+        expired = [
+            record for record in self._uploads.values() if record.created_at <= cutoff
+        ]
+        for record in expired:
+            self._uploads.pop(record.attachment_id, None)
+            _unlink_upload(record.path)
+
+    def _release_uploads(self, connection: _Connection | None = None) -> None:
+        """Delete pending uploads on shutdown, or one connection's on disconnect.
+
+        Consumed uploads are no longer tracked: their files stay on disk for the
+        turn that references them.
+        """
+        if connection is None:
+            released = list(self._uploads.values())
+            self._uploads.clear()
+        else:
+            released = [
+                record for record in self._uploads.values() if record.owner is connection
+            ]
+            for record in released:
+                self._uploads.pop(record.attachment_id, None)
+        for record in released:
+            _unlink_upload(record.path)
+
+    async def _attachment_content(
+        self, text: str, attachments: list[_UploadRecord]
+    ) -> str:
+        """Build the model-facing content line for a turn's attachments.
+
+        Empty text falls back to one placeholder per attachment; audio
+        attachments contribute a best-effort transcription, mirroring the
+        Telegram channel.
+        """
+        parts: list[str] = (
+            [text]
+            if text
+            else [f"[{record.kind}: {record.name}]" for record in attachments]
+        )
+        for record in attachments:
+            if record.kind != "audio":
+                continue
+            transcription = await self._transcribe_attachment(record.path)
+            if transcription:
+                parts.append(f"[transcription: {transcription}]")
+        return "\n".join(parts)
+
+    async def _transcribe_attachment(self, path: Path) -> str:
+        """Transcribe an audio attachment; a failure only loses the transcript."""
+        try:
+            return await self.transcribe_audio(path)
+        except Exception:
+            self.logger.exception("desktop: failed to transcribe {}", path)
+            return ""
+
     def _session_exists(self, session_key: str) -> bool:
         manager = self._services.session_manager
         if manager is None:
@@ -1276,6 +1485,65 @@ def _cron_job(job: object) -> dict[str, Any]:
         "last_status": optional_text(getattr(state, "last_status", None)),
         "payload_preview": preview_text(getattr(payload, "message", None), 120),
     }
+
+
+_EXTENSION_ALPHABET = frozenset("abcdefghijklmnopqrstuvwxyz0123456789")
+
+
+def _parse_attachment_ids(value: object) -> list[str] | None:
+    """Validate a ``chat.send`` attachments list; ``None`` marks a bad shape."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return None
+    attachment_ids: list[str] = []
+    for entry in cast(list[object], value):
+        attachment_id = optional_text(entry)
+        if attachment_id is None:
+            return None
+        attachment_ids.append(attachment_id)
+    return attachment_ids
+
+
+def _upload_name(value: object) -> str:
+    """Reduce a client-supplied filename to a harmless display basename."""
+    name = optional_text(value) or "upload"
+    name = name.replace("\\", "/").rsplit("/", 1)[-1]
+    return safe_filename(name)[:255] or "upload"
+
+
+def _upload_extension(name: str, mime: str) -> str:
+    """Pick a safe extension for the stored file; client names are untrusted."""
+    suffix = Path(name).suffix.lower()
+    if _is_safe_extension(suffix):
+        return suffix
+    guessed = (mimetypes.guess_extension(mime, strict=False) or "").lower()
+    return guessed if _is_safe_extension(guessed) else ""
+
+
+def _is_safe_extension(extension: str) -> bool:
+    return (
+        2 <= len(extension) <= 11
+        and extension.startswith(".")
+        and all(char in _EXTENSION_ALPHABET for char in extension[1:])
+    )
+
+
+def _attachment_payload(record: _UploadRecord) -> dict[str, Any]:
+    """The wire projection shared by the upload result and the user-turn echo."""
+    return {
+        "attachment_id": record.attachment_id,
+        "name": record.name,
+        "mime": record.mime,
+        "kind": record.kind,
+        "size": record.size,
+    }
+
+
+def _unlink_upload(path: Path) -> None:
+    """Best-effort deletion of a pruned upload's backing file."""
+    with contextlib.suppress(OSError):
+        path.unlink()
 
 
 def _now_ms() -> int:
