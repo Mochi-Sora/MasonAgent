@@ -31,6 +31,7 @@ from mason.runtime_context import (
     append_runtime_context,
 )
 from mason.security.workspace_access import WorkspaceScopeResolver
+from mason.session import attachments as attachment_records
 from mason.session.keys import last_channel_from_metadata
 from mason.session.manager import Session
 from mason.session.summary import SessionSummary
@@ -44,6 +45,7 @@ def session_extra(metadata: Mapping[str, Any] | None) -> dict[str, Any]:
         cli_app_utils.session_extra(metadata)
         | mcp_tools.session_extra(metadata)
         | session_tools.session_extra(metadata)
+        | attachment_records.session_extra(metadata)
     )
 
 

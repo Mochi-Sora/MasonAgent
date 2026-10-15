@@ -71,6 +71,7 @@ async def test_upload_then_chat_send_publishes_media(
                 "mime": "image/jpeg",
                 "kind": "image",
                 "size": len(raw),
+                "duration_ms": 4200,
             }
 
             sent = await request(

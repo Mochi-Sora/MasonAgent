@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from mason.runtime_context import public_history_message
+from mason.session.attachments import AttachmentRecord, normalize_attachments
 from mason.session.history_visibility import (
     HIDDEN_HISTORY_CONTINUATION,
     hidden_history_kind,
@@ -23,6 +25,23 @@ from mason.utils.file_edit_events import (
 _VISIBLE_ROLES = {"user", "assistant"}
 #: Framework tool errors reach the model as "Error: ..." payloads.
 _ERROR_PREFIX = "error"
+#: Model-facing placeholders that stand in for attachments. When a message
+#: carries structured attachments, these lines (which may embed filesystem
+#: paths) are hidden; clients render the records instead.
+_ATTACHMENT_PLACEHOLDER_RE = re.compile(
+    r"^\[(?:(?:image|audio|video|file)(?::[^\]]*)?|Attachment:[^\]]*)\]$"
+)
+
+
+def _strip_attachment_placeholders(text: str) -> str:
+    """Drop placeholder-only lines that duplicate structured attachments."""
+    if not text:
+        return text
+    kept = [
+        line for line in text.splitlines()
+        if not _ATTACHMENT_PLACEHOLDER_RE.match(line.strip())
+    ]
+    return "\n".join(kept).strip()
 
 
 class HistoryTool(TypedDict):
@@ -44,6 +63,7 @@ class SessionMessage(TypedDict):
     reasoning: list[str]
     tools: list[HistoryTool]
     file_edits: list[HistoryFileEdit]
+    attachments: list[AttachmentRecord]
     #: True when this assistant message continues the previous answer and was
     #: separated from it only by an internal recovery prompt (hidden history).
     continued: bool
@@ -183,9 +203,12 @@ def _visible_messages(
             continue
         public = public_history_message(message)
         text = _message_text(public)
+        attachments = normalize_attachments(public.get("attachments"))
+        if attachments:
+            text = _strip_attachment_placeholders(text)
         reasoning = _reasoning_segments(public)
         tools, file_edits = _tool_activity(public, tool_results, workspace)
-        if not text and not tools and not file_edits:
+        if not text and not attachments and not tools and not file_edits:
             continues_previous = False
             continue
         continued = continues_previous and role == "assistant"
@@ -199,6 +222,7 @@ def _visible_messages(
             "reasoning": reasoning,
             "tools": tools,
             "file_edits": file_edits,
+            "attachments": attachments,
             "continued": continued,
         })
     return visible

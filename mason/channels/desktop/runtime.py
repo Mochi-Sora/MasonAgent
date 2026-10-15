@@ -20,7 +20,9 @@ Design notes
   and the accumulated text is committed as one final 'message' event per
   segment.  'turn.end' comes from the ordered 'TurnEndEvent' outbound event,
   so it always follows the turn's messages; the idle transition only releases
-  the session's busy state and commits pending stream text.
+  the session's busy state and commits pending stream text.  A discarded
+  stream segment (recovery boundary) closes with a 'message' event carrying
+  'replaced: true' so clients drop the text they already rendered.
 * Live session lists: 'session.updated' is pushed for the owning connection
   whenever a turn is persisted ('SessionTurnPersisted'), carrying the key,
   title, updated_at, and message_count of the stored session record.
@@ -112,6 +114,7 @@ from mason.config.paths import get_media_dir
 from mason.config.schema import Base
 from mason.pairing import PAIRING_CODE_META_KEY, approve_code, generate_code, is_approved
 from mason.session.access import SessionAccess
+from mason.session.attachments import ATTACHMENTS_METADATA_KEY
 from mason.session.turn_metadata import TURN_ID_METADATA_KEY
 from mason.utils.helpers import safe_filename
 
@@ -206,6 +209,7 @@ class _UploadRecord:
     size: int
     owner: _Connection
     created_at: float
+    duration_ms: int | None = None
 
 
 class DesktopChannel(BaseChannel):
@@ -467,6 +471,7 @@ class DesktopChannel(BaseChannel):
                         "expires_at": _now_ms() + PAIRING_CODE_TTL_S * 1000,
                     },
                     "reason": reason,
+                    "limits": self._hello_limits(),
                 },
             )
         )
@@ -501,6 +506,7 @@ class DesktopChannel(BaseChannel):
                     "paired": True,
                     "device_token": token,
                     "gateway": {"version": __version__},
+                    "limits": self._hello_limits(),
                 },
             )
         )
@@ -577,6 +583,10 @@ class DesktopChannel(BaseChannel):
 
     # -- media uploads -------------------------------------------------------
 
+    def _hello_limits(self) -> dict[str, int]:
+        """Advertised client limits, so uploads can be pre-checked."""
+        return {"max_upload_bytes": self._upload_limit_bytes()}
+
     async def _handle_media_upload(
         self, connection: _Connection, request: RequestFrame
     ) -> None:
@@ -642,6 +652,7 @@ class DesktopChannel(BaseChannel):
             size=len(raw),
             owner=connection,
             created_at=time.monotonic(),
+            duration_ms=_upload_duration_ms(request.body.get("duration_ms")),
         )
         self._uploads[record.attachment_id] = record
         self.logger.debug(
@@ -730,13 +741,20 @@ class DesktopChannel(BaseChannel):
                 _attachment_payload(record) for record in attachments
             ]
         await connection.send_frame(event_frame("message", echo_payload))
+        metadata: dict[str, Any] = {TURN_ID_METADATA_KEY: turn_id}
+        if attachments:
+            # Persisted with the user turn so sessions.history can return the
+            # same records after a reload.
+            metadata[ATTACHMENTS_METADATA_KEY] = [
+                _attachment_payload(record) for record in attachments
+            ]
         try:
             await self._handle_message(
                 sender_id=token,
                 chat_id=session_id,
                 content=await self._attachment_content(text, attachments),
                 media=[str(record.path) for record in attachments],
-                metadata={TURN_ID_METADATA_KEY: turn_id},
+                metadata=metadata,
                 session_key=session_id,
             )
         except Exception:
@@ -868,6 +886,17 @@ class DesktopChannel(BaseChannel):
                 "text": message["content"],
                 "ts": epoch_ms(message["timestamp"], fallback_ts),
             }
+            if message["continued"]:
+                payload["continued"] = True
+            if message["attachments"]:
+                payload["attachments"] = [
+                    {
+                        key: value
+                        for key, value in attachment.items()
+                        if key != "duration_ms" or value is not None
+                    }
+                    for attachment in message["attachments"]
+                ]
             if message["reasoning"]:
                 payload["reasoning"] = [
                     {"text": segment} for segment in message["reasoning"]
@@ -1119,7 +1148,23 @@ class DesktopChannel(BaseChannel):
             if merge_next:
                 # The same user-visible message continues in a later segment.
                 return
-            # A recovery boundary that will regenerate this text: discard it.
+            # A recovery boundary that will regenerate this text: tell the
+            # client to discard what it already rendered, then drop the buffer.
+            if state is not None and state.text and connection is not None:
+                await connection.send_frame(
+                    event_frame(
+                        "message",
+                        {
+                            "session_id": chat_id,
+                            "turn_id": turn_id,
+                            "message_id": state.message_id,
+                            "role": "assistant",
+                            "text": "",
+                            "ts": _now_ms(),
+                            "replaced": True,
+                        },
+                    )
+                )
             self._outbound_streams.pop(chat_id, None)
             return
         if state is None:
@@ -1505,6 +1550,14 @@ def _parse_attachment_ids(value: object) -> list[str] | None:
     return attachment_ids
 
 
+def _upload_duration_ms(value: object) -> int | None:
+    """Normalize an optional media duration from an upload request."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    duration = int(value)
+    return duration if duration >= 0 else None
+
+
 def _upload_name(value: object) -> str:
     """Reduce a client-supplied filename to a harmless display basename."""
     name = optional_text(value) or "upload"
@@ -1531,13 +1584,16 @@ def _is_safe_extension(extension: str) -> bool:
 
 def _attachment_payload(record: _UploadRecord) -> dict[str, Any]:
     """The wire projection shared by the upload result and the user-turn echo."""
-    return {
+    payload: dict[str, Any] = {
         "attachment_id": record.attachment_id,
         "name": record.name,
         "mime": record.mime,
         "kind": record.kind,
         "size": record.size,
     }
+    if record.duration_ms is not None:
+        payload["duration_ms"] = record.duration_ms
+    return payload
 
 
 def _unlink_upload(path: Path) -> None:

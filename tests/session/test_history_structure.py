@@ -176,3 +176,41 @@ def test_hidden_retry_prompts_do_not_mark_continuation(tmp_path: Path) -> None:
         for message in messages
         for prompt in (FINALIZATION_RETRY_PROMPT, BUDGET_EXHAUSTED_FINALIZATION_PROMPT)
     )
+
+
+def test_attachment_records_hide_path_placeholders(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    record = {
+        "attachment_id": "att-0123456789ab",
+        "name": "photo.png",
+        "mime": "image/png",
+        "kind": "image",
+        "size": 42,
+        "duration_ms": None,
+    }
+    session = manager.get_or_create("desktop:media")
+    session.messages = [
+        {
+            "role": "user",
+            "content": "look at this\n[image: /root/.mason/media/desktop/uuid.png]",
+            "media": ["/root/.mason/media/desktop/uuid.png"],
+            "attachments": [record],
+        },
+        {"role": "assistant", "content": "Nice photo."},
+        {
+            "role": "user",
+            "content": "[image: photo.jpg]",
+            "attachments": [{**record, "name": "photo.jpg"}],
+        },
+    ]
+    manager.save(session)
+
+    match = SessionAccess(_manager(tmp_path)).read("desktop:media", query="", limit=10)
+
+    assert match is not None
+    messages = match["messages"]
+    assert messages[0]["content"] == "look at this"
+    assert messages[0]["attachments"] == [record]
+    assert messages[2]["content"] == ""
+    assert messages[2]["attachments"][0]["name"] == "photo.jpg"
+    assert "/root/.mason/media" not in json.dumps(messages)

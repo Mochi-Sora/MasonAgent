@@ -72,10 +72,17 @@ async def test_resuming_and_merge_next_stream_semantics(tmp_path: Path) -> None:
             await harness.channel.send_delta(session_id, " more", {}, stream_end=True)
 
             await next_event(ws, "delta")
+            # The discarded segment closes with a replacement marker so the
+            # client drops the text it already rendered.
+            replaced = await next_event(ws, "message")
+            assert replaced["event"]["replaced"] is True
+            assert replaced["event"]["text"] == ""
             await next_event(ws, "delta")
             await next_event(ws, "delta")
             final = await next_event(ws, "message")
             assert final["event"]["text"] == "keep more"
+            assert "replaced" not in final["event"]
+            assert final["event"]["message_id"] != replaced["event"]["message_id"]
         finally:
             await ws.close()
 

@@ -9,16 +9,18 @@ end-to-end counterpart to ``dev/smoke.mjs``, which only exercises the mock.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from desktop_support import connect_client, hello, next_event, request
+from desktop_support import connect_client, hello, next_event, next_frame, request
 
 from mason.agent.loop import AgentLoop
 from mason.bus.queue import MessageBus
+from mason.channels.desktop import runtime as desktop_runtime
 from mason.channels.manager import ChannelManager
 from mason.config.loader import set_config_path
 from mason.config.schema import Config, ToolApprovalConfig, ToolsConfig
@@ -232,5 +234,146 @@ async def test_gateway_turn_interrupt_publishes_interrupted(tmp_path: Path) -> N
             end = await next_event(ws, "turn.end")
             assert end["event"]["status"] == "interrupted"
             assert end["event"]["turn_id"] == turn_id
+        finally:
+            await ws.close()
+
+
+async def _frames_until_turn_end(ws: Any) -> list[dict[str, Any]]:
+    """Collect event frames (skipping responses) through the terminal signal."""
+    frames: list[dict[str, Any]] = []
+    while True:
+        frame = await next_frame(ws, timeout=5)
+        if "id" in frame:
+            continue
+        frames.append(frame)
+        if frame.get("type") == "turn.end":
+            return frames
+
+
+@pytest.mark.asyncio
+async def test_gateway_length_recovery_leaves_history_clean(tmp_path: Path) -> None:
+    """A truncated answer replays as folded segments, never the internal prompt."""
+    responses = iter([
+        LLMResponse(content="First segment of a very long answer.", finish_reason="length"),
+        LLMResponse(content=" Second segment continues the answer.", finish_reason="stop"),
+    ])
+
+    async def stream(*, on_content_delta: Any, **_kwargs: Any) -> LLMResponse:
+        response = next(responses)
+        await on_content_delta(response.content or "")
+        return response
+
+    provider = _provider()
+    provider.chat_stream_with_retry = AsyncMock(side_effect=stream)
+
+    async with gateway_stack(tmp_path, provider) as stack:
+        ws = await connect_client(stack.url)
+        try:
+            await hello(ws)
+            sent = await request(ws, "c1", "chat.send", text="write a very long answer")
+            session_id = sent["result"]["session_id"]
+
+            frames = await _frames_until_turn_end(ws)
+            assert frames[-1]["event"]["status"] == "completed"
+            assert frames[-1]["event"]["session_id"] == session_id
+            events = [(frame["type"], frame["event"]) for frame in frames]
+            assistant_messages = [
+                event for kind, event in events
+                if kind == "message" and event.get("role") == "assistant"
+            ]
+            assert len(assistant_messages) == 1
+            final_text = assistant_messages[0]["text"]
+            assert final_text.startswith("First segment of a very long answer.")
+            assert final_text.endswith("Second segment continues the answer.")
+            assert not any(event.get("replaced") for _kind, event in events)
+
+            history = await request(ws, "h1", "sessions.history", session_id=session_id)
+            messages = history["result"]["messages"]
+            assert [message["role"] for message in messages] == [
+                "user",
+                "assistant",
+                "assistant",
+            ]
+            assert [message["text"] for message in messages] == [
+                "write a very long answer",
+                "First segment of a very long answer.",
+                "Second segment continues the answer.",
+            ]
+            assert messages[1].get("continued") is None
+            assert messages[2]["continued"] is True
+            assert not any("cut off" in message["text"] for message in messages)
+
+            listed = await request(ws, "s1", "sessions.list")
+            entry = listed["result"]["sessions"][0]
+            assert entry["id"] == session_id
+            assert entry["message_count"] == 3
+        finally:
+            await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_gateway_attachment_records_reach_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An uploaded image survives a reload as a record, not a filesystem path."""
+    media_dir = tmp_path / "desktop-media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_get_media_dir(channel: str | None = None) -> Path:
+        media_dir.mkdir(parents=True, exist_ok=True)
+        return media_dir
+
+    monkeypatch.setattr(desktop_runtime, "get_media_dir", fake_get_media_dir)
+
+    provider = _provider(LLMResponse(content="Got the photo.", finish_reason="stop"))
+
+    async with gateway_stack(tmp_path, provider) as stack:
+        ws = await connect_client(stack.url)
+        try:
+            await hello(ws)
+            raw = b"\x89PNG fake image body"
+            upload = await request(
+                ws,
+                "u1",
+                "media.upload",
+                name="photo.png",
+                mime="image/png",
+                kind="image",
+                data=base64.b64encode(raw).decode("ascii"),
+            )
+            assert upload["ok"] is True
+            attachment = upload["result"]
+
+            sent = await request(
+                ws,
+                "c1",
+                "chat.send",
+                text="look at this",
+                attachments=[attachment["attachment_id"]],
+            )
+            session_id = sent["result"]["session_id"]
+            echo = await next_event(ws, "message")
+            assert echo["event"]["role"] == "user"
+            assert echo["event"]["attachments"] == [attachment]
+
+            end = await next_event(ws, "turn.end")
+            assert end["event"]["status"] == "completed"
+
+            history = await request(ws, "h1", "sessions.history", session_id=session_id)
+            messages = history["result"]["messages"]
+            user_message = messages[0]
+            assert user_message["role"] == "user"
+            assert user_message["text"] == "look at this"
+            assert user_message["attachments"] == [attachment]
+            for message in messages:
+                assert str(media_dir) not in message["text"]
+
+            # The stored transcript keeps the structured record, so reloads and
+            # replay see the attachment even though the client text has no path.
+            stored = next((tmp_path / "sessions").rglob("*.jsonl"))
+            raw_transcript = stored.read_text(encoding="utf-8")
+            assert attachment["attachment_id"] in raw_transcript
+            assert "photo.png" in raw_transcript
+            assert "[image:" not in user_message["text"]
         finally:
             await ws.close()
