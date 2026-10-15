@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from mason.runtime_context import public_history_message
-from mason.session.history_visibility import is_hidden_history_message
+from mason.session.history_visibility import (
+    HIDDEN_HISTORY_CONTINUATION,
+    hidden_history_kind,
+    is_hidden_history_message,
+)
 from mason.session.manager import SessionInfo, SessionManager
 from mason.utils.file_edit_events import (
     display_file_edit_path,
@@ -40,6 +44,9 @@ class SessionMessage(TypedDict):
     reasoning: list[str]
     tools: list[HistoryTool]
     file_edits: list[HistoryFileEdit]
+    #: True when this assistant message continues the previous answer and was
+    #: separated from it only by an internal recovery prompt (hidden history).
+    continued: bool
 
 
 class SessionMatch(TypedDict):
@@ -164,19 +171,25 @@ def _visible_messages(
     typed_messages = cast(list[object], raw_messages)
     tool_results = _tool_results_by_call(typed_messages)
     visible: list[SessionMessage] = []
+    continues_previous = False
     for index, raw_message in enumerate(typed_messages):
         if not isinstance(raw_message, dict):
+            continues_previous = False
             continue
         message = cast(dict[str, Any], raw_message)
         role = message.get("role")
         if role not in _VISIBLE_ROLES or message.get("_command") or is_hidden_history_message(message):
+            continues_previous = hidden_history_kind(message) == HIDDEN_HISTORY_CONTINUATION
             continue
         public = public_history_message(message)
         text = _message_text(public)
         reasoning = _reasoning_segments(public)
         tools, file_edits = _tool_activity(public, tool_results, workspace)
         if not text and not tools and not file_edits:
+            continues_previous = False
             continue
+        continued = continues_previous and role == "assistant"
+        continues_previous = False
         timestamp = public.get("createdAt", public.get("timestamp"))
         visible.append({
             "message_index": index,
@@ -186,6 +199,7 @@ def _visible_messages(
             "reasoning": reasoning,
             "tools": tools,
             "file_edits": file_edits,
+            "continued": continued,
         })
     return visible
 

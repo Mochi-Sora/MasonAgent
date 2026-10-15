@@ -8,6 +8,11 @@ from typing import Any, cast
 
 from loguru import logger
 
+from mason.session.history_visibility import (
+    HIDDEN_HISTORY_CONTINUATION,
+    HIDDEN_HISTORY_META,
+    HIDDEN_HISTORY_RETRY,
+)
 from mason.utils.helpers import stringify_text_blocks
 
 _MAX_REPEAT_EXTERNAL_LOOKUPS = 2
@@ -65,17 +70,25 @@ def is_blank_text(content: str | None) -> bool:
     return content is None or not content.strip()
 
 
-def build_finalization_retry_message() -> dict[str, str]:
+def build_finalization_retry_message() -> dict[str, Any]:
     """A short no-tools-allowed prompt for final answer recovery."""
-    return {"role": "user", "content": FINALIZATION_RETRY_PROMPT}
+    return {
+        "role": "user",
+        "content": FINALIZATION_RETRY_PROMPT,
+        HIDDEN_HISTORY_META: {"kind": HIDDEN_HISTORY_RETRY},
+    }
 
 
-def build_budget_exhausted_finalization_message() -> dict[str, str]:
+def build_budget_exhausted_finalization_message() -> dict[str, Any]:
     """Prompt the model for a no-tools final response after budget exhaustion."""
-    return {"role": "user", "content": BUDGET_EXHAUSTED_FINALIZATION_PROMPT}
+    return {
+        "role": "user",
+        "content": BUDGET_EXHAUSTED_FINALIZATION_PROMPT,
+        HIDDEN_HISTORY_META: {"kind": HIDDEN_HISTORY_RETRY},
+    }
 
 
-def build_length_recovery_message(content: str) -> dict[str, str]:
+def build_length_recovery_message(content: str) -> dict[str, Any]:
     """Prompt the model to continue after hitting output token limit."""
     tail = content[-_LENGTH_RECOVERY_TAIL_CHARS:]
     prompt = (
@@ -87,7 +100,11 @@ def build_length_recovery_message(content: str) -> dict[str, str]:
         "</already_delivered_tail>\n"
         "Begin with the text that belongs immediately after this tail."
     )
-    return {"role": "user", "content": prompt}
+    return {
+        "role": "user",
+        "content": prompt,
+        HIDDEN_HISTORY_META: {"kind": HIDDEN_HISTORY_CONTINUATION},
+    }
 
 
 def external_lookup_signature(tool_name: str, arguments: Any) -> str | None:

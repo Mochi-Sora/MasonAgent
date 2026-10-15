@@ -7,6 +7,13 @@ from pathlib import Path
 
 from mason.session import SessionManager
 from mason.session.access import SessionAccess
+from mason.utils.runtime import (
+    BUDGET_EXHAUSTED_FINALIZATION_PROMPT,
+    FINALIZATION_RETRY_PROMPT,
+    build_budget_exhausted_finalization_message,
+    build_finalization_retry_message,
+    build_length_recovery_message,
+)
 
 
 def _manager(tmp_path: Path) -> SessionManager:
@@ -114,3 +121,58 @@ def test_tool_only_turns_are_visible_without_text(tmp_path: Path) -> None:
     activity = match["messages"][1]
     assert activity["content"] == ""
     assert activity["tools"] == [{"name": "list_dir", "ok": True, "summary": None}]
+
+
+def test_hidden_continuation_prompt_marks_the_next_assistant(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = manager.get_or_create("cli:long")
+    session.messages = [
+        {"role": "user", "content": "write a very long answer"},
+        {"role": "assistant", "content": "First segment."},
+        build_length_recovery_message("First segment."),
+        {"role": "assistant", "content": "Second segment continues."},
+    ]
+    manager.save(session)
+
+    match = SessionAccess(_manager(tmp_path)).read("cli:long", query="", limit=10)
+
+    assert match is not None
+    messages = match["messages"]
+    assert [message["role"] for message in messages] == ["user", "assistant", "assistant"]
+    assert [message["content"] for message in messages] == [
+        "write a very long answer",
+        "First segment.",
+        "Second segment continues.",
+    ]
+    assert messages[1]["continued"] is False
+    assert messages[2]["continued"] is True
+    assert not any("cut off" in message["content"] for message in messages)
+
+
+def test_hidden_retry_prompts_do_not_mark_continuation(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = manager.get_or_create("cli:retry")
+    session.messages = [
+        {"role": "user", "content": "answer this"},
+        build_finalization_retry_message(),
+        {"role": "assistant", "content": "The answer."},
+        build_budget_exhausted_finalization_message(),
+        {"role": "assistant", "content": "The budget answer."},
+    ]
+    manager.save(session)
+
+    match = SessionAccess(_manager(tmp_path)).read("cli:retry", query="", limit=10)
+
+    assert match is not None
+    messages = match["messages"]
+    assert [message["content"] for message in messages] == [
+        "answer this",
+        "The answer.",
+        "The budget answer.",
+    ]
+    assert [message["continued"] for message in messages] == [False, False, False]
+    assert not any(
+        prompt in message["content"]
+        for message in messages
+        for prompt in (FINALIZATION_RETRY_PROMPT, BUDGET_EXHAUSTED_FINALIZATION_PROMPT)
+    )

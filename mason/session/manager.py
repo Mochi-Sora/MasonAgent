@@ -27,7 +27,11 @@ from mason.runtime_context import (
     RUNTIME_CONTEXT_HISTORY_META,
     public_history_message,
 )
-from mason.session.history_visibility import HIDDEN_HISTORY_META, is_hidden_history_message
+from mason.session.history_visibility import (
+    HIDDEN_HISTORY_META,
+    is_hidden_history_message,
+    visible_history_message_count,
+)
 from mason.session.keys import is_internal_session
 from mason.session.model_selection import SESSION_MODEL_PRESET_METADATA_KEY
 from mason.session.summary import SUMMARY_CONTINUATION_TEXT, is_summary_checkpoint
@@ -1242,7 +1246,7 @@ class JsonlSessionStore:
             "metadata": session.metadata,
             # Served from the metadata record so session listings and
             # single-session updates never read the transcript for a count.
-            "message_count": len(session.messages),
+            "message_count": visible_history_message_count(session.messages),
             "last_archived": session.last_archived,
             # Keep old mason releases able to read sessions written
             # during the field-name migration.
@@ -1444,7 +1448,7 @@ class JsonlSessionStore:
                 "created_at": repaired.created_at.isoformat(),
                 "updated_at": repaired.updated_at.isoformat(),
                 "metadata": repaired.metadata,
-                "message_count": len(repaired.messages),
+                "message_count": visible_history_message_count(repaired.messages),
             }
 
     def list_sessions(self) -> list[SessionInfo]:
@@ -1559,7 +1563,7 @@ class JsonlSessionStore:
                                 "",
                             ),
                             "path": str(path),
-                            "message_count": len(repaired.messages),
+                            "message_count": visible_history_message_count(repaired.messages),
                         }
                     )
                 continue

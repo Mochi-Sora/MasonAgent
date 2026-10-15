@@ -11,6 +11,7 @@ from pathlib import Path
 
 from mason.providers.base import ProviderConversationState
 from mason.session import SessionManager
+from mason.utils.runtime import build_length_recovery_message
 
 
 def _manager(tmp_path: Path) -> SessionManager:
@@ -64,6 +65,24 @@ def test_stored_count_wins_over_the_transcript(tmp_path: Path) -> None:
     assert metadata is not None
     assert metadata["message_count"] == 1
     assert [row["message_count"] for row in reloaded.list_sessions()] == [1]
+
+
+def test_message_count_excludes_hidden_history_entries(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    session = manager.get_or_create("cli:hidden")
+    session.messages = [
+        {"role": "user", "content": "write a very long answer"},
+        {"role": "assistant", "content": "First segment."},
+        build_length_recovery_message("First segment."),
+        {"role": "assistant", "content": "Second segment."},
+        {"role": "tool", "tool_call_id": "call_1", "name": "exec", "content": "ok"},
+    ]
+    manager.save(session)
+
+    metadata = _manager(tmp_path).read_session_metadata("cli:hidden")
+
+    assert metadata is not None
+    assert metadata["message_count"] == 3
 
 
 def test_legacy_records_without_a_count_fall_back_to_counting(tmp_path: Path) -> None:
