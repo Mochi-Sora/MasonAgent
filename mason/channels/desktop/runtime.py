@@ -40,6 +40,10 @@ Design notes
   id; 'chat.send' resolves ids owned by the sending connection into the turn's
   media.  Unused uploads expire after UPLOAD_TTL_S and their files are deleted
   as the registry is pruned.
+* Media fetch: 'media.fetch' returns the stored bytes of an attachment
+  referenced by a session transcript, so clients can rebuild previews after a
+  reload.  Resolution is transcript-scoped and the fetched file must live in
+  the instance media directory; fetch is whole-file (no range/seek).
 * Retry / recovery / response-source notices are 'interactive' notifications
   (a channel capability, see mason.channels.capabilities); protocol v1 has no
   frames for them yet, so this channel does not declare the capability.
@@ -85,6 +89,7 @@ from mason.channels.desktop.protocol import (
     ERROR_BAD_REQUEST,
     ERROR_BUSY,
     ERROR_INTERNAL,
+    ERROR_MEDIA_GONE,
     ERROR_NO_APPROVAL,
     ERROR_NO_ATTACHMENT,
     ERROR_NO_SESSION,
@@ -114,7 +119,11 @@ from mason.config.paths import get_media_dir
 from mason.config.schema import Base
 from mason.pairing import PAIRING_CODE_META_KEY, approve_code, generate_code, is_approved
 from mason.session.access import SessionAccess
-from mason.session.attachments import ATTACHMENTS_METADATA_KEY
+from mason.session.attachments import (
+    ATTACHMENT_PATH_KEY,
+    ATTACHMENTS_METADATA_KEY,
+    public_attachment,
+)
 from mason.session.turn_metadata import TURN_ID_METADATA_KEY
 from mason.utils.helpers import safe_filename
 
@@ -155,6 +164,7 @@ class DesktopConfig(Base):
     send_tool_hints: bool = True
     trust_localhost: bool = False
     max_upload_mb: int = 25
+    max_fetch_mb: int = 25
 
 
 @dataclass
@@ -250,6 +260,7 @@ class DesktopChannel(BaseChannel):
             "ping": self._handle_ping,
             "chat.send": self._handle_chat_send,
             "media.upload": self._handle_media_upload,
+            "media.fetch": self._handle_media_fetch,
             "turn.interrupt": self._handle_turn_interrupt,
             "sessions.list": self._handle_sessions_list,
             "sessions.history": self._handle_sessions_history,
@@ -584,8 +595,11 @@ class DesktopChannel(BaseChannel):
     # -- media uploads -------------------------------------------------------
 
     def _hello_limits(self) -> dict[str, int]:
-        """Advertised client limits, so uploads can be pre-checked."""
-        return {"max_upload_bytes": self._upload_limit_bytes()}
+        """Advertised client limits, so uploads and fetches can be pre-checked."""
+        return {
+            "max_upload_bytes": self._upload_limit_bytes(),
+            "max_fetch_bytes": self._fetch_limit_bytes(),
+        }
 
     async def _handle_media_upload(
         self, connection: _Connection, request: RequestFrame
@@ -663,6 +677,102 @@ class DesktopChannel(BaseChannel):
             token,
         )
         await connection.send_frame(ok_response(request.id, _attachment_payload(record)))
+
+    async def _handle_media_fetch(
+        self, connection: _Connection, request: RequestFrame
+    ) -> None:
+        """Serve the stored bytes of an attachment referenced by a session.
+
+        Resolution is transcript-scoped: the id must appear on a record
+        persisted with the session, so a client can never point the server at
+        an arbitrary path.  Fetch is whole-file; players cannot seek.
+        """
+        token = connection.device_token
+        if token is None or not is_approved(self.name, token):
+            await connection.send_frame(
+                error_response(request.id, ERROR_UNAUTHORIZED, "device token is not approved")
+            )
+            await connection.close(CLOSE_UNAUTHORIZED, "unauthorized")
+            return
+        session_id = optional_text(request.body.get("session_id"))
+        attachment_id = optional_text(request.body.get("attachment_id"))
+        if session_id is None or attachment_id is None:
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_BAD_REQUEST,
+                    "session_id and attachment_id are required",
+                )
+            )
+            return
+        manager = self._services.session_manager
+        if manager is None:
+            await connection.send_frame(
+                error_response(request.id, ERROR_INTERNAL, "session services are unavailable")
+            )
+            return
+        try:
+            payload = manager.read_session_file(session_id)
+        except Exception:
+            self.logger.exception("desktop: failed to read session {}", session_id)
+            await connection.send_frame(
+                error_response(request.id, ERROR_INTERNAL, "failed to read the session")
+            )
+            return
+        if payload is None:
+            await connection.send_frame(
+                error_response(request.id, ERROR_NO_SESSION, f"unknown session {session_id}")
+            )
+            return
+        stored = _stored_attachment(payload.get("messages"), attachment_id)
+        if stored is None:
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_NO_ATTACHMENT,
+                    f"attachment {attachment_id} is not referenced by this session",
+                )
+            )
+            return
+        media_root = get_media_dir(self.name).resolve()
+        stored_path = _stored_attachment_path(stored)
+        if (
+            stored_path is None
+            or not stored_path.is_relative_to(media_root)
+            or not stored_path.is_file()
+        ):
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_MEDIA_GONE,
+                    "the stored media file is no longer available",
+                )
+            )
+            return
+        limit = self._fetch_limit_bytes()
+        try:
+            if stored_path.stat().st_size > limit:
+                await connection.send_frame(
+                    error_response(
+                        request.id,
+                        ERROR_TOO_LARGE,
+                        f"stored file exceeds the {self.config.max_fetch_mb} MB fetch limit",
+                        {"limit_bytes": limit},
+                    )
+                )
+                return
+            raw = stored_path.read_bytes()
+        except OSError:
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_MEDIA_GONE,
+                    "the stored media file is no longer available",
+                )
+            )
+            return
+        result = _stored_attachment_response(stored, base64.b64encode(raw).decode("ascii"))
+        await connection.send_frame(ok_response(request.id, result))
 
     async def _handle_chat_send(self, connection: _Connection, request: RequestFrame) -> None:
         token = connection.device_token
@@ -744,9 +854,10 @@ class DesktopChannel(BaseChannel):
         metadata: dict[str, Any] = {TURN_ID_METADATA_KEY: turn_id}
         if attachments:
             # Persisted with the user turn so sessions.history can return the
-            # same records after a reload.
+            # same records after a reload, and media.fetch can resolve the
+            # stored bytes; the private path never leaves the transcript.
             metadata[ATTACHMENTS_METADATA_KEY] = [
-                _attachment_payload(record) for record in attachments
+                _persisted_attachment_payload(record) for record in attachments
             ]
         try:
             await self._handle_message(
@@ -1438,6 +1549,10 @@ class DesktopChannel(BaseChannel):
         """The accepted decoded size for one upload, in bytes."""
         return max(0, int(self.config.max_upload_mb)) * 1024 * 1024
 
+    def _fetch_limit_bytes(self) -> int:
+        """The largest stored file media.fetch will return, in bytes."""
+        return max(0, int(self.config.max_fetch_mb)) * 1024 * 1024
+
     def _upload_frame_max_bytes(self) -> int:
         """Frame size that admits a capped base64 upload plus its JSON envelope."""
         encoded = 4 * ((self._upload_limit_bytes() + 2) // 3)
@@ -1593,6 +1708,54 @@ def _attachment_payload(record: _UploadRecord) -> dict[str, Any]:
     }
     if record.duration_ms is not None:
         payload["duration_ms"] = record.duration_ms
+    return payload
+
+
+def _persisted_attachment_payload(record: _UploadRecord) -> dict[str, Any]:
+    """The transcript projection: public fields plus the private stored path.
+
+    ``media.fetch`` resolves ids through this record; public projections drop
+    the underscore-prefixed key, so it never reaches a frame or the model.
+    """
+    return _attachment_payload(record) | {ATTACHMENT_PATH_KEY: str(record.path)}
+
+
+def _stored_attachment(messages: object, attachment_id: str) -> dict[str, Any] | None:
+    """Find the persisted attachment record for an id in a session transcript."""
+    if not isinstance(messages, list):
+        return None
+    for raw_message in cast(list[object], messages):
+        if not isinstance(raw_message, Mapping):
+            continue
+        records = cast(Mapping[str, Any], raw_message).get(ATTACHMENTS_METADATA_KEY)
+        if not isinstance(records, list):
+            continue
+        for raw_record in cast(list[object], records):
+            if not isinstance(raw_record, Mapping):
+                continue
+            record = cast(Mapping[str, Any], raw_record)
+            if record.get("attachment_id") == attachment_id:
+                return dict(record)
+    return None
+
+
+def _stored_attachment_path(stored: Mapping[str, Any]) -> Path | None:
+    """Resolve a record's private path; ``None`` when absent or unresolvable."""
+    raw_path = stored.get(ATTACHMENT_PATH_KEY)
+    if not isinstance(raw_path, str) or not raw_path:
+        return None
+    try:
+        return Path(raw_path).resolve()
+    except OSError:
+        return None
+
+
+def _stored_attachment_response(stored: Mapping[str, Any], data: str) -> dict[str, Any]:
+    """The media.fetch result: the public record plus the base64 bytes."""
+    payload = dict(public_attachment(stored))
+    if payload.get("duration_ms") is None:
+        payload.pop("duration_ms", None)
+    payload["data"] = data
     return payload
 
 

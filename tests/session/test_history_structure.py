@@ -187,6 +187,7 @@ def test_attachment_records_hide_path_placeholders(tmp_path: Path) -> None:
         "kind": "image",
         "size": 42,
         "duration_ms": None,
+        "_path": "/root/.mason/media/desktop/uuid.png",
     }
     session = manager.get_or_create("desktop:media")
     session.messages = [
@@ -210,7 +211,9 @@ def test_attachment_records_hide_path_placeholders(tmp_path: Path) -> None:
     assert match is not None
     messages = match["messages"]
     assert messages[0]["content"] == "look at this"
-    assert messages[0]["attachments"] == [record]
+    assert messages[0]["attachments"] == [
+        {key: value for key, value in record.items() if not key.startswith("_")}
+    ]
     assert messages[2]["content"] == ""
     assert messages[2]["attachments"][0]["name"] == "photo.jpg"
     assert "/root/.mason/media" not in json.dumps(messages)

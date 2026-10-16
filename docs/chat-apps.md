@@ -1152,6 +1152,7 @@ Pairing works like any other channel: an unpaired client receives a pairing code
 > - `trustLocalhost`: default `false`. Only enable it when every local process may act as the client; it skips pairing entirely for loopback connections.
 > - `allowFrom`: optional allowlist of approved device IDs.
 > - `maxUploadMb`: default `25`. Upload cap for `media.upload` attachments; larger payloads are rejected with `too_large`.
+> - `maxFetchMb`: default `25`. Cap for files returned by `media.fetch`; the last allowed size is advertised to clients as `hello.limits.max_fetch_bytes`, and larger stored files answer `too_large`. Fetch is whole-file (no range/seek).
 > - `streaming`, `sendProgress`, `sendToolHints`, and `showReasoning` (all default `true`) control what the desktop client receives.
 
 **2. Run**

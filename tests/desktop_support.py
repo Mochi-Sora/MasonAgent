@@ -79,6 +79,26 @@ def make_cron_service(jobs: list[Any]) -> Any:
     return SimpleNamespace(list_jobs=lambda include_disabled=True: list(jobs))
 
 
+def private_payload_keys(value: object, path: str = "") -> list[str]:
+    """Every underscore-prefixed key anywhere in a frame payload.
+
+    Private transcript metadata (``_path``, ``_command``, ``_hidden_history``)
+    must never reach a client frame; tests assert this returns ``[]``.
+    """
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, item in cast(dict[object, object], value).items():
+            key_text = str(key)
+            child = f"{path}.{key_text}" if path else key_text
+            if key_text.startswith("_"):
+                found.append(child)
+            found.extend(private_payload_keys(item, child))
+    elif isinstance(value, list):
+        for index, item in enumerate(cast(list[object], value)):
+            found.extend(private_payload_keys(item, f"{path}[{index}]"))
+    return found
+
+
 class DesktopHarness:
     """A running desktop channel plus its message bus."""
 

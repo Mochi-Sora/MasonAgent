@@ -16,7 +16,14 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from desktop_support import connect_client, hello, next_event, next_frame, request
+from desktop_support import (
+    connect_client,
+    hello,
+    next_event,
+    next_frame,
+    private_payload_keys,
+    request,
+)
 
 from mason.agent.loop import AgentLoop
 from mason.bus.queue import MessageBus
@@ -315,7 +322,7 @@ async def test_gateway_length_recovery_leaves_history_clean(tmp_path: Path) -> N
 async def test_gateway_attachment_records_reach_history(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An uploaded image survives a reload as a record, not a filesystem path."""
+    """An uploaded image survives a reload as a record and refetchable bytes."""
     media_dir = tmp_path / "desktop-media"
     media_dir.mkdir(parents=True, exist_ok=True)
 
@@ -330,7 +337,8 @@ async def test_gateway_attachment_records_reach_history(
     async with gateway_stack(tmp_path, provider) as stack:
         ws = await connect_client(stack.url)
         try:
-            await hello(ws)
+            paired = await hello(ws)
+            assert paired["result"]["limits"]["max_fetch_bytes"] == 25 * 1024 * 1024
             raw = b"\x89PNG fake image body"
             upload = await request(
                 ws,
@@ -352,12 +360,11 @@ async def test_gateway_attachment_records_reach_history(
                 attachments=[attachment["attachment_id"]],
             )
             session_id = sent["result"]["session_id"]
-            echo = await next_event(ws, "message")
-            assert echo["event"]["role"] == "user"
-            assert echo["event"]["attachments"] == [attachment]
-
-            end = await next_event(ws, "turn.end")
-            assert end["event"]["status"] == "completed"
+            frames = await _frames_until_turn_end(ws)
+            events = [frame["event"] for frame in frames]
+            echo = next(event for event in events if event.get("role") == "user")
+            assert echo["attachments"] == [attachment]
+            assert frames[-1]["event"]["status"] == "completed"
 
             history = await request(ws, "h1", "sessions.history", session_id=session_id)
             messages = history["result"]["messages"]
@@ -368,12 +375,29 @@ async def test_gateway_attachment_records_reach_history(
             for message in messages:
                 assert str(media_dir) not in message["text"]
 
-            # The stored transcript keeps the structured record, so reloads and
-            # replay see the attachment even though the client text has no path.
+            # Reload path: the transcript record resolves the stored bytes.
+            fetched = await request(
+                ws,
+                "m1",
+                "media.fetch",
+                session_id=session_id,
+                attachment_id=attachment["attachment_id"],
+            )
+            assert fetched["ok"] is True
+            assert fetched["result"] == {
+                **attachment,
+                "data": base64.b64encode(raw).decode("ascii"),
+            }
+
+            # The stored transcript keeps the structured record and its private
+            # path, but no frame may carry an underscore-prefixed key.
             stored = next((tmp_path / "sessions").rglob("*.jsonl"))
             raw_transcript = stored.read_text(encoding="utf-8")
             assert attachment["attachment_id"] in raw_transcript
             assert "photo.png" in raw_transcript
+            assert "_path" in raw_transcript
             assert "[image:" not in user_message["text"]
+            for frame in [*frames, history, fetched]:
+                assert private_payload_keys(frame) == []
         finally:
             await ws.close()

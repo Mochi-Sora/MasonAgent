@@ -9,11 +9,13 @@ from typing import Any
 
 import pytest
 from desktop_support import (
+    FakeSessionManager,
     connect_client,
     desktop_channel,
     hello,
     next_event,
     next_frame,
+    private_payload_keys,
     request,
 )
 
@@ -51,6 +53,31 @@ async def _upload(ws: Any, frame_id: str, data: bytes, **fields: Any) -> dict[st
 
 def _is_uuid_stem(path: Path) -> bool:
     return len(path.stem) == 32 and all(char in "0123456789abcdef" for char in path.stem)
+
+
+def _stored_record(
+    media_dir: Path, attachment_id: str = "att-0123456789ab", **overrides: Any
+) -> dict[str, Any]:
+    """A transcript record as the channel persists it (private path included)."""
+    record: dict[str, Any] = {
+        "attachment_id": attachment_id,
+        "name": "photo.jpg",
+        "mime": "image/jpeg",
+        "kind": "image",
+        "size": 10,
+        "duration_ms": None,
+        "_path": str(media_dir / "stored.bin"),
+    }
+    record.update(overrides)
+    return record
+
+
+def _session_with_attachment(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "messages": [
+            {"role": "user", "content": "look", "attachments": [record]},
+        ]
+    }
 
 
 async def test_upload_then_chat_send_publishes_media(
@@ -354,5 +381,181 @@ async def test_expired_upload_is_pruned_with_its_file(
             )
             assert denied["error"]["code"] == "no_attachment"
             assert not stored.exists()
+        finally:
+            await ws.close()
+
+
+async def test_media_fetch_returns_stored_bytes(
+    tmp_path: Path, _desktop_media_dir: Path
+) -> None:
+    raw = b"jpeg bytes"
+    stored = _desktop_media_dir / "stored.bin"
+    stored.write_bytes(raw)
+    record = _stored_record(_desktop_media_dir, size=len(raw), duration_ms=4200)
+
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        harness.channel.attach_services(
+            session_manager=FakeSessionManager(
+                sessions={"desktop:abc": _session_with_attachment(record)}
+            )
+        )
+        ws = await connect_client(harness.url)
+        try:
+            await hello(ws)
+            fetched = await request(
+                ws, "m1", "media.fetch", session_id="desktop:abc",
+                attachment_id=record["attachment_id"],
+            )
+            assert fetched["ok"] is True
+            assert fetched["result"] == {
+                "attachment_id": record["attachment_id"],
+                "name": "photo.jpg",
+                "mime": "image/jpeg",
+                "kind": "image",
+                "size": len(raw),
+                "duration_ms": 4200,
+                "data": base64.b64encode(raw).decode("ascii"),
+            }
+        finally:
+            await ws.close()
+
+
+async def test_media_fetch_rejects_unknown_targets(
+    tmp_path: Path, _desktop_media_dir: Path
+) -> None:
+    stored = _desktop_media_dir / "stored.bin"
+    stored.write_bytes(b"bytes")
+    record = _stored_record(_desktop_media_dir)
+
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        harness.channel.attach_services(
+            session_manager=FakeSessionManager(
+                sessions={
+                    "desktop:abc": _session_with_attachment(record),
+                    "desktop:other": {"messages": [{"role": "user", "content": "hi"}]},
+                }
+            )
+        )
+        ws = await connect_client(harness.url)
+        try:
+            await hello(ws)
+            missing = await request(ws, "m1", "media.fetch", session_id="desktop:abc")
+            assert missing["error"]["code"] == "bad_request"
+
+            unknown_session = await request(
+                ws, "m2", "media.fetch", session_id="desktop:nope",
+                attachment_id=record["attachment_id"],
+            )
+            assert unknown_session["error"]["code"] == "no_session"
+
+            foreign = await request(
+                ws, "m3", "media.fetch", session_id="desktop:other",
+                attachment_id=record["attachment_id"],
+            )
+            assert foreign["error"]["code"] == "no_attachment"
+
+            # Uploaded but never sent: the id exists only in the upload
+            # registry, so no transcript references it.
+            upload = await _upload(ws, "u1", b"pending", name="pending.jpg")
+            pending = await request(
+                ws, "m4", "media.fetch", session_id="desktop:abc",
+                attachment_id=upload["result"]["attachment_id"],
+            )
+            assert pending["error"]["code"] == "no_attachment"
+        finally:
+            await ws.close()
+
+
+async def test_media_fetch_reports_gone_and_limits(
+    tmp_path: Path, _desktop_media_dir: Path
+) -> None:
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(b"secret")
+    big = _desktop_media_dir / "big.bin"
+    big.write_bytes(b"x" * (1024 * 1024 + 1))
+    missing = _stored_record(
+        _desktop_media_dir, attachment_id="att-111111111111", name="gone.jpg"
+    )
+    escaped = _stored_record(
+        _desktop_media_dir, attachment_id="att-222222222222", _path=str(outside)
+    )
+    legacy = _stored_record(_desktop_media_dir, attachment_id="att-333333333333")
+    legacy.pop("_path")
+    oversize = _stored_record(
+        _desktop_media_dir, attachment_id="att-444444444444",
+        size=1024 * 1024 + 1, _path=str(big),
+    )
+
+    async with desktop_channel(tmp_path, trustLocalhost=True, maxFetchMb=1) as harness:
+        harness.channel.attach_services(
+            session_manager=FakeSessionManager(sessions={
+                "desktop:abc": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "look",
+                            "attachments": [missing, escaped, legacy, oversize],
+                        }
+                    ]
+                }
+            })
+        )
+        ws = await connect_client(harness.url)
+        try:
+            await hello(ws)
+            # No stored file, a path outside the media directory, and a legacy
+            # record without a path all report the file as gone.
+            for attachment_id in (
+                "att-111111111111", "att-222222222222", "att-333333333333"
+            ):
+                gone = await request(
+                    ws, f"m-{attachment_id}", "media.fetch", session_id="desktop:abc",
+                    attachment_id=attachment_id,
+                )
+                assert gone["error"]["code"] == "media_gone"
+
+            too_large = await request(
+                ws, "m-large", "media.fetch", session_id="desktop:abc",
+                attachment_id="att-444444444444",
+            )
+            assert too_large["error"]["code"] == "too_large"
+            assert too_large["error"]["details"] == {"limit_bytes": 1024 * 1024}
+        finally:
+            await ws.close()
+
+
+async def test_media_frames_never_carry_private_keys(
+    tmp_path: Path, _desktop_media_dir: Path
+) -> None:
+    raw = b"bytes"
+    stored = _desktop_media_dir / "stored.bin"
+    stored.write_bytes(raw)
+    record = _stored_record(_desktop_media_dir, size=len(raw))
+
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        harness.channel.attach_services(
+            session_manager=FakeSessionManager(
+                sessions={"desktop:abc": _session_with_attachment(record)}
+            )
+        )
+        ws = await connect_client(harness.url)
+        try:
+            frames = [await hello(ws)]
+            frames.append(
+                await request(ws, "h1", "sessions.history", session_id="desktop:abc")
+            )
+            frames.append(
+                await request(
+                    ws, "m1", "media.fetch", session_id="desktop:abc",
+                    attachment_id=record["attachment_id"],
+                )
+            )
+            frames.append(await _upload(ws, "u1", raw))
+            assert frames[-1]["ok"] is True
+            for frame in frames:
+                assert private_payload_keys(frame) == []
+
+            history = frames[1]["result"]["messages"]
+            assert history[0]["attachments"][0]["attachment_id"] == record["attachment_id"]
         finally:
             await ws.close()

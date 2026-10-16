@@ -15,6 +15,7 @@ SETUP_SPEC = ChannelSetupSpec(
         "sendToolHints": field("bool", default=True),
         "trustLocalhost": field("bool", default=False),
         "maxUploadMb": field("int", default=25),
+        "maxFetchMb": field("int", default=25),
     },
 )
 

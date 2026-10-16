@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from mason.runtime_context import public_history_message
-from mason.session.attachments import AttachmentRecord, normalize_attachments
+from mason.session.attachments import (
+    AttachmentRecord,
+    normalize_attachments,
+    public_attachments,
+)
 from mason.session.history_visibility import (
     HIDDEN_HISTORY_CONTINUATION,
     hidden_history_kind,
@@ -203,7 +207,7 @@ def _visible_messages(
             continue
         public = public_history_message(message)
         text = _message_text(public)
-        attachments = normalize_attachments(public.get("attachments"))
+        attachments = public_attachments(normalize_attachments(public.get("attachments")))
         if attachments:
             text = _strip_attachment_placeholders(text)
         reasoning = _reasoning_segments(public)
