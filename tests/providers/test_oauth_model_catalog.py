@@ -14,8 +14,10 @@ import pytest
 from mason.providers.oauth_model_catalog import (
     OAuthCatalogAuthRequiredError,
     OAuthModelCatalog,
+    OAuthModelCatalogSnapshot,
     get_oauth_model_catalog,
     invalidate_oauth_model_catalog,
+    preferred_oauth_model,
 )
 from mason.providers.openai_codex_provider import DEFAULT_OPENAI_CODEX_MODELS_URL
 from mason.providers.registry import ProviderModelSpec
@@ -34,6 +36,59 @@ def _clear_oauth_catalogs() -> None:
 
 def _fallback_model() -> ProviderModelSpec:
     return ProviderModelSpec(id="provider/fallback", label="Fallback")
+
+
+def _snapshot(*models: ProviderModelSpec) -> OAuthModelCatalogSnapshot:
+    return OAuthModelCatalogSnapshot(
+        models=tuple(models),
+        source="remote",
+        fetched_at=0.0,
+    )
+
+
+def test_preferred_oauth_model_keeps_default_when_account_lists_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models = (
+        ProviderModelSpec(id="provider/other", label="Other"),
+        ProviderModelSpec(id="provider/preferred", label="Preferred"),
+    )
+    monkeypatch.setattr(
+        "mason.providers.oauth_model_catalog.get_oauth_model_catalog",
+        lambda *_args, **_kwargs: _snapshot(*models),
+    )
+
+    assert preferred_oauth_model("openai_codex", "provider/preferred") == "provider/preferred"
+
+
+def test_preferred_oauth_model_uses_top_account_model_when_default_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models = (
+        ProviderModelSpec(id="openai-codex/gpt-5.6-luna", label="GPT-5.6-Luna"),
+        ProviderModelSpec(id="openai-codex/gpt-5.6-terra", label="GPT-5.6-Terra"),
+    )
+    monkeypatch.setattr(
+        "mason.providers.oauth_model_catalog.get_oauth_model_catalog",
+        lambda *_args, **_kwargs: _snapshot(*models),
+    )
+
+    assert preferred_oauth_model(
+        "openai_codex", "openai-codex/gpt-5.6-sol"
+    ) == "openai-codex/gpt-5.6-luna"
+
+
+def test_preferred_oauth_model_keeps_default_when_catalog_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "mason.providers.oauth_model_catalog.get_oauth_model_catalog",
+        lambda *_args, **_kwargs: _snapshot(),
+    )
+
+    assert preferred_oauth_model(
+        "openai_codex", "openai-codex/gpt-5.6-sol"
+    ) == "openai-codex/gpt-5.6-sol"
 
 
 def test_xai_catalog_fetches_remote_models_and_reuses_capability_metadata(

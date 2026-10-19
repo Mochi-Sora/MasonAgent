@@ -599,10 +599,14 @@ def test_provider_login_openai_codex_handles_missing_oauth_symbol(monkeypatch):
     assert result.exception is not None
 
 
-def test_provider_login_can_set_openai_codex_as_main_provider(tmp_path):
+def test_provider_login_can_set_openai_codex_as_main_provider(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
     called = False
     original = provider_commands._LOGIN_HANDLERS["openai_codex"]
+    monkeypatch.setattr(
+        "mason.providers.oauth_model_catalog.preferred_oauth_model",
+        lambda _provider, preferred, proxy=None: preferred,
+    )
 
     def fake_login() -> None:
         nonlocal called
@@ -633,6 +637,47 @@ def test_provider_login_can_set_openai_codex_as_main_provider(tmp_path):
     assert saved.agents.defaults.model == "openai-codex/gpt-5.6-sol"
     assert saved.agents.defaults.model_preset is None
     assert make_provider(saved).__class__.__name__ == "OpenAICodexProvider"
+
+
+def test_provider_login_picks_an_account_model_when_default_is_unavailable(
+    tmp_path, monkeypatch
+):
+    """A plan without the curated flagship must not be pinned to it."""
+    config_path = tmp_path / "config.json"
+    original = provider_commands._LOGIN_HANDLERS["openai_codex"]
+    seen: list[tuple[str, str]] = []
+
+    def fake_preferred(provider: str, preferred: str, *, proxy=None) -> str:
+        seen.append((provider, preferred))
+        return "openai-codex/gpt-5.6-luna"
+
+    provider_commands._LOGIN_HANDLERS["openai_codex"] = lambda: None
+    monkeypatch.setattr(
+        "mason.providers.oauth_model_catalog.preferred_oauth_model",
+        fake_preferred,
+    )
+    try:
+        result = runner.invoke(
+            app,
+            [
+                "provider",
+                "login",
+                "openai-codex",
+                "--set-main",
+                "--config",
+                str(config_path),
+            ],
+        )
+    finally:
+        provider_commands._LOGIN_HANDLERS["openai_codex"] = original
+
+    assert result.exit_code == 0
+    assert seen == [("openai_codex", "openai-codex/gpt-5.6-sol")]
+    assert "gpt-5.6-luna" in result.stdout
+
+    saved = Config.model_validate(json.loads(config_path.read_text(encoding="utf-8")))
+    assert saved.agents.defaults.provider == "openai_codex"
+    assert saved.agents.defaults.model == "openai-codex/gpt-5.6-luna"
 
 
 def test_provider_login_prints_oauth_urls_without_hard_wrapping(monkeypatch):

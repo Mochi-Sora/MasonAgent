@@ -1008,8 +1008,14 @@ class TestMainMenuUpdate:
         config = Config()
         oauth_calls: list[tuple[Config, str]] = []
         model_prompts: list[tuple[str, str, str]] = []
+        events: list[str] = []
 
         monkeypatch.setattr(onboard_wizard, "_show_quick_start_progress", lambda *_args: None)
+        monkeypatch.setattr(
+            onboard_wizard,
+            "_quick_start_oauth_default_model",
+            lambda _config, _provider, fallback: fallback,
+        )
         monkeypatch.setattr(
             onboard_wizard,
             "_select_with_back",
@@ -1020,6 +1026,7 @@ class TestMainMenuUpdate:
             raise AssertionError("OpenAI Codex Quick Start should not ask for an API key")
 
         def fake_model_input(prompt, current, provider, *, config):
+            events.append("model")
             model_prompts.append((prompt, current, provider))
             return current
 
@@ -1028,14 +1035,14 @@ class TestMainMenuUpdate:
         monkeypatch.setattr(
             onboard_wizard,
             "_quick_start_oauth_login",
-            lambda selected_config, provider: oauth_calls.append(
-                (selected_config, provider)
-            )
+            lambda selected_config, provider: events.append("login")
+            or oauth_calls.append((selected_config, provider))
             or True,
         )
 
         assert onboard_wizard._configure_quick_start_provider(config) is True
 
+        assert events == ["login", "model"]
         assert oauth_calls == [(config, "openai_codex")]
         assert model_prompts == [
             ("Model ID", "openai-codex/gpt-5.6-sol", "openai_codex")
@@ -1043,6 +1050,37 @@ class TestMainMenuUpdate:
         assert config.providers.openai_codex.api_key is None
         assert config.model_presets["primary"].provider == "openai_codex"
         assert config.model_presets["primary"].model == "openai-codex/gpt-5.6-sol"
+
+    def test_quick_start_openai_codex_defaults_to_an_account_model(self, monkeypatch):
+        """After login, Quick Start defaults to a model the account actually has."""
+        config = Config()
+        model_prompts: list[tuple[str, str, str]] = []
+
+        monkeypatch.setattr(onboard_wizard, "_show_quick_start_progress", lambda *_args: None)
+        monkeypatch.setattr(
+            onboard_wizard,
+            "_select_with_back",
+            lambda *args, **kwargs: "OpenAI Codex",
+        )
+        monkeypatch.setattr(onboard_wizard, "_quick_start_oauth_login", lambda *args: True)
+        monkeypatch.setattr(
+            onboard_wizard,
+            "_quick_start_oauth_default_model",
+            lambda _config, _provider, _fallback: "openai-codex/gpt-5.6-luna",
+        )
+
+        def fake_model_input(prompt, current, provider, *, config):
+            model_prompts.append((prompt, current, provider))
+            return current
+
+        monkeypatch.setattr(onboard_wizard, "_input_model_with_autocomplete", fake_model_input)
+
+        assert onboard_wizard._configure_quick_start_provider(config) is True
+
+        assert model_prompts == [
+            ("Model ID", "openai-codex/gpt-5.6-luna", "openai_codex")
+        ]
+        assert config.model_presets["primary"].model == "openai-codex/gpt-5.6-luna"
 
     def test_quick_start_oauth_login_uses_device_flow_when_headless(self, monkeypatch):
         """A headless host must not wait for a localhost browser callback."""

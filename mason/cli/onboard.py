@@ -1680,9 +1680,46 @@ def _quick_start_requires_api_key(provider_name: str, info: _QuickStartProviderI
 
 def _quick_start_codex_proxy(config: Config) -> str | None:
     """Resolve only the Codex proxy without validating unrelated provider secrets."""
+    return _quick_start_oauth_proxy(config, "openai_codex")
+
+
+def _quick_start_oauth_proxy(config: Config, provider_name: str) -> str | None:
+    """Resolve only one provider's proxy without validating unrelated secrets."""
     proxy_config = Config()
-    proxy_config.providers.openai_codex.proxy = config.providers.openai_codex.proxy
-    return resolve_config_env_vars(proxy_config).providers.openai_codex.proxy or None
+    source = getattr(config.providers, provider_name, None)
+    isolated = getattr(proxy_config.providers, provider_name, None)
+    if source is None or isolated is None:
+        return None
+    isolated.proxy = getattr(source, "proxy", None)
+    resolved = getattr(resolve_config_env_vars(proxy_config).providers, provider_name, None)
+    return (resolved.proxy if resolved is not None else None) or None
+
+
+def _quick_start_oauth_default_model(
+    config: Config, provider_name: str, fallback: str
+) -> str:
+    """Pick a model the signed-in account exposes when discovery is available."""
+    if not fallback:
+        return fallback
+    with suppress(Exception):
+        from mason.providers.oauth_model_catalog import preferred_oauth_model
+
+        return preferred_oauth_model(
+            provider_name,
+            fallback,
+            proxy=_quick_start_oauth_proxy(config, provider_name),
+        )
+    return fallback
+
+
+def _quick_start_default_model(
+    config: Config, provider_name: str, provider_info: _QuickStartProviderInfo | None
+) -> str:
+    """Return the initial Model ID prompt value for a Quick Start provider."""
+    default = provider_info.default_model if provider_info else ""
+    if provider_info and provider_info.is_oauth:
+        return _quick_start_oauth_default_model(config, provider_name, default)
+    return default
 
 
 def _headless_environment() -> bool:
@@ -1898,9 +1935,15 @@ def _configure_quick_start_provider(config: Config) -> bool | object:
         if api_base and (base_was_prompted or not catalog_provider.api_base):
             catalog_provider.api_base = api_base
 
+        # Authenticate first so the model default can come from the account's
+        # live catalog instead of a possibly unavailable curated model.
+        if provider_info and provider_info.is_oauth:
+            if not _quick_start_oauth_login(config, provider_name):
+                return False
+
         model = _input_model_with_autocomplete(
             "Model ID",
-            provider_info.default_model if provider_info else "",
+            _quick_start_default_model(config, provider_name, provider_info),
             provider_name,
             config=catalog_config,
         )
@@ -1910,10 +1953,6 @@ def _configure_quick_start_provider(config: Config) -> bool | object:
         if not model:
             console.print("[yellow]! Model ID is required for Quick Start[/yellow]")
             return False
-
-        if provider_info and provider_info.is_oauth:
-            if not _quick_start_oauth_login(config, provider_name):
-                return False
 
         if api_key is not None:
             provider_config.api_key = api_key

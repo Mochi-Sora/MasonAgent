@@ -252,6 +252,27 @@ def get_oauth_model_catalog(
     raise ValueError(f"OAuth model discovery is not available for {provider_name}")
 
 
+def preferred_oauth_model(
+    provider_name: str,
+    preferred: str,
+    *,
+    proxy: str | None = None,
+) -> str:
+    """Return ``preferred`` when the account exposes it, else its top model.
+
+    Model availability depends on the signed-in subscription tier, so a
+    curated default can be rejected at request time even though login
+    succeeded. Discovery is advisory: when the catalog cannot be loaded the
+    caller's default is kept rather than failing the login.
+    """
+    snapshot = get_oauth_model_catalog(provider_name, proxy=proxy)
+    if snapshot.find(preferred) is not None:
+        return preferred
+    if snapshot.models:
+        return snapshot.models[0].id
+    return preferred
+
+
 def invalidate_oauth_model_catalog(provider_name: str) -> None:
     """Invalidate provider discovery after its OAuth identity changes."""
     if provider_name == "openai_codex":

@@ -17,6 +17,7 @@ from mason import __logo__
 from mason.providers.oauth_guidance import OAUTH_CLI_KIT_MISSING_MESSAGE
 
 if TYPE_CHECKING:
+    from mason.config.schema import Config
     from mason.providers.registry import ProviderSpec
 
 
@@ -117,6 +118,39 @@ def _resolve_oauth_provider(provider: str) -> ProviderSpec:
     return spec
 
 
+def _oauth_catalog_proxy(provider_name: str, config: Config) -> str | None:
+    """Resolve only this provider's proxy without validating unrelated secrets."""
+    from mason.config.loader import resolve_config_env_vars
+    from mason.config.schema import Config as ConfigModel
+
+    proxy_config = ConfigModel()
+    source = getattr(config.providers, provider_name, None)
+    isolated = getattr(proxy_config.providers, provider_name, None)
+    if source is None or isolated is None:
+        return None
+    isolated.proxy = getattr(source, "proxy", None)
+    resolved = getattr(resolve_config_env_vars(proxy_config).providers, provider_name, None)
+    return (getattr(resolved, "proxy", None) or None) if resolved is not None else None
+
+
+def _catalog_aware_default(provider_name: str, preferred: str, config: Config) -> str:
+    """Prefer a model the signed-in account actually exposes.
+
+    OAuth model availability depends on the subscription tier, so a curated
+    default can be rejected at request time even though login succeeded.
+    Discovery is advisory; any failure keeps the curated default.
+    """
+    from mason.providers.oauth_model_catalog import preferred_oauth_model
+
+    with suppress(Exception):
+        return preferred_oauth_model(
+            provider_name,
+            preferred,
+            proxy=_oauth_catalog_proxy(provider_name, config),
+        )
+    return preferred
+
+
 def _set_oauth_provider_as_main(
     provider_name: str,
     *,
@@ -132,7 +166,16 @@ def _set_oauth_provider_as_main(
         console.print(f"[dim]Using config: {resolved_config_path}[/dim]")
 
     config = load_config(resolved_config_path)
-    selected_model = (model or "").strip() or _OAUTH_PROVIDER_DEFAULT_MODELS[provider_name]
+    selected_model = (model or "").strip()
+    if not selected_model:
+        selected_model = _OAUTH_PROVIDER_DEFAULT_MODELS[provider_name]
+        resolved_default = _catalog_aware_default(provider_name, selected_model, config)
+        if resolved_default != selected_model:
+            console.print(
+                f"[dim]{selected_model} is not listed for this account; "
+                f"using {resolved_default}.[/dim]"
+            )
+        selected_model = resolved_default
     config.agents.defaults.model_preset = None
     config.agents.defaults.provider = provider_name
     config.agents.defaults.model = selected_model
