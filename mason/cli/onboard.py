@@ -1216,8 +1216,45 @@ def _get_provider_info() -> dict[str, tuple[str, bool, bool, str]]:
             spec.default_api_base,
         )
         for spec in PROVIDERS
-        if not spec.is_oauth
+        if not spec.is_oauth and not spec.settings_alias_for
     }
+
+
+@lru_cache(maxsize=1)
+def _get_oauth_provider_display() -> dict[str, str]:
+    """OAuth providers offered by the advanced LLM Provider menu."""
+    from mason.providers.registry import PROVIDERS
+
+    return {
+        spec.name: spec.display_name or spec.name
+        for spec in PROVIDERS
+        if spec.is_oauth and not spec.settings_alias_for
+    }
+
+
+def _provider_menu_choices(config: Config) -> dict[str, str]:
+    """Map advanced-menu labels to provider names, without alias duplicates."""
+    entries: dict[str, str] = {
+        f"{display} (OAuth)": name
+        for name, display in _get_oauth_provider_display().items()
+    }
+    for name, display in _get_provider_names().items():
+        provider = getattr(config.providers, name, None)
+        label = f"{display} *" if provider and provider.api_key else display
+        entries[label] = name
+    return entries
+
+
+def _configure_oauth_provider(config: Config, provider_name: str, display: str) -> None:
+    """Authenticate an OAuth provider selected from the advanced menu."""
+    if provider_name in _QUICK_START_OAUTH_PROVIDERS:
+        if _quick_start_oauth_login(config, provider_name):
+            _configure_provider(config, provider_name)
+        return
+    command = f"mason provider login {provider_name.replace('_', '-')}"
+    console.print(
+        f"[yellow]{display} uses OAuth sign-in. Run `{command}` to authenticate.[/yellow]"
+    )
 
 
 def _get_provider_names() -> dict[str, str]:
@@ -1251,31 +1288,22 @@ def _configure_provider(config: Config, provider_name: str) -> None:
 def _configure_providers(config: Config) -> None:
     """Configure LLM providers."""
 
-    def get_provider_choices() -> list[str]:
-        """Build provider choices with config status indicators."""
-        choices: list[str] = []
-        for name, display in _get_provider_names().items():
-            provider = getattr(config.providers, name, None)
-            if provider and provider.api_key:
-                choices.append(f"{display} *")
-            else:
-                choices.append(display)
-        return choices + ["<- Back"]
-
     last_provider_key: str | None = None
     while True:
         try:
             console.clear()
-            _show_section_header("LLM Providers", "Select a provider to configure API key and endpoint")
-            choices = get_provider_choices()
+            _show_section_header(
+                "LLM Providers",
+                "Select a provider to configure its API key and endpoint, or sign in with OAuth",
+            )
+            entries = _provider_menu_choices(config)
+            choices = list(entries) + ["<- Back"]
             default_choice = None
             if last_provider_key:
-                display = _get_provider_names().get(last_provider_key)
-                if display:
-                    for c in choices:
-                        if c.replace(" *", "") == display:
-                            default_choice = c
-                            break
+                for label, name in entries.items():
+                    if name == last_provider_key:
+                        default_choice = label
+                        break
             answer = _select_with_back(
                 "Select provider:", choices, default=default_choice
             )
@@ -1283,16 +1311,16 @@ def _configure_providers(config: Config) -> None:
             if answer is _BACK_PRESSED or answer is None or answer == "<- Back":
                 break
 
-            # Type guard: answer is now guaranteed to be a string
             assert isinstance(answer, str)
-            # Extract provider name from choice (remove " *" suffix if present)
-            provider_name = answer.replace(" *", "")
-            # Find the actual provider key from display names
-            for name, display in _get_provider_names().items():
-                if display == provider_name:
-                    last_provider_key = name
-                    _configure_provider(config, name)
-                    break
+            provider_name = entries.get(answer)
+            if provider_name is None:
+                continue
+            last_provider_key = provider_name
+            oauth_display = _get_oauth_provider_display().get(provider_name)
+            if oauth_display is not None:
+                _configure_oauth_provider(config, provider_name, oauth_display)
+            else:
+                _configure_provider(config, provider_name)
 
         except KeyboardInterrupt:
             console.print("\n[dim]Returning to main menu...[/dim]")
@@ -1618,6 +1646,7 @@ def _get_quick_start_provider_info() -> dict[str, _QuickStartProviderInfo]:
         if (
             spec.name == "custom"
             or spec.is_transcription_only
+            or spec.settings_alias_for
             or (spec.is_oauth and spec.name not in _QUICK_START_OAUTH_PROVIDERS)
         ):
             continue

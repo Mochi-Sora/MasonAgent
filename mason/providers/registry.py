@@ -501,7 +501,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         name="github_copilot",
         keywords=("github_copilot", "copilot"),
         env_key="",
-        display_name="Github Copilot",
+        display_name="GitHub Copilot",
         model_catalog="hybrid",
         builtin_models=(
             ProviderModelSpec(

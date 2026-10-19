@@ -400,6 +400,27 @@ class TestProviderChannelInfo:
         assert "openai_codex" not in names
         assert "github_copilot" not in names
 
+    def test_get_provider_names_hides_settings_aliases(self):
+        """Alias entries must not appear as duplicate menu providers."""
+        from mason.cli.onboard import _get_provider_names
+
+        names = _get_provider_names()
+        assert "opencode" in names
+        assert "opencode_zen" not in names
+        assert len(set(names.values())) == len(names)
+
+    def test_advanced_provider_menu_includes_oauth_providers(self):
+        from mason.cli.onboard import _provider_menu_choices
+
+        entries = _provider_menu_choices(Config())
+
+        assert entries["OpenAI Codex (OAuth)"] == "openai_codex"
+        assert entries["xAI Grok (OAuth)"] == "xai_grok"
+        assert entries["GitHub Copilot (OAuth)"] == "github_copilot"
+        assert entries["OpenAI"] == "openai"
+        assert entries["OpenCode Zen"] == "opencode"
+        assert "OpenCode Zen *" not in entries
+
     def test_get_channel_names_returns_dict(self):
         from mason.cli.onboard import _get_channel_names
 
