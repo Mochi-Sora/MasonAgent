@@ -35,7 +35,7 @@ _OAUTH_PROVIDER_DEFAULT_MODELS: dict[str, str] = {
 
 
 class _OAuthToken(Protocol):
-    access: str | None
+    access: str
     account_id: str | None
 
 
@@ -167,12 +167,23 @@ def provider_login(
         "-m",
         help="Model to use when setting this provider as the active provider",
     ),
+    device: bool = typer.Option(
+        False,
+        "--device",
+        help="Use the device-code flow (headless hosts); supported by openai-codex",
+    ),
     config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
 ):
     """Authenticate with an OAuth provider."""
     spec = _resolve_oauth_provider(provider)
 
-    handler = _LOGIN_HANDLERS.get(spec.name)
+    if device:
+        handler = _LOGIN_DEVICE_HANDLERS.get(spec.name)
+        if handler is None:
+            console.print(f"[red]Device-code login is not supported for {spec.label}[/red]")
+            raise typer.Exit(1)
+    else:
+        handler = _LOGIN_HANDLERS.get(spec.name)
     if not handler:
         console.print(f"[red]Login not implemented for {spec.label}[/red]")
         raise typer.Exit(1)
@@ -217,17 +228,29 @@ def provider_logout(
     handler()
 
 
+def _openai_codex_proxy() -> str | None:
+    from mason.config.loader import load_config, resolve_config_env_vars
+
+    try:
+        return resolve_config_env_vars(load_config()).providers.openai_codex.proxy or None
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+
+
+def _finish_openai_codex_login(token: _OAuthToken | None) -> None:
+    if not (token and token.access):
+        console.print("[red]✗ Authentication failed[/red]")
+        raise typer.Exit(1)
+    console.print(
+        f"[green]✓ Authenticated with OpenAI Codex[/green]  [dim]{token.account_id}[/dim]"
+    )
+
+
 def _login_openai_codex() -> None:
     try:
-        from mason.config.loader import load_config, resolve_config_env_vars
-
         get_token, login_oauth_interactive = _load_openai_oauth_client()
-        proxy = None
-        try:
-            proxy = resolve_config_env_vars(load_config()).providers.openai_codex.proxy or None
-        except ValueError as e:
-            console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1) from e
+        proxy = _openai_codex_proxy()
         token = None
         with suppress(Exception):
             token = get_token(proxy=proxy)
@@ -238,15 +261,40 @@ def _login_openai_codex() -> None:
                 prompt_fn=lambda s: typer.prompt(s),
                 proxy=proxy,
             )
-        if not (token and token.access):
-            console.print("[red]✗ Authentication failed[/red]")
-            raise typer.Exit(1)
-        console.print(
-            f"[green]✓ Authenticated with OpenAI Codex[/green]  [dim]{token.account_id}[/dim]"
-        )
+        _finish_openai_codex_login(token)
     except ImportError:
         console.print(f"[red]{OAUTH_CLI_KIT_MISSING_MESSAGE}[/red]")
         raise typer.Exit(1)
+
+
+def _login_openai_codex_device() -> None:
+    """Authenticate with the Codex device-code flow (no localhost callback)."""
+    try:
+        from mason.providers import openai_codex_oauth
+
+        get_token, _login_interactive = _load_openai_oauth_client()
+    except ImportError:
+        console.print(f"[red]{OAUTH_CLI_KIT_MISSING_MESSAGE}[/red]")
+        raise typer.Exit(1)
+
+    proxy = _openai_codex_proxy()
+    token = None
+    with suppress(Exception):
+        token = get_token(proxy=proxy)
+    if token and token.access:
+        _finish_openai_codex_login(token)
+        return
+
+    console.print("[cyan]Starting device-code OAuth login...[/cyan]\n")
+    try:
+        token = openai_codex_oauth.login_openai_codex_device(
+            print_fn=lambda s: console.print(s),
+            proxy=proxy,
+        )
+    except openai_codex_oauth.OpenAICodexOAuthError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    _finish_openai_codex_login(token)
 
 
 def _logout_openai_codex() -> None:
@@ -368,6 +416,9 @@ _LOGIN_HANDLERS: dict[str, Callable[[], None]] = {
     "openai_codex": _login_openai_codex,
     "xai_grok": _login_xai_grok,
     "github_copilot": _login_github_copilot,
+}
+_LOGIN_DEVICE_HANDLERS: dict[str, Callable[[], None]] = {
+    "openai_codex": _login_openai_codex_device,
 }
 _LOGOUT_HANDLERS: dict[str, Callable[[], None]] = {
     "openai_codex": _logout_openai_codex,

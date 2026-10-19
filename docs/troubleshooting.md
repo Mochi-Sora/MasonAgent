@@ -170,7 +170,7 @@ If you need a known-good snippet instead of diagnosis, use [`provider-cookbook.m
 | Bedrock validation error | Check AWS region, credentials, model access, model ID, and whether the model supports Converse. |
 | OAuth provider fails | Run the matching login command: `openai-codex`, `xai-grok`, or `github-copilot`, normally with `--set-main`. |
 | Codex OAuth needs a proxy | Set `providers.openaiCodex.proxy` before running the login command. The proxy applies to login, token refresh, and Codex API requests. |
-| Codex login runs on a remote/headless machine | Open ChatGPT in your local browser; when the localhost callback page cannot load, copy the full `http://localhost:1455/auth/callback?...` URL from the address bar and paste the same callback URL back into the terminal. |
+| Codex login runs on a remote/headless machine | Run `mason provider login openai-codex --device` (device code, no callback listener). Alternatively open ChatGPT in your local browser and paste the full `http://localhost:1455/auth/callback?...` URL back into the terminal. |
 | Codex login runs in Docker | Start the container with `docker run -it` so the OAuth flow has an interactive terminal. |
 | Codex says a model is not supported with a ChatGPT account | Use provider `openai_codex` with a Codex model such as `openai-codex/gpt-5.6-sol`. Do not use the direct-API `openai/...` prefix with Codex OAuth. |
 | Config says `providers.openai_codex` conflicts with the built-in provider | Under `providers`, keep only the canonical `openaiCodex` settings key and remove a duplicate `openai_codex` key. A model preset's `provider` value remains `openai_codex`. |

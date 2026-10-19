@@ -412,12 +412,44 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         display_name="OpenAI Codex",
         model_catalog="hybrid",
         builtin_models=(
+            # The account's live catalog is authoritative; this is the offline
+            # fallback. GPT-5.6 remains available during the GPT-6 rollout and
+            # stays the curated default; retired models (GPT-5.5, GPT-5.4,
+            # GPT-5.3-Codex-Spark) are deliberately absent.
             ProviderModelSpec(
                 id="openai-codex/gpt-5.6-sol",
                 label="GPT-5.6-Sol",
-                description="Latest frontier agentic coding model.",
+                description="Frontier agentic coding model.",
                 context_window=272_000,
                 reasoning_efforts=("low", "medium", "high", "xhigh", "max", "ultra"),
+            ),
+            ProviderModelSpec(
+                id="openai-codex/gpt-6.1-sol",
+                label="GPT-6.1 Sol",
+                description="Recommended frontier model for complex coding and agentic work.",
+                context_window=272_000,
+                reasoning_efforts=("low", "medium", "high", "xhigh", "max", "ultra"),
+            ),
+            ProviderModelSpec(
+                id="openai-codex/gpt-6-astra",
+                label="GPT-6 Astra",
+                description="Most capable model for complex work across code, apps, and research.",
+                context_window=272_000,
+                reasoning_efforts=("low", "medium", "high", "xhigh", "max", "ultra"),
+            ),
+            ProviderModelSpec(
+                id="openai-codex/gpt-6-sol",
+                label="GPT-6 Sol",
+                description="Strong model for complex coding, research, and real-world work.",
+                context_window=272_000,
+                reasoning_efforts=("low", "medium", "high", "xhigh", "max", "ultra"),
+            ),
+            ProviderModelSpec(
+                id="openai-codex/gpt-6-luna",
+                label="GPT-6 Luna",
+                description="Fast, cost-efficient model for focused, repeatable tasks.",
+                context_window=272_000,
+                reasoning_efforts=("low", "medium", "high", "xhigh", "max"),
             ),
             ProviderModelSpec(
                 id="openai-codex/gpt-5.6-terra",
@@ -432,34 +464,6 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
                 description="Fast and affordable agentic coding model.",
                 context_window=272_000,
                 reasoning_efforts=("low", "medium", "high", "xhigh", "max"),
-            ),
-            ProviderModelSpec(
-                id="openai-codex/gpt-5.5",
-                label="GPT-5.5",
-                description="Frontier model for complex coding, research, and real-world work.",
-                context_window=272_000,
-                reasoning_efforts=("low", "medium", "high", "xhigh"),
-            ),
-            ProviderModelSpec(
-                id="openai-codex/gpt-5.4",
-                label="GPT-5.4",
-                description="Strong model for everyday coding.",
-                context_window=272_000,
-                reasoning_efforts=("low", "medium", "high", "xhigh"),
-            ),
-            ProviderModelSpec(
-                id="openai-codex/gpt-5.4-mini",
-                label="GPT-5.4-Mini",
-                description="Small, fast, and cost-efficient model for simpler coding tasks.",
-                context_window=272_000,
-                reasoning_efforts=("low", "medium", "high", "xhigh"),
-            ),
-            ProviderModelSpec(
-                id="openai-codex/gpt-5.3-codex-spark",
-                label="GPT-5.3-Codex-Spark",
-                description="Ultra-fast coding model.",
-                context_window=128_000,
-                reasoning_efforts=("low", "medium", "high", "xhigh"),
             ),
         ),
         backend="openai_codex",

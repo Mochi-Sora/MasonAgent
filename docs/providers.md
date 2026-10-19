@@ -570,9 +570,21 @@ For OpenAI Codex:
 mason provider login openai-codex --set-main
 ```
 
+On a headless host (a VPS or remote shell) use the device-code flow instead;
+it prints a URL and a one-time code and needs no local callback listener:
+
+```bash
+mason provider login openai-codex --device --set-main
+```
+
+If `~/.codex/auth.json` already exists from a Codex CLI login, mason adopts
+those credentials automatically instead of starting a new sign-in.
+
 mason refreshes the account's Codex model catalog online, including current
 context-window and reasoning-effort metadata, and falls back to a small compatible
-catalog when the service cannot be reached.
+catalog when the service cannot be reached. The current fallback covers GPT-6.1 Sol,
+GPT-6 Astra/Sol/Luna, and the GPT-5.6 models that remain available during the
+rollout; retired models (GPT-5.5, GPT-5.4, GPT-5.3-Codex-Spark) are not offered.
 
 For an eligible X Premium / Grok subscription:
 

@@ -635,6 +635,31 @@ def test_provider_login_can_set_openai_codex_as_main_provider(tmp_path):
     assert make_provider(saved).__class__.__name__ == "OpenAICodexProvider"
 
 
+def test_provider_login_openai_codex_device_flow_uses_device_handler():
+    called = False
+    original = provider_commands._LOGIN_DEVICE_HANDLERS["openai_codex"]
+
+    def fake_login() -> None:
+        nonlocal called
+        called = True
+
+    provider_commands._LOGIN_DEVICE_HANDLERS["openai_codex"] = fake_login
+    try:
+        result = runner.invoke(app, ["provider", "login", "openai-codex", "--device"])
+    finally:
+        provider_commands._LOGIN_DEVICE_HANDLERS["openai_codex"] = original
+
+    assert result.exit_code == 0
+    assert called is True
+
+
+def test_provider_login_device_flow_rejects_other_providers():
+    result = runner.invoke(app, ["provider", "login", "xai-grok", "--device"])
+
+    assert result.exit_code == 1
+    assert "Device-code login is not supported for xAI Grok" in result.stdout
+
+
 def test_provider_login_can_set_github_copilot_as_main_provider(tmp_path):
     config_path = tmp_path / "config.json"
     original = provider_commands._LOGIN_HANDLERS["github_copilot"]
