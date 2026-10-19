@@ -312,7 +312,7 @@ class TestBuildResponsesBodyExtraBody:
         assert body["include"] == ["web_search_call.action.sources"]
         assert provider._should_use_responses_api(None, None) is True
 
-    def test_deepseek_default_search_replaces_the_local_search_function(self) -> None:
+    def test_deepseek_does_not_enable_hosted_search_by_default(self) -> None:
         provider = OpenAICompatProvider(
             api_key="test-key",
             default_model="deepseek-v4-flash",
@@ -336,10 +336,17 @@ class TestBuildResponsesBodyExtraBody:
             tool_choice=None,
         )
 
-        assert body["tools"] == [{"type": "web_search"}]
+        # DeepSeek's hosted web search is opt-in via extraBody.tools; by
+        # default the local function tool is sent unchanged.
+        assert body["tools"] == [{
+            "type": "function",
+            "name": "web_search",
+            "description": "Search with mason's configured backend",
+            "parameters": {"type": "object"},
+        }]
         assert "include" not in body
 
-    def test_explicit_empty_tools_disables_deepseek_default_search(self) -> None:
+    def test_explicit_empty_tools_keeps_deepseek_function_tools(self) -> None:
         provider = OpenAICompatProvider(
             api_key="test-key",
             default_model="deepseek-v4-flash",

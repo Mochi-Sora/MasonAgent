@@ -358,10 +358,11 @@ request, while other tools such as `web_fetch` remain available.
 </details>
 
 <details>
-<summary><b>DeepSeek native web search</b></summary>
+<summary><b>DeepSeek native web search (opt-in)</b></summary>
 
-DeepSeek V4 Flash and Pro use DeepSeek's native Responses API. Their provider-hosted web search is
-enabled by default because it does not require a separate paid add-on. Turn it off in the provider settings, or with:
+DeepSeek V4 Flash and Pro use DeepSeek's native Responses API, but Mason does not enable the
+provider-hosted web search or fetch tools. Mason's own `web_search` and `web_fetch` function tools
+are used unless you opt in explicitly:
 
 ```json
 {
@@ -369,16 +370,16 @@ enabled by default because it does not require a separate paid add-on. Turn it o
     "deepseek": {
       "apiKey": "${DEEPSEEK_API_KEY}",
       "extraBody": {
-        "tools": []
+        "tools": [{ "type": "web_search" }]
       }
     }
   }
 }
 ```
 
-The switch applies to `deepseek-v4-flash` and `deepseek-v4-pro`; DeepSeek models that remain on
-Chat Completions cannot use this Responses tool. Native search calls appear in the activity
-stream, and their opaque output items are preserved for multi-turn Responses state replay.
+The hosted tool applies to `deepseek-v4-pro` (and is ignored by `deepseek-flash`); DeepSeek models
+that remain on Chat Completions cannot use it. Native search calls appear in the activity stream,
+and their opaque output items are preserved for multi-turn Responses state replay.
 
 </details>
 

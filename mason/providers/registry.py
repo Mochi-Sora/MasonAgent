@@ -526,13 +526,19 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         backend="openai_compat",
         default_api_base="https://api.deepseek.com",
         thinking_style="thinking_type",
+        # These models use DeepSeek's native Responses API. Its provider-hosted
+        # web search / fetch tools are deliberately NOT enabled: Mason keeps
+        # its own `web_search` and `web_fetch` function tools instead. Opt in
+        # explicitly via providers.deepseek.extraBody.tools.
+        # `deepseek-flash` and `deepseek-v4-pro` are the current models;
+        # `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` are legacy
+        # aliases the API still accepts (served by V4.1-Flash).
         responses_models=(
             "deepseek-flash",
             "deepseek-v4-flash",
             "deepseek-v4-pro",
             "deepseek-v4-flash-vision-exp",
         ),
-        responses_default_tools=("web_search",),
     ),
     # Gemini: Google's OpenAI-compatible endpoint
     ProviderSpec(

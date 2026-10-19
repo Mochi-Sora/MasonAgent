@@ -319,7 +319,7 @@ Arbitrary custom provider names are OpenAI-compatible only; they do not use the 
 
 `providers.openai.apiType` may be set when you need to force a specific OpenAI API surface. Other providers reject `apiType`; leave it unset outside `providers.openai`. Replace the model with a model ID available to your OpenAI account. Direct OpenAI Responses, OpenAI Codex, Azure OpenAI Responses, and eligible GitHub Copilot models share [opaque Responses state retention](./configuration.md#responses-state-and-compaction); native compaction is enabled only where the backend supports it. Provider-native features for OpenAI web search, Codex Fast mode, DeepSeek web search, and Grok X Search are enabled by setting the corresponding raw provider request fields under `extraBody`.
 
-DeepSeek is the model-level exception in the OpenAI-compatible provider: `deepseek-v4-flash` and `deepseek-v4-pro` automatically use DeepSeek's native Responses API. Its native `web_search` tool is enabled by default and shows its lifecycle in the chat transcript; set `providers.deepseek.extraBody.tools` to `[]` to disable it.
+DeepSeek is the model-level exception in the OpenAI-compatible provider: `deepseek-flash` and `deepseek-v4-pro` (plus the legacy `deepseek-v4-flash*` aliases) automatically use DeepSeek's native Responses API. Mason does **not** enable DeepSeek's provider-hosted web search or fetch tools; its own `web_search` and `web_fetch` function tools are sent instead. To opt in to the hosted `web_search` tool, add it explicitly under `providers.deepseek.extraBody.tools` (for example `[{"type": "web_search"}]`).
 
 ### Custom OpenAI-Compatible Endpoint
 
