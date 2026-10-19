@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -305,6 +306,10 @@ def test_stats_reports_counts_sizes_and_pending(db: MemoryDB) -> None:
     assert db.stats()["consolidation_cursor"] == 1
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX permission bits; the memory subsystem is unsupported on Windows",
+)
 def test_store_files_are_not_world_readable(db: MemoryDB) -> None:
     db.counts()  # force connect/create
     assert db.path.stat().st_mode & 0o777 == 0o600

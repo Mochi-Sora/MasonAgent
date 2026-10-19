@@ -206,8 +206,8 @@ class TestIdleScanThrottling:
 
     def test_configured_idle_scan_interval_throttles_checks(self, tmp_path, monkeypatch):
         """The configured interval should reach the loop and gate session scans."""
-        ticks = iter((1_000.0, 1_000.0, 1_009.999, 1_010.0))
-        monkeypatch.setattr("mason.agent.loop.time.monotonic", lambda: next(ticks))
+        clock = {"now": 1_000.0}
+        monkeypatch.setattr("mason.agent.loop.time.monotonic", lambda: clock["now"])
         config = Config.model_validate({
             "agents": {
                 "defaults": {
@@ -227,8 +227,12 @@ class TestIdleScanThrottling:
 
         loop._check_expired_sessions_if_due()
         loop.auto_compact.check_expired.assert_called_once()
+
+        clock["now"] = 1_009.999
         loop._check_expired_sessions_if_due()
         loop.auto_compact.check_expired.assert_called_once()
+
+        clock["now"] = 1_010.0
         loop._check_expired_sessions_if_due()
 
         assert loop.auto_compact.check_expired.call_count == 2
