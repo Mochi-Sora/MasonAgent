@@ -615,10 +615,47 @@ def _prompt_cache_key(session_id: str) -> str:
 
 
 def _friendly_error(status_code: int, raw: str) -> str:
-    _ = raw
     if status_code == 429:
         return "ChatGPT usage quota exceeded or rate limit triggered. Please try again later."
+    detail = _error_detail(raw)
+    if detail:
+        return f"HTTP {status_code}: Codex API request failed: {detail}"
     return f"HTTP {status_code}: Codex API request failed"
+
+
+def _error_detail(raw: str) -> str:
+    """Return a bounded one-line reason from a structured error payload.
+
+    The Codex backend reports actionable problems (unsupported model, bad
+    parameter, entitlement) in a JSON error body. Surface only those known
+    fields; never echo arbitrary response text, which could contain prompt
+    content.
+    """
+    if not raw.strip():
+        return ""
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    payload_data = cast(dict[str, Any], payload)
+    detail = ""
+    error = payload_data.get("error")
+    if isinstance(error, dict):
+        error_data = cast(dict[str, Any], error)
+        parts = [
+            str(error_data[key])
+            for key in ("message", "code", "param")
+            if isinstance(error_data.get(key), str) and error_data.get(key)
+        ]
+        if parts:
+            detail = " | ".join(parts)
+    elif isinstance(error, str) and error:
+        detail = error
+    elif isinstance(payload_data.get("detail"), str):
+        detail = cast(str, payload_data["detail"])
+    return " ".join(detail.split())[:300]
 
 
 def _codex_error_response(exc: Exception) -> LLMResponse:

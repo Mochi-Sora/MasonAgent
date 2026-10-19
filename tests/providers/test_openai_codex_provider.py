@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import ssl
 from types import SimpleNamespace
 from typing import Any
@@ -18,6 +19,7 @@ from mason.providers.openai_codex_provider import (
     _build_reasoning_options,
     _codex_error_response,
     _CodexHTTPError,
+    _error_detail,
     _friendly_error,
     _request_codex,
     _should_retry_status,
@@ -125,6 +127,65 @@ def test_codex_http_friendly_error_omits_raw_body() -> None:
     assert "PRIVATE PROMPT MUST NOT APPEAR" not in message
 
 
+def test_codex_http_friendly_error_includes_structured_reason() -> None:
+    raw = (
+        '{"error": {"message": "Unsupported model: gpt-9", '
+        '"type": "invalid_request_error", "code": "model_not_found", '
+        '"param": "model"}}'
+    )
+
+    message = _friendly_error(400, raw)
+
+    assert message == (
+        "HTTP 400: Codex API request failed: "
+        "Unsupported model: gpt-9 | model_not_found | model"
+    )
+
+
+def test_codex_http_friendly_error_accepts_detail_field() -> None:
+    raw = '{"detail": "Instructions are not supported"}'
+
+    message = _friendly_error(400, raw)
+
+    assert message == "HTTP 400: Codex API request failed: Instructions are not supported"
+
+
+def test_codex_http_friendly_error_accepts_error_string() -> None:
+    raw = '{"error": "account is not entitled to this model"}'
+
+    assert _error_detail(raw) == "account is not entitled to this model"
+
+
+def test_codex_http_error_detail_collapses_whitespace() -> None:
+    raw = json.dumps({"error": {"message": "line one\n\n  line two"}})
+
+    assert _error_detail(raw) == "line one line two"
+
+
+def test_codex_http_error_detail_truncates_long_reason() -> None:
+    raw = '{"error": {"message": "' + "x" * 500 + '"}}'
+
+    detail = _error_detail(raw)
+
+    assert len(detail) == 300
+    assert detail == "x" * 300
+
+
+def test_codex_http_error_detail_ignores_unstructured_fields() -> None:
+    raw = '{"request": {"input": "PRIVATE PROMPT MUST NOT APPEAR"}}'
+
+    assert _error_detail(raw) == ""
+    assert "PRIVATE PROMPT MUST NOT APPEAR" not in _friendly_error(400, raw)
+
+
+def test_codex_http_429_keeps_quota_message() -> None:
+    raw = '{"error": {"message": "slow down"}}'
+
+    assert _friendly_error(429, raw) == (
+        "ChatGPT usage quota exceeded or rate limit triggered. Please try again later."
+    )
+
+
 @pytest.mark.asyncio
 async def test_codex_request_non_200_populates_http_metadata(monkeypatch) -> None:
     original_client = httpx.AsyncClient
@@ -172,9 +233,8 @@ async def test_codex_request_marks_rejected_compaction_without_retaining_raw_bod
         return httpx.Response(
             400,
             json={
-                "error": {
-                    "message": f"Unknown input type compaction_trigger; {secret}",
-                },
+                "input": secret,
+                "error": {"message": "Unknown input type compaction_trigger"},
             },
             request=request,
         )
@@ -199,6 +259,7 @@ async def test_codex_request_marks_rejected_compaction_without_retaining_raw_bod
 
     error = caught.value
     assert error.compaction_unsupported is True
+    assert "Unknown input type compaction_trigger" in str(error)
     assert secret not in str(error)
     assert not hasattr(error, "body")
 
