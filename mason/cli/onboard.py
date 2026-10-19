@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import os
+import sys
 import types
 from collections.abc import Callable, Iterable, Sized
 from contextlib import suppress
@@ -1683,6 +1685,13 @@ def _quick_start_codex_proxy(config: Config) -> str | None:
     return resolve_config_env_vars(proxy_config).providers.openai_codex.proxy or None
 
 
+def _headless_environment() -> bool:
+    """Linux without a display, such as a VPS reached over SSH."""
+    return sys.platform.startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    )
+
+
 def _quick_start_oauth_login(config: Config, provider_name: str) -> bool:
     """Authenticate an OAuth provider supported by Quick Start."""
     if provider_name != "openai_codex":
@@ -1709,16 +1718,39 @@ def _quick_start_oauth_login(config: Config, provider_name: str) -> bool:
     with suppress(Exception):
         token = get_token(proxy=proxy)
     if not getattr(token, "access", None):
-        console.print("[cyan]Starting interactive OAuth login...[/cyan]\n")
-        try:
-            token = login_oauth_interactive(
-                print_fn=lambda message: console.print(message, markup=False),
-                prompt_fn=lambda prompt: _get_questionary().text(prompt).ask() or "",
-                proxy=proxy,
-            )
-        except Exception as exc:
-            console.print(f"[red]OAuth login failed: {escape(str(exc))}[/red]")
-            return False
+        if _headless_environment():
+            console.print("[cyan]Starting device-code OAuth login...[/cyan]\n")
+            try:
+                from mason.providers.openai_codex_oauth import (
+                    OpenAICodexOAuthError,
+                    login_openai_codex_device,
+                )
+            except ImportError:
+                console.print(f"[red]{OAUTH_CLI_KIT_MISSING_MESSAGE}[/red]")
+                return False
+            try:
+                token = login_openai_codex_device(
+                    print_fn=lambda message: console.print(
+                        message, markup=False, soft_wrap=True
+                    ),
+                    proxy=proxy,
+                )
+            except OpenAICodexOAuthError as exc:
+                console.print(f"[red]OAuth login failed: {escape(str(exc))}[/red]")
+                return False
+        else:
+            console.print("[cyan]Starting interactive OAuth login...[/cyan]\n")
+            try:
+                token = login_oauth_interactive(
+                    print_fn=lambda message: console.print(
+                        message, markup=False, soft_wrap=True
+                    ),
+                    prompt_fn=lambda prompt: _get_questionary().text(prompt).ask() or "",
+                    proxy=proxy,
+                )
+            except Exception as exc:
+                console.print(f"[red]OAuth login failed: {escape(str(exc))}[/red]")
+                return False
 
     if not getattr(token, "access", None):
         console.print("[red]OAuth login failed[/red]")

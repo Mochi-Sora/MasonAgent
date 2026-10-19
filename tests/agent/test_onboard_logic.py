@@ -1044,6 +1044,59 @@ class TestMainMenuUpdate:
         assert config.model_presets["primary"].provider == "openai_codex"
         assert config.model_presets["primary"].model == "openai-codex/gpt-5.6-sol"
 
+    def test_quick_start_oauth_login_uses_device_flow_when_headless(self, monkeypatch):
+        """A headless host must not wait for a localhost browser callback."""
+        import oauth_cli_kit
+
+        from mason.providers import openai_codex_oauth
+
+        config = Config()
+        token = SimpleNamespace(access="device-token", account_id="account-123")
+        device_calls: list[dict[str, Any]] = []
+
+        monkeypatch.setattr(oauth_cli_kit, "get_token", lambda **kwargs: None)
+        monkeypatch.setattr(onboard_wizard, "_headless_environment", lambda: True)
+        monkeypatch.setattr(onboard_wizard.console, "print", lambda *args, **kwargs: None)
+
+        def fake_device_login(**kwargs: Any) -> SimpleNamespace:
+            device_calls.append(kwargs)
+            return token
+
+        monkeypatch.setattr(
+            openai_codex_oauth, "login_openai_codex_device", fake_device_login
+        )
+
+        assert onboard_wizard._quick_start_oauth_login(config, "openai_codex") is True
+        assert len(device_calls) == 1
+        assert device_calls[0]["proxy"] is None
+
+    def test_quick_start_oauth_login_soft_wraps_browser_url(self, monkeypatch):
+        """Long authorize URLs must not be hard-wrapped when printed."""
+        import oauth_cli_kit
+
+        config = Config()
+        captured: dict[str, Any] = {}
+        printed: list[tuple[str, dict[str, Any]]] = []
+
+        monkeypatch.setattr(oauth_cli_kit, "get_token", lambda **kwargs: None)
+        monkeypatch.setattr(onboard_wizard, "_headless_environment", lambda: False)
+        monkeypatch.setattr(
+            onboard_wizard.console,
+            "print",
+            lambda message="", **kwargs: printed.append((message, kwargs)),
+        )
+
+        def fake_login(**kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return SimpleNamespace(access="browser-token", account_id="account-123")
+
+        monkeypatch.setattr(oauth_cli_kit, "login_oauth_interactive", fake_login)
+
+        assert onboard_wizard._quick_start_oauth_login(config, "openai_codex") is True
+        captured["print_fn"]("https://auth.openai.com/oauth/authorize?x=1")
+        assert printed[-1][1]["soft_wrap"] is True
+        assert printed[-1][1]["markup"] is False
+
     def test_quick_start_openai_codex_login_failure_does_not_create_preset(self, monkeypatch):
         """A failed Codex login must not leave a ready-looking model preset."""
         config = Config()
@@ -1142,6 +1195,7 @@ class TestMainMenuUpdate:
             lambda **_kwargs: SimpleNamespace(account_id="missing-access"),
         )
         monkeypatch.setattr(oauth_cli_kit, "login_oauth_interactive", fake_login)
+        monkeypatch.setattr(onboard_wizard, "_headless_environment", lambda: False)
         monkeypatch.setattr(
             onboard_wizard,
             "_get_questionary",
@@ -1156,7 +1210,8 @@ class TestMainMenuUpdate:
         assert onboard_wizard._quick_start_oauth_login(config, "openai_codex") is True
         assert prompts == ["authorization-code"]
         assert any(
-            args == ("[bold]Open the browser[/bold]",) and kwargs == {"markup": False}
+            args == ("[bold]Open the browser[/bold]",)
+            and kwargs == {"markup": False, "soft_wrap": True}
             for args, kwargs in printed
         )
         assert any(r"\[red]account-123\[/red]" in str(args[0]) for args, _kwargs in printed)

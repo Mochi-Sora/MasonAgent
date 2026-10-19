@@ -635,7 +635,40 @@ def test_provider_login_can_set_openai_codex_as_main_provider(tmp_path):
     assert make_provider(saved).__class__.__name__ == "OpenAICodexProvider"
 
 
-def test_provider_login_openai_codex_device_flow_uses_device_handler():
+def test_provider_login_prints_oauth_urls_without_hard_wrapping(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        provider_commands.console,
+        "print",
+        lambda message="", **kwargs: calls.append((message, kwargs)),
+    )
+
+    provider_commands._print_oauth_message(
+        "https://auth.openai.com/oauth/authorize?scope=openid+profile"
+    )
+
+    assert calls == [
+        (
+            "https://auth.openai.com/oauth/authorize?scope=openid+profile",
+            {"soft_wrap": True},
+        )
+    ]
+
+
+def test_provider_login_hints_device_flow_on_headless_linux(monkeypatch):
+    calls = []
+    monkeypatch.setattr(provider_commands.sys, "platform", "linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(provider_commands.console, "print", lambda *args, **kwargs: calls.append(args))
+
+    provider_commands._headless_login_hint()
+
+    assert calls
+    assert "--device" in str(calls[0][0])
+
+
+def test_provider_login_device_flow_uses_device_handler():
     called = False
     original = provider_commands._LOGIN_DEVICE_HANDLERS["openai_codex"]
 

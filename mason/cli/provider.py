@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Callable
 from contextlib import suppress
 from importlib import import_module
@@ -247,6 +249,27 @@ def _finish_openai_codex_login(token: _OAuthToken | None) -> None:
     )
 
 
+def _print_oauth_message(message: str) -> None:
+    """Print sign-in output without hard-wrapping long URLs.
+
+    Rich folds long words onto new lines by default, which corrupts a copied
+    authorize URL; soft wrapping keeps the URL one logical line.
+    """
+    console.print(message, soft_wrap=True)
+
+
+def _headless_login_hint() -> None:
+    """Point Linux hosts without a display at device-code login."""
+    if not sys.platform.startswith("linux"):
+        return
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        return
+    console.print(
+        "[yellow]No graphical browser detected. On a headless host, "
+        "`mason provider login openai-codex --device` avoids the localhost callback.[/yellow]"
+    )
+
+
 def _login_openai_codex() -> None:
     try:
         get_token, login_oauth_interactive = _load_openai_oauth_client()
@@ -255,9 +278,10 @@ def _login_openai_codex() -> None:
         with suppress(Exception):
             token = get_token(proxy=proxy)
         if not (token and token.access):
+            _headless_login_hint()
             console.print("[cyan]Starting interactive OAuth login...[/cyan]\n")
             token = login_oauth_interactive(
-                print_fn=lambda s: console.print(s),
+                print_fn=_print_oauth_message,
                 prompt_fn=lambda s: typer.prompt(s),
                 proxy=proxy,
             )
