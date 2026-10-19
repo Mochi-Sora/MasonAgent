@@ -40,6 +40,9 @@ Design notes
   id; 'chat.send' resolves ids owned by the sending connection into the turn's
   media.  Unused uploads expire after UPLOAD_TTL_S and their files are deleted
   as the registry is pruned.
+* Steering: 'chat.inject' publishes text into the turn already running for a
+  session (the agent loop drains it at its next model boundary) without
+  starting a new turn, and is advertised via 'hello.features'.
 * Media fetch: 'media.fetch' returns the stored bytes of an attachment
   referenced by a session transcript, so clients can rebuild previews after a
   reload.  Resolution is transcript-scoped and the fetched file must live in
@@ -259,6 +262,7 @@ class DesktopChannel(BaseChannel):
             "hello": self._handle_hello,
             "ping": self._handle_ping,
             "chat.send": self._handle_chat_send,
+            "chat.inject": self._handle_chat_inject,
             "media.upload": self._handle_media_upload,
             "media.fetch": self._handle_media_fetch,
             "turn.interrupt": self._handle_turn_interrupt,
@@ -483,6 +487,7 @@ class DesktopChannel(BaseChannel):
                     },
                     "reason": reason,
                     "limits": self._hello_limits(),
+                    "features": self._hello_features(),
                 },
             )
         )
@@ -518,6 +523,7 @@ class DesktopChannel(BaseChannel):
                     "device_token": token,
                     "gateway": {"version": __version__},
                     "limits": self._hello_limits(),
+                    "features": self._hello_features(),
                 },
             )
         )
@@ -600,6 +606,14 @@ class DesktopChannel(BaseChannel):
             "max_upload_bytes": self._upload_limit_bytes(),
             "max_fetch_bytes": self._fetch_limit_bytes(),
         }
+
+    def _hello_features(self) -> list[str]:
+        """Additive request frames this channel understands.
+
+        Clients feature-detect: without ``chat.inject`` a gateway only supports
+        one turn at a time and no mid-turn input, so clients queue instead.
+        """
+        return ["chat.inject"]
 
     async def _handle_media_upload(
         self, connection: _Connection, request: RequestFrame
@@ -871,6 +885,78 @@ class DesktopChannel(BaseChannel):
         except Exception:
             self._active_turns.pop(session_id, None)
             self.logger.exception("desktop: failed to publish an inbound message")
+
+    async def _handle_chat_inject(
+        self, connection: _Connection, request: RequestFrame
+    ) -> None:
+        """Deliver user input into the turn already running for one session.
+
+        Unlike ``chat.send`` this never starts a turn: the text is published to
+        the session inbox, where the agent loop drains it at its next model
+        boundary (mid-turn steering).  If the turn finishes first, the same
+        session worker handles it as the next turn - the client's queueing
+        fallback.  Only the connection that owns the running turn may inject.
+        """
+        token = connection.device_token
+        if token is None or not is_approved(self.name, token):
+            await connection.send_frame(
+                error_response(request.id, ERROR_UNAUTHORIZED, "device token is not approved")
+            )
+            await connection.close(CLOSE_UNAUTHORIZED, "unauthorized")
+            return
+        text = optional_text(request.body.get("text"))
+        if text is None:
+            await connection.send_frame(
+                error_response(request.id, ERROR_BAD_REQUEST, "text is required")
+            )
+            return
+        session_id = optional_text(request.body.get("session_id"))
+        if session_id is None:
+            await connection.send_frame(
+                error_response(request.id, ERROR_BAD_REQUEST, "session_id is required")
+            )
+            return
+        if not self._session_exists(session_id):
+            await connection.send_frame(
+                error_response(request.id, ERROR_NO_SESSION, f"unknown session {session_id}")
+            )
+            return
+        turn_id = self._active_turns.get(session_id)
+        if turn_id is None or self._session_owners.get(session_id) is not connection:
+            await connection.send_frame(
+                error_response(
+                    request.id,
+                    ERROR_NO_TURN,
+                    "no turn owned by this connection is running for that session",
+                )
+            )
+            return
+        await connection.send_frame(
+            ok_response(request.id, {"session_id": session_id, "turn_id": turn_id})
+        )
+        await connection.send_frame(
+            event_frame(
+                "message",
+                {
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "message_id": f"msg-{uuid.uuid4().hex[:12]}",
+                    "role": "user",
+                    "text": text,
+                    "ts": _now_ms(),
+                },
+            )
+        )
+        try:
+            await self._handle_message(
+                sender_id=token,
+                chat_id=session_id,
+                content=text,
+                metadata={TURN_ID_METADATA_KEY: turn_id},
+                session_key=session_id,
+            )
+        except Exception:
+            self.logger.exception("desktop: failed to publish an injected message")
 
     async def _handle_turn_interrupt(
         self, connection: _Connection, request: RequestFrame

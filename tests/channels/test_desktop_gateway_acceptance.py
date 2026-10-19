@@ -401,3 +401,68 @@ async def test_gateway_attachment_records_reach_history(
                 assert private_payload_keys(frame) == []
         finally:
             await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_gateway_inject_steers_the_running_turn(tmp_path: Path) -> None:
+    """Mid-turn text is drained by the loop and answered inside the same turn."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+    seen: list[list[dict[str, Any]]] = []
+
+    calls = 0
+
+    async def provider_call(**kwargs: Any) -> LLMResponse:
+        nonlocal calls
+        calls += 1
+        seen.append(kwargs["messages"])
+        if calls == 1:
+            started.set()
+            await release.wait()
+            return LLMResponse(content="First answer.", finish_reason="stop")
+        return LLMResponse(content="Steered answer.", finish_reason="stop")
+
+    provider = _provider()
+    provider.chat_stream_with_retry = AsyncMock(side_effect=provider_call)
+
+    async with gateway_stack(tmp_path, provider) as stack:
+        ws = await connect_client(stack.url)
+        try:
+            await hello(ws)
+            sent = await request(ws, "c1", "chat.send", text="do the thing")
+            session_id = sent["result"]["session_id"]
+            turn_id = sent["result"]["turn_id"]
+            await next_event(ws, "message")
+            await asyncio.wait_for(started.wait(), 5)
+
+            injected = await request(
+                ws, "i1", "chat.inject",
+                session_id=session_id, text="actually use the CLI",
+            )
+            assert injected["ok"] is True
+            assert injected["result"]["turn_id"] == turn_id
+
+            echo = await next_event(ws, "message")
+            assert echo["event"]["role"] == "user"
+            assert echo["event"]["text"] == "actually use the CLI"
+            assert echo["event"]["turn_id"] == turn_id
+
+            release.set()
+            frames = await _frames_until_turn_end(ws)
+            assert frames[-1]["event"]["status"] == "completed"
+            assert len(seen) == 2, "the loop continued the turn with the injection"
+            injected_texts = [
+                message["content"]
+                for message in seen[1]
+                if message.get("role") == "user" and isinstance(message.get("content"), str)
+            ]
+            assert "actually use the CLI" in injected_texts
+            assistant_messages = [
+                frame["event"]
+                for frame in frames
+                if frame.get("type") == "message"
+                and frame["event"].get("role") == "assistant"
+            ]
+            assert assistant_messages[-1]["text"] == "Steered answer."
+        finally:
+            await ws.close()

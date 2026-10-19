@@ -357,3 +357,69 @@ async def test_query_frames_without_services(tmp_path: Path) -> None:
                 assert result["error"]["code"] == "internal"
         finally:
             await ws.close()
+
+
+async def test_chat_inject_targets_the_running_turn(tmp_path: Path) -> None:
+    """An inject is echoed on the running turn and reaches the agent inbox."""
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        ws, session_id, turn_id = await _paired_session(harness)
+        try:
+            assert harness.bus.inbound.qsize() == 1
+            harness.bus.inbound.get_nowait()  # the original chat.send
+
+            injected = await request(
+                ws, "i1", "chat.inject", session_id=session_id, text="use the CLI instead"
+            )
+            assert injected["ok"] is True
+            assert injected["result"] == {"session_id": session_id, "turn_id": turn_id}
+
+            echo = await next_event(ws, "message")
+            assert echo["event"]["role"] == "user"
+            assert echo["event"]["text"] == "use the CLI instead"
+            assert echo["event"]["turn_id"] == turn_id
+            assert echo["event"]["session_id"] == session_id
+
+            inbound = harness.bus.inbound.get_nowait()
+            assert inbound.channel == "desktop"
+            assert inbound.chat_id == session_id
+            assert inbound.content == "use the CLI instead"
+            assert inbound.session_key == session_id
+        finally:
+            await ws.close()
+
+
+async def test_chat_inject_requires_an_owned_running_turn(tmp_path: Path) -> None:
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        ws, session_id, _turn_id = await _paired_session(harness)
+        other = await connect_client(harness.url)
+        await hello(other)
+        try:
+            harness.channel.attach_services(
+                session_manager=FakeSessionManager(sessions={session_id: {}, "s-idle": {}}),
+            )
+            idle = await request(ws, "i1", "chat.inject", session_id="s-idle", text="anything")
+            assert idle["error"]["code"] == "no_turn"
+
+            unknown = await request(ws, "i2", "chat.inject", session_id="s-missing", text="x")
+            assert unknown["error"]["code"] == "no_session"
+
+            missing = await request(ws, "i3", "chat.inject", session_id=session_id)
+            assert missing["error"]["code"] == "bad_request"
+
+            foreign = await request(
+                other, "i4", "chat.inject", session_id=session_id, text="steer"
+            )
+            assert foreign["error"]["code"] == "no_turn"
+        finally:
+            await other.close()
+            await ws.close()
+
+
+async def test_hello_advertises_chat_inject(tmp_path: Path) -> None:
+    async with desktop_channel(tmp_path, trustLocalhost=True) as harness:
+        ws = await connect_client(harness.url)
+        try:
+            result = await hello(ws)
+            assert "chat.inject" in result["result"]["features"]
+        finally:
+            await ws.close()
