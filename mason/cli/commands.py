@@ -783,6 +783,8 @@ def status(
 
         # Check API keys from registry
         for spec in PROVIDERS:
+            if spec.settings_alias_for:
+                continue
             p = getattr(loaded.providers, spec.name, None)
             if p is None:
                 continue

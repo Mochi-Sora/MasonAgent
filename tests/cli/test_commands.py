@@ -345,6 +345,7 @@ def test_status_checks_oauth_login_state(tmp_path: Path, monkeypatch):
     assert "OpenAI Codex: ✓ (OAuth)" in output
     assert "xAI Grok: not signed in" in output
     assert "GitHub Copilot: not signed in" in output
+    assert output.count("OpenCode Zen:") == 1
 
 
 def test_onboard_interactive_discard_does_not_save_or_create_workspace(mock_paths, monkeypatch):
