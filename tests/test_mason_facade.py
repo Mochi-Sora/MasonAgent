@@ -131,14 +131,14 @@ def test_from_config_accepts_default_model_override(tmp_path):
     assert bot._loop.model_preset is None
 
 
-def test_from_config_accepts_default_model_preset(tmp_path):
+def test_from_config_accepts_default_generation_preset(tmp_path):
     config_path = _write_config(
         tmp_path,
         {
             "modelPresets": {
                 "fast": {
-                    "model": "openai/gpt-4.1-mini",
-                    "provider": "openrouter",
+                    "maxTokens": 4096,
+                    "temperature": 0.2,
                 }
             }
         },
@@ -146,20 +146,27 @@ def test_from_config_accepts_default_model_preset(tmp_path):
 
     bot = Mason.from_config(config_path, workspace=tmp_path, model_preset="fast")
 
+    assert bot.runtime.model == "openai/gpt-4.1"
+    assert bot._loop.model_preset == "fast"
+    assert bot._loop.runtime_resolver.runtime.generation.max_tokens == 4096
+
+
+def test_from_config_composes_model_and_preset_overrides(tmp_path):
+    config_path = _write_config(
+        tmp_path,
+        {"modelPresets": {"fast": {"maxTokens": 1024}}},
+    )
+
+    bot = Mason.from_config(
+        config_path,
+        workspace=tmp_path,
+        model="openai/gpt-4.1-mini",
+        model_preset="fast",
+    )
+
     assert bot.runtime.model == "openai/gpt-4.1-mini"
     assert bot._loop.model_preset == "fast"
-
-
-def test_from_config_rejects_multiple_model_selectors(tmp_path):
-    config_path = _write_config(tmp_path)
-
-    with pytest.raises(ValueError, match="mutually exclusive"):
-        Mason.from_config(
-            config_path,
-            workspace=tmp_path,
-            model="openai/gpt-4.1",
-            model_preset="fast",
-        )
+    assert bot._loop.runtime_resolver.runtime.generation.max_tokens == 1024
 
 
 def test_from_config_default_path():
@@ -873,12 +880,48 @@ async def test_run_model_preset_override_is_per_run(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_rejects_multiple_model_selectors(tmp_path):
-    config_path = _write_config(tmp_path)
-    bot = Mason.from_config(config_path, workspace=tmp_path)
+async def test_run_composes_model_and_preset_overrides(tmp_path):
+    from mason.bus.events import OutboundMessage
+    from mason.providers.factory import ProviderSnapshot
 
-    with pytest.raises(ValueError, match="mutually exclusive"):
-        await bot.run("hi", model="openai/gpt-4.1", model_preset="fast")
+    config_path = _write_config(
+        tmp_path,
+        {"modelPresets": {"fast": {"maxTokens": 1024}}},
+    )
+    bot = Mason.from_config(config_path, workspace=tmp_path)
+    original_runtime = bot._loop.runtime_resolver.runtime
+    override_provider = _fake_provider("combo-provider", max_tokens=1024)
+    override = ProviderSnapshot(
+        provider=override_provider,
+        model="openai/gpt-4.1-mini",
+        context_window_tokens=4096,
+        signature=("combo",),
+        model_preset="fast",
+    )
+    override_runtime = runtime_from_provider_snapshot(override)
+    bot._loop.runtime_resolver.resolve_override = MagicMock(
+        return_value=override_runtime
+    )
+
+    async def fake_process_direct(message, *, session_key, hooks, runtime):
+        assert runtime is override_runtime
+        return OutboundMessage(channel="cli", chat_id="direct", content="ok")
+
+    bot._loop.process_direct = fake_process_direct
+
+    result = await bot.run(
+        "hi",
+        model="openai/gpt-4.1-mini",
+        model_preset="fast",
+    )
+
+    assert result.content == "ok"
+    bot._loop.runtime_resolver.resolve_override.assert_called_once_with(
+        model="openai/gpt-4.1-mini",
+        model_preset="fast",
+        config=bot._config,
+    )
+    assert bot._loop.runtime_resolver.runtime is original_runtime
 
 
 @pytest.mark.asyncio
@@ -1200,16 +1243,62 @@ async def test_run_streamed_model_override_reports_admitted_runtime(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_stream_rejects_multiple_model_selectors(tmp_path):
-    config_path = _write_config(tmp_path)
-    bot = Mason.from_config(config_path, workspace=tmp_path)
+async def test_stream_composes_model_and_preset_overrides(tmp_path):
+    from mason.bus.events import OutboundMessage
+    from mason.providers.factory import ProviderSnapshot
 
-    with pytest.raises(ValueError, match="mutually exclusive"):
-        _ = [event async for event in bot.stream(
+    config_path = _write_config(
+        tmp_path,
+        {"modelPresets": {"fast": {"maxTokens": 1024}}},
+    )
+    bot = Mason.from_config(config_path, workspace=tmp_path)
+    override_provider = _fake_provider("combo-stream-provider", max_tokens=1024)
+    override = ProviderSnapshot(
+        provider=override_provider,
+        model="openai/gpt-4.1-mini",
+        context_window_tokens=4096,
+        signature=("combo", "stream"),
+        model_preset="fast",
+    )
+    override_runtime = runtime_from_provider_snapshot(override)
+    bot._loop.runtime_resolver.resolve_override = MagicMock(
+        return_value=override_runtime
+    )
+
+    async def fake_process_direct(
+        message,
+        *,
+        session_key,
+        on_stream,
+        on_stream_end,
+        hooks,
+        on_runtime_admitted,
+        runtime,
+    ):
+        assert runtime is override_runtime
+        await on_runtime_admitted(runtime)
+        await on_stream("ok")
+        await on_stream_end(resuming=False)
+        return OutboundMessage(channel="cli", chat_id="direct", content="ok")
+
+    bot._loop.process_direct = fake_process_direct
+
+    events = [
+        event async for event in bot.stream(
             "hi",
-            model="openai/gpt-4.1",
+            model="openai/gpt-4.1-mini",
             model_preset="fast",
-        )]
+        )
+    ]
+
+    assert events[0].type == "run.started"
+    assert events[0].metadata["model"] == "openai/gpt-4.1-mini"
+    assert events[0].metadata["model_preset"] == "fast"
+    bot._loop.runtime_resolver.resolve_override.assert_called_once_with(
+        model="openai/gpt-4.1-mini",
+        model_preset="fast",
+        config=bot._config,
+    )
 
 
 @pytest.mark.asyncio

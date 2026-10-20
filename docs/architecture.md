@@ -66,7 +66,7 @@ Provider metadata is centralized in `mason/providers/registry.py`. Configuration
 
 Provider selection uses:
 
-- explicit `agents.defaults.provider` or preset provider;
+- explicit `agents.defaults.provider` (or the per-session `/model` selection);
 - provider registry keywords;
 - API key prefixes and API base URL hints;
 - local provider fallback when `apiBase` is configured;

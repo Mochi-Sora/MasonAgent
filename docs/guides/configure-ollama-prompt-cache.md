@@ -169,7 +169,7 @@ manifest instead of copying the base weights.
 
 ## Select the derived model in mason
 
-Merge this preset into `~/.mason/config.json` and select it:
+Merge this into `~/.mason/config.json` and select the derived model:
 
 ```json
 {
@@ -180,8 +180,6 @@ Merge this preset into `~/.mason/config.json` and select it:
   },
   "modelPresets": {
     "Ollama Llama 3.1 prefix-stable": {
-      "provider": "ollama",
-      "model": "llama3.1:8b-prefix-stable-v1",
       "maxTokens": 2048,
       "contextWindowTokens": 16384,
       "temperature": 0.1
@@ -189,7 +187,9 @@ Merge this preset into `~/.mason/config.json` and select it:
   },
   "agents": {
     "defaults": {
-      "modelPreset": "Ollama Llama 3.1 prefix-stable"
+      "modelPreset": "Ollama Llama 3.1 prefix-stable",
+      "model": "llama3.1:8b-prefix-stable-v1",
+      "provider": "ollama"
     }
   }
 }
@@ -212,7 +212,7 @@ Treat these numbers as a diagnostic example, not a performance guarantee.
 
 ## Roll back
 
-Switch `agents.defaults.modelPreset` back to the original preset. When no config
+Switch `agents.defaults.model` back to the original model and `agents.defaults.modelPreset` back to its original preset. When no config
 uses the derived tag, remove it with:
 
 ```bash

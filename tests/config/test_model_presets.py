@@ -216,7 +216,7 @@ def test_legacy_defaults_config_without_presets_still_resolves() -> None:
     assert resolved.reasoning_effort == "low"
 
 
-def test_resolve_preset_returns_active_preset() -> None:
+def test_resolve_preset_uses_settings_without_changing_the_model() -> None:
     config = Config.model_validate({
         "model_presets": {
             "fast": {
@@ -235,8 +235,8 @@ def test_resolve_preset_returns_active_preset() -> None:
         },
     })
     resolved = config.resolve_preset()
-    assert resolved.model == "openai/gpt-4.1"
-    assert resolved.provider == "openai"
+    assert resolved.model == config.agents.defaults.model
+    assert resolved.provider == config.agents.defaults.provider
     assert resolved.max_tokens == 4096
     assert resolved.context_window_tokens == 32_768
     assert resolved.temperature == 0.5
@@ -257,7 +257,7 @@ def test_default_preset_is_agents_defaults_even_when_named_preset_is_active() ->
         },
     })
 
-    assert config.resolve_preset().model == "openai/gpt-4.1-mini"
+    assert config.resolve_preset().model == "openai/gpt-4.1"
     assert config.resolve_preset("default").model == "openai/gpt-4.1"
 
 
@@ -321,8 +321,8 @@ def test_resolve_preset_can_target_named_preset_without_activating() -> None:
     })
 
     resolved = config.resolve_preset("deep")
-    assert resolved.model == "anthropic/claude-opus-4-5"
-    assert resolved.provider == "anthropic"
+    assert resolved.model == config.agents.defaults.model
+    assert resolved.provider == config.agents.defaults.provider
 
 
 def test_validator_rejects_unknown_preset() -> None:
@@ -374,19 +374,16 @@ def test_resolve_preset_rejects_unknown_named_preset() -> None:
         pytest.param("anthropic", "anthropic/claude-opus-4-5", id="provider_when_forced"),
     ],
 )
-def test_match_provider_uses_model_preset(provider_name, model) -> None:
+def test_match_provider_uses_default_model_when_preset_is_settings_only(provider_name, model) -> None:
     config = Config.model_validate({
         "providers": {
             provider_name: {"apiKey": "sk-test"},
         },
-        "model_presets": {
-            "fast": {
-                "model": model,
-                "provider": provider_name,
-            }
-        },
+        "model_presets": {"fast": {}},
         "agents": {
             "defaults": {
+                "model": model,
+                "provider": "auto",
                 "modelPreset": "fast",
             }
         },

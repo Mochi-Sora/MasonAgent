@@ -14,7 +14,7 @@ Match the recipe to the credential or endpoint you already have:
 
 | What you have | Recipe | Must match |
 |---|---|---|
-| A gateway key and model IDs that include a model family path, such as `provider/model-name` | [OpenRouter Gateway](#recipe-openrouter-gateway) | API key, provider config key, preset provider, and gateway model ID |
+| A gateway key and model IDs that include a model family path, such as `provider/model-name` | [OpenRouter Gateway](#recipe-openrouter-gateway) | API key, provider config key, selected provider, and gateway model ID |
 | An OpenCode Zen or Go key | [OpenCode Zen or Go](#recipe-opencode-zen-or-go) | `OPENCODE_API_KEY`, the Zen/Go provider key, and a model ID from the matching OpenCode endpoint |
 | An OpenAI platform API key and OpenAI model ID | [OpenAI Direct](#recipe-openai-direct) | `OPENAI_API_KEY`, `provider: "openai"`, and an OpenAI model available to that account |
 | An Anthropic API key and Anthropic model ID | [Anthropic Direct](#recipe-anthropic-direct) | `ANTHROPIC_API_KEY`, `provider: "anthropic"`, and a non-gateway model ID |
@@ -22,7 +22,7 @@ Match the recipe to the credential or endpoint you already have:
 | An OpenAI-compatible `/v1` endpoint that is not a named mason provider | [Custom OpenAI-Compatible Provider](#recipe-custom-openai-compatible-provider) | `apiBase`, optional API key, and the model ID served by that endpoint |
 | Ollama already running locally | [Ollama Local Model](#recipe-ollama-local-model) | Ollama `apiBase`, pulled model name, and local server availability |
 | vLLM, LM Studio, or another local OpenAI-compatible server | [vLLM or LM Studio](#recipe-vllm-or-lm-studio) | Local `/v1` base URL, any required key, and served model name |
-| A primary model plus one or more backups | [Fallback Presets](#recipe-fallback-presets) | Named presets in `modelPresets`, referenced from `agents.defaults.fallbackModels` |
+| A primary model plus one or more backups | [Fallback Models](#recipe-fallback-models) | Model IDs or inline candidates in `agents.defaults.fallbackModels` |
 | A working agent and a Langfuse project | [Langfuse Tracing](#recipe-langfuse-tracing) | Langfuse env vars in the same process environment that starts mason |
 
 ## How to Use a Recipe
@@ -34,7 +34,7 @@ Match the recipe to the credential or endpoint you already have:
 5. Run `mason agent -m "Hello!"`.
 6. If the CLI works, continue with the gateway or chat apps.
 
-The active model should normally come from `agents.defaults.modelPreset`, and that name should point to an entry in `modelPresets`. Direct `agents.defaults.provider` and `agents.defaults.model` still work for older configs, but presets are easier to switch and easier to reuse as fallbacks.
+The active model comes from `agents.defaults.model` and `agents.defaults.provider`, or from `/model` for one chat session. `agents.defaults.modelPreset` points to an entry in `modelPresets`, which supplies generation settings only and never selects a model.
 
 ## Secret Setup
 
@@ -71,8 +71,6 @@ This recipe applies when one API key routes many hosted model families.
   },
   "modelPresets": {
     "primary": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4.5",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
@@ -80,7 +78,9 @@ This recipe applies when one API key routes many hosted model families.
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "anthropic/claude-sonnet-4.5",
+      "provider": "openrouter"
     }
   }
 }
@@ -112,8 +112,6 @@ OpenCode Zen:
   },
   "modelPresets": {
     "primary": {
-      "provider": "opencode_zen",
-      "model": "opencode/deepseek-v4-pro",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
@@ -121,7 +119,9 @@ OpenCode Zen:
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "opencode/deepseek-v4-pro",
+      "provider": "opencode_zen"
     }
   }
 }
@@ -138,8 +138,6 @@ OpenCode Go:
   },
   "modelPresets": {
     "primary": {
-      "provider": "opencode_go",
-      "model": "opencode-go/deepseek-v4-flash",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
@@ -147,7 +145,9 @@ OpenCode Go:
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "opencode-go/deepseek-v4-flash",
+      "provider": "opencode_go"
     }
   }
 }
@@ -179,8 +179,6 @@ This recipe applies when you have an OpenAI API key and want to call OpenAI dire
   },
   "modelPresets": {
     "primary": {
-      "provider": "openai",
-      "model": "gpt-5",
       "maxTokens": 4096,
       "contextWindowTokens": 128000,
       "temperature": 0.1
@@ -188,7 +186,9 @@ This recipe applies when you have an OpenAI API key and want to call OpenAI dire
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "gpt-5",
+      "provider": "openai"
     }
   }
 }
@@ -215,8 +215,6 @@ This recipe applies when your key comes from Anthropic and your model name is an
   },
   "modelPresets": {
     "primary": {
-      "provider": "anthropic",
-      "model": "claude-sonnet-4-5",
       "maxTokens": 4096,
       "contextWindowTokens": 200000,
       "temperature": 0.1
@@ -224,7 +222,9 @@ This recipe applies when your key comes from Anthropic and your model name is an
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "claude-sonnet-4-5",
+      "provider": "anthropic"
     }
   }
 }
@@ -238,7 +238,7 @@ ANTHROPIC_API_KEY="sk-ant-..." mason agent -m "Hello!"
 
 If you copied a model name such as `anthropic/claude-sonnet-4.5`, that is a gateway-style model path and belongs under `provider: "openrouter"`, not `provider: "anthropic"`.
 
-If you use an Anthropic-compatible proxy, keep the preset provider as `anthropic` and set `providers.anthropic.apiBase`:
+If you use an Anthropic-compatible proxy, select `anthropic` as the provider and set `providers.anthropic.apiBase`:
 
 ```json
 {
@@ -250,8 +250,6 @@ If you use an Anthropic-compatible proxy, keep the preset provider as `anthropic
   },
   "modelPresets": {
     "primary": {
-      "provider": "anthropic",
-      "model": "claude-sonnet-4-5",
       "maxTokens": 4096,
       "contextWindowTokens": 200000,
       "temperature": 0.1
@@ -259,7 +257,9 @@ If you use an Anthropic-compatible proxy, keep the preset provider as `anthropic
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "claude-sonnet-4-5",
+      "provider": "anthropic"
     }
   }
 }
@@ -280,15 +280,15 @@ This recipe applies when your key comes from Kimi's Coding Plan endpoint. Mason 
   },
   "modelPresets": {
     "kimiCoding": {
-      "provider": "kimi_coding",
-      "model": "kimi-for-coding",
       "maxTokens": 4096,
       "temperature": 0.1
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "kimiCoding"
+      "modelPreset": "kimiCoding",
+      "model": "kimi-for-coding",
+      "provider": "kimi_coding"
     }
   }
 }
@@ -317,8 +317,6 @@ This recipe applies to an OpenAI-compatible service that is not a named mason pr
   },
   "modelPresets": {
     "primary": {
-      "provider": "custom",
-      "model": "provider-model-name",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
@@ -326,7 +324,9 @@ This recipe applies to an OpenAI-compatible service that is not a named mason pr
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "provider-model-name",
+      "provider": "custom"
     }
   }
 }
@@ -341,7 +341,7 @@ mason agent -m "Hello!"
 
 `apiBase` is the HTTP base URL, not the model name. Include the version path when the service expects it, such as `/v1`. If the service requires a non-empty key but does not validate it, use a placeholder such as `"apiKey": "EMPTY"`.
 
-For multiple custom endpoints, do not overload the single `custom` block. Name each endpoint under `providers` and reference that same name from the preset:
+For multiple custom endpoints, do not overload the single `custom` block. Name each endpoint under `providers` and select it as the provider:
 
 ```json
 {
@@ -356,15 +356,6 @@ For multiple custom endpoints, do not overload the single `custom` block. Name e
   },
   "modelPresets": {
     "work": {
-      "provider": "workProxy",
-      "model": "gpt-4o-mini",
-      "maxTokens": 4096,
-      "contextWindowTokens": 65536,
-      "temperature": 0.1
-    },
-    "lab": {
-      "provider": "lab-local",
-      "model": "served-model-name",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
@@ -372,11 +363,15 @@ For multiple custom endpoints, do not overload the single `custom` block. Name e
   },
   "agents": {
     "defaults": {
-      "modelPreset": "work"
+      "modelPreset": "work",
+      "model": "gpt-4o-mini",
+      "provider": "workProxy"
     }
   }
 }
 ```
+
+To use the lab endpoint in a chat session, switch to it explicitly: `/model lab-local served-model-name`.
 
 These custom names behave like direct OpenAI-compatible providers: `apiBase` is required, `apiKey` is optional when the endpoint allows anonymous or placeholder credentials, and `apiType` should be left unset. They do not support Anthropic-compatible endpoints; use the `anthropic` provider with `apiBase` for that case.
 
@@ -398,8 +393,6 @@ ollama pull llama3.2
   },
   "modelPresets": {
     "local": {
-      "provider": "ollama",
-      "model": "llama3.2",
       "maxTokens": 2048,
       "contextWindowTokens": 32768,
       "temperature": 0.2
@@ -407,7 +400,9 @@ ollama pull llama3.2
   },
   "agents": {
     "defaults": {
-      "modelPreset": "local"
+      "modelPreset": "local",
+      "model": "llama3.2",
+      "provider": "ollama"
     }
   }
 }
@@ -442,8 +437,6 @@ This recipe applies when a local server exposes an OpenAI-compatible `/v1` API.
   },
   "modelPresets": {
     "local": {
-      "provider": "vllm",
-      "model": "served-model-name",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.2
@@ -451,7 +444,9 @@ This recipe applies when a local server exposes an OpenAI-compatible `/v1` API.
   },
   "agents": {
     "defaults": {
-      "modelPreset": "local"
+      "modelPreset": "local",
+      "model": "served-model-name",
+      "provider": "vllm"
     }
   }
 }
@@ -468,23 +463,23 @@ For LM Studio, use its local base URL and provider name:
   },
   "modelPresets": {
     "local": {
-      "provider": "lm_studio",
-      "model": "local-model",
       "maxTokens": 2048,
       "contextWindowTokens": 32768
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "local"
+      "modelPreset": "local",
+      "model": "local-model",
+      "provider": "lm_studio"
     }
   }
 }
 ```
 
-The config key can be `lmStudio` or `lm_studio`, but the preset provider should use the registry name `lm_studio`.
+The config key can be `lmStudio` or `lm_studio`, but the selected provider must use the registry name `lm_studio`.
 
-## Recipe: Fallback Presets
+## Recipe: Fallback Models
 
 This recipe applies when one provider sometimes rate-limits, one model is expensive, or you want a local backup.
 
@@ -492,37 +487,38 @@ This recipe applies when one provider sometimes rate-limits, one model is expens
 {
   "modelPresets": {
     "fast": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4.5",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
-    },
-    "deep": {
-      "provider": "anthropic",
-      "model": "claude-sonnet-4-5",
-      "maxTokens": 4096,
-      "contextWindowTokens": 200000,
-      "temperature": 0.1
-    },
-    "local": {
-      "provider": "ollama",
-      "model": "llama3.2",
-      "maxTokens": 2048,
-      "contextWindowTokens": 32768,
-      "temperature": 0.2
     }
   },
   "agents": {
     "defaults": {
       "modelPreset": "fast",
-      "fallbackModels": ["deep", "local"]
+      "fallbackModels": [
+        {
+          "model": "claude-sonnet-4-5",
+          "provider": "anthropic",
+          "maxTokens": 4096,
+          "contextWindowTokens": 200000,
+          "temperature": 0.1
+        },
+        {
+          "model": "llama3.2",
+          "provider": "ollama",
+          "maxTokens": 2048,
+          "contextWindowTokens": 32768,
+          "temperature": 0.2
+        }
+      ],
+      "model": "anthropic/claude-sonnet-4.5",
+      "provider": "openrouter"
     }
   }
 }
 ```
 
-`fallbackModels` belongs under `agents.defaults`. String entries are preset names, not raw model names. mason tries the active preset first, then the fallback presets in order.
+`fallbackModels` belongs under `agents.defaults`. String entries are model IDs; a value that matches a legacy preset name resolves to that preset's old model binding for migration. mason tries the active model first, then the fallback candidates in order.
 
 Keep fallback candidates realistic. If the local fallback has a smaller context window, mason must build context that fits the smallest window in the active chain.
 
@@ -558,27 +554,25 @@ Langfuse is not a model provider in `config.json`. It is configured through envi
 
 ## Recipe: Switch Models at Runtime
 
-Use this after you have more than one preset and are chatting through a supported channel.
+Use this after you have more than one model you can reach through your providers and are chatting through a supported channel.
 
 ```json
 {
   "modelPresets": {
     "fast": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4.5",
       "maxTokens": 4096,
       "contextWindowTokens": 65536
     },
-    "local": {
-      "provider": "ollama",
-      "model": "llama3.2",
+    "localSmall": {
       "maxTokens": 2048,
       "contextWindowTokens": 32768
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "fast"
+      "modelPreset": "fast",
+      "model": "anthropic/claude-sonnet-4.5",
+      "provider": "openrouter"
     }
   }
 }
@@ -587,21 +581,24 @@ Use this after you have more than one preset and are chatting through a supporte
 In chat:
 
 ```text
-/model
-/model local
-/model fast
+/model openrouter anthropic/claude-sonnet-4.5
+/model ollama llama3.2
+/presets
+/presets fast
+/presets localSmall
 ```
 
-`/model` stores the selection in the current session without rewriting `config.json`.
-The selection survives restarts, does not affect other sessions, and an in-progress
-turn keeps using the model it started with.
+`/model` stores the model selection in the current session without rewriting
+`config.json`. `/presets` applies generation settings to the model that is already
+active. The selection survives restarts, does not affect other sessions, and an
+in-progress turn keeps using the model it started with.
 
 ## Quick Failure Map
 
 | Symptom | Usually means | First check |
 |---|---|---|
 | `401`, `unauthorized`, or `invalid API key` | The key is missing, wrong, expired, or under the wrong provider | Print or re-set the environment variable in the same terminal or service |
-| `model not found` | The model ID does not belong to the selected provider or gateway | Compare `modelPresets.<name>.provider` and `modelPresets.<name>.model` |
+| `model not found` | The model ID does not belong to the selected provider or gateway | Compare `agents.defaults.provider`/`model` (or the `/model` selection) |
 | `connection refused` | Local server is not running or `apiBase` has the wrong port/path | Run `curl <apiBase>/models` |
 | `provider not found` | Provider name is misspelled or uses the config key instead of registry name | Use names such as `openrouter`, `openai`, `anthropic`, `ollama`, `vllm`, `lm_studio` |
 | Langfuse shows no traces | Env vars are missing, `langfuse` is not installed in the active Python environment, or the provider path is native | Run `python -m pip show langfuse` and restart mason from the same environment |

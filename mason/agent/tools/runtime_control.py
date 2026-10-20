@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from mason.agent.subagent import SubagentManager, SubagentStatus
     from mason.agent.tools.shell import ExecToolConfig
     from mason.agent.tools.web import WebToolsConfig
-    from mason.config.schema import ModelPresetConfig
+    from mason.config.schema import GenerationPresetConfig
     from mason.utils.llm_runtime import LLMRuntime
 
 
@@ -128,7 +128,7 @@ class _RuntimeControlTarget(Protocol):
     def model_preset(self) -> str | None: ...
 
     @property
-    def model_presets(self) -> Mapping[str, ModelPresetConfig]: ...
+    def model_presets(self) -> Mapping[str, GenerationPresetConfig]: ...
 
     @property
     def context_window_tokens(self) -> int: ...
@@ -215,12 +215,10 @@ class AgentRuntimeControl:
 
 
 def _snapshot_model_presets(
-    presets: Mapping[str, ModelPresetConfig],
+    presets: Mapping[str, GenerationPresetConfig],
 ) -> dict[str, dict[str, object]]:
     return {
         name: {
-            "model": preset.model,
-            "provider": preset.provider,
             "max_tokens": preset.max_tokens,
             "context_window_tokens": preset.context_window_tokens,
             "temperature": preset.temperature,

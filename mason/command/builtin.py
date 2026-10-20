@@ -23,6 +23,7 @@ from mason.utils.workspace_prompts import initialize_workspace_prompt
 
 if TYPE_CHECKING:
     from mason.agent.loop import AgentLoop
+    from mason.providers.model_catalog import ModelInfo, ProviderChoice
     from mason.session.manager import Session
 
 # Command lifecycle contract for how a slash command participates in turn state:
@@ -99,9 +100,17 @@ BUILTIN_COMMAND_SPECS: tuple[BuiltinCommandSpec, ...] = (
     ),
     BuiltinCommandSpec(
         "/model",
-        "Switch model preset",
-        "Show or switch the active model preset.",
+        "Switch model",
+        "Show, list, or switch the active model by provider.",
         "brain",
+        "[provider] [model]",
+        accepts_args=True,
+    ),
+    BuiltinCommandSpec(
+        "/presets",
+        "Switch settings preset",
+        "Show or apply a standalone generation-settings preset to the current model.",
+        "tune",
         "[preset]",
         accepts_args=True,
     ),
@@ -353,70 +362,222 @@ def _command_error_message(exc: Exception) -> str:
     return str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
 
 
+def _provider_choices(loop: AgentLoop) -> list[ProviderChoice]:
+    loader = loop.provider_choices
+    if loader is None:
+        return []
+    try:
+        return list(loader())
+    except Exception:
+        logger.exception("Could not load the provider catalog")
+        return []
+
+
+def _match_provider(loop: AgentLoop, value: str) -> str | None:
+    normalized = value.replace("-", "_").casefold()
+    for choice in _provider_choices(loop):
+        if (
+            choice.name.replace("-", "_").casefold() == normalized
+            or choice.display_name.casefold() == value.casefold()
+        ):
+            return choice.name
+    return None
+
+
+def _current_provider_name(loop: AgentLoop, session: Session) -> str | None:
+    try:
+        runtime = loop.runtime_for_session(session, recover_removed=False)
+    except (KeyError, ValueError):
+        return None
+    name = getattr(runtime.provider, "provider_name", None)
+    return name if isinstance(name, str) and name else None
+
+
 def _model_command_status(loop: AgentLoop, session: Session) -> str:
-    names = _model_preset_names(loop)
     try:
         runtime = loop.runtime_for_session(session, recover_removed=False)
     except (KeyError, ValueError) as exc:
         return "\n".join([
             "## Model",
             f"- Current selection error: {_command_error_message(exc)}",
-            f"- Available presets: {_format_preset_names(names)}",
-            "- Switch with `/model <preset>`.",
+            "- Use `/model <provider> <model>` to choose a model.",
         ])
-    active = runtime.model_preset or "default"
+    provider = getattr(runtime.provider, "provider_name", None)
+    provider_name = provider if isinstance(provider, str) and provider else "unknown"
+    configured = [choice for choice in _provider_choices(loop) if choice.configured]
+    provider_names = _format_preset_names([choice.name for choice in configured])
     return "\n".join([
         "## Model",
         f"- Current model: `{runtime.model}`",
-        f"- Current preset: `{active}`",
-        f"- Available presets: {_format_preset_names(names)}",
+        f"- Provider: `{provider_name}`",
+        f"- Settings preset: `{runtime.model_preset or 'default'}`",
+        f"- Available providers: {provider_names}",
+        "- Use `/model <provider>` to list models, or `/model <provider> <model>` to switch.",
+        "- Use `/presets` to apply generation settings without changing the model.",
     ])
 
 
+def _model_listing(loop: AgentLoop, provider: str) -> str:
+    loader = loop.model_catalog
+    if loader is None:
+        return (
+            f"Model listing is unavailable for `{provider}`. "
+            f"Switch directly with `/model {provider} <model>`."
+        )
+    try:
+        models: list[ModelInfo] = list(loader(provider))
+    except Exception:
+        logger.exception("Could not load models for provider {}", provider)
+        return f"Could not load models for `{provider}`."
+    if not models:
+        return f"No models found for `{provider}`."
+    shown = models[:80]
+    lines = [f"## Models: `{provider}`", ""]
+    for item in shown:
+        window = f" — {item.context_window:,} tokens" if item.context_window else ""
+        lines.append(f"- `{item.id}`{window}")
+    if len(models) > len(shown):
+        lines.append(f"- … and {len(models) - len(shown)} more")
+    lines += ["", f"Switch with `/model {provider} <model>`."]
+    return "\n".join(lines)
+
+
 async def cmd_model(ctx: CommandContext) -> OutboundMessage:
-    """Show or switch model presets."""
+    """Show, list, or switch the active model by provider."""
     loop = ctx.loop
     args = ctx.args.strip()
     metadata = {**dict(ctx.msg.metadata or {}), "render_as": "text"}
+    session = ctx.session or loop.sessions.get_or_create(ctx.key)
+
+    def reply(content: str) -> OutboundMessage:
+        return OutboundMessage(
+            channel=ctx.msg.channel,
+            chat_id=ctx.msg.chat_id,
+            content=content,
+            metadata=metadata,
+        )
 
     if not args:
-        session = ctx.session or loop.sessions.get_or_create(ctx.key)
-        return OutboundMessage(
-            channel=ctx.msg.channel,
-            chat_id=ctx.msg.chat_id,
-            content=_model_command_status(loop, session),
-            metadata=metadata,
-        )
+        return reply(_model_command_status(loop, session))
 
-    name = args
+    model = ""
+    provider = None
+    if " " in args:
+        head, _, tail = args.partition(" ")
+        provider = _match_provider(loop, head)
+        if provider is not None:
+            if not tail.strip():
+                return reply(_model_listing(loop, provider))
+            model = tail.strip()
+    else:
+        provider_only = _match_provider(loop, args)
+        if provider_only is not None:
+            return reply(_model_listing(loop, provider_only))
+        prefix, separator, rest = args.partition("/")
+        if separator and rest:
+            provider = _match_provider(loop, prefix)
+            if provider is not None:
+                model = rest
+        if not model:
+            provider = _current_provider_name(loop, session)
+            model = args
+    if not model:
+        return reply("Error: a model is required.")
+
+    # A provider is only inferred when the user did not name one explicitly.
+    prefix, separator, bare = model.partition("/")
+    if separator and provider and prefix.replace("-", "_") == provider.replace("-", "_"):
+        model = bare
+
     try:
-        runtime = loop.set_session_model_preset(ctx.key, name)
+        runtime = loop.set_session_model(ctx.key, model, provider=provider)
     except (KeyError, ValueError) as exc:
-        names = _model_preset_names(loop)
+        return reply(
+            "Could not switch model: "
+            f"{_command_error_message(exc)}\n\n"
+            "Use `/model` to see providers and `/model <provider>` to list models."
+        )
+
+    actual_provider = getattr(runtime.provider, "provider_name", None)
+    if not isinstance(actual_provider, str) or not actual_provider:
+        actual_provider = provider or "unknown"
+    return reply("\n".join([
+        f"Switched model for this session to `{runtime.model}`.",
+        f"- Provider: `{actual_provider}`",
+        f"- Settings preset: `{runtime.model_preset or 'default'}`",
+        f"- Context window: {runtime.context_window_tokens:,} tokens",
+    ]))
+
+
+def _preset_command_status(loop: AgentLoop, session: Session) -> str:
+    try:
+        runtime = loop.runtime_for_session(session, recover_removed=False)
+    except (KeyError, ValueError) as exc:
+        return "\n".join([
+            "## Presets",
+            f"- Current selection error: {_command_error_message(exc)}",
+            f"- Available presets: {_format_preset_names(_model_preset_names(loop))}",
+        ])
+    active = runtime.model_preset or "default"
+    lines = [
+        "## Presets",
+        f"- Active: `{active}`",
+        f"- Model stays: `{runtime.model}`",
+        "",
+    ]
+    for name in _model_preset_names(loop):
+        preset = loop.model_presets.get(name)
+        if preset is None:
+            continue
+        effort = preset.reasoning_effort or "default"
+        window = (
+            f"{preset.context_window_tokens:,}"
+            if preset.context_window_tokens is not None
+            else "model default"
+        )
+        lines.append(
+            f"- `{name}`: max_tokens={preset.max_tokens:,}, "
+            f"temperature={preset.temperature:g}, reasoning={effort}, "
+            f"context_window={window}"
+        )
+    lines += ["", "Apply with `/presets <name>`; the model is never changed."]
+    return "\n".join(lines)
+
+
+async def cmd_presets(ctx: CommandContext) -> OutboundMessage:
+    """Show or apply a standalone generation-settings preset."""
+    loop = ctx.loop
+    args = ctx.args.strip()
+    metadata = {**dict(ctx.msg.metadata or {}), "render_as": "text"}
+    session = ctx.session or loop.sessions.get_or_create(ctx.key)
+
+    def reply(content: str) -> OutboundMessage:
         return OutboundMessage(
             channel=ctx.msg.channel,
             chat_id=ctx.msg.chat_id,
-            content=(
-                f"Could not switch model preset: {_command_error_message(exc)}\n\n"
-                f"Available presets: {_format_preset_names(names)}"
-            ),
+            content=content,
             metadata=metadata,
         )
 
-    max_tokens = runtime.generation.max_tokens
-    lines = [
-        f"Switched model preset to `{runtime.model_preset}`.",
-        "- Scope: current session",
-        f"- Model: `{runtime.model}`",
-        f"- Context window: {runtime.context_window_tokens}",
-    ]
-    lines.append(f"- Max output tokens: {max_tokens}")
-    return OutboundMessage(
-        channel=ctx.msg.channel,
-        chat_id=ctx.msg.chat_id,
-        content="\n".join(lines),
-        metadata=metadata,
-    )
+    if not args:
+        return reply(_preset_command_status(loop, session))
+
+    try:
+        runtime = loop.set_session_model_preset(ctx.key, args)
+    except (KeyError, ValueError) as exc:
+        return reply(
+            "Could not apply settings preset: "
+            f"{_command_error_message(exc)}\n\n"
+            f"Available presets: {_format_preset_names(_model_preset_names(loop))}"
+        )
+
+    return reply("\n".join([
+        f"Applied settings preset `{runtime.model_preset or 'default'}`.",
+        f"- Model unchanged: `{runtime.model}`",
+        f"- Max output tokens: {runtime.generation.max_tokens:,}",
+        f"- Temperature: {runtime.generation.temperature:g}",
+        f"- Context window: {runtime.context_window_tokens:,} tokens",
+    ]))
 
 
 async def cmd_evaluator_prompt(ctx: CommandContext) -> OutboundMessage:
@@ -714,6 +875,8 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.exact("/status", cmd_status)
     router.exact("/model", cmd_model)
     router.prefix("/model ", cmd_model)
+    router.exact("/presets", cmd_presets)
+    router.prefix("/presets ", cmd_presets)
     router.exact("/history", cmd_history)
     router.prefix("/history ", cmd_history)
     router.exact("/goal", cmd_goal)

@@ -23,7 +23,7 @@ tools:
     allow_set: false   # default: false (read-only)
 ```
 
-To allow the agent to set its configuration (e.g. switch models, adjust parameters), set `tools.my.allow_set: true`.
+To allow the agent to set its configuration (e.g. apply a settings preset, adjust parameters), set `tools.my.allow_set: true`.
 
 Legacy `tools.myEnabled` / `tools.mySet` keys are auto-migrated on load, and rewritten in-place the next time `mason onboard` refreshes the config.
 
@@ -66,7 +66,7 @@ my(action="check", key="web_config.enable")
 | Scenario | How |
 |----------|-----|
 | "What model are you using?" | `check("model")` |
-| "Which model preset is active?" | `check("model_preset")` |
+| "Which settings preset is active?" | `check("model_preset")` |
 | "What is the per-turn iteration limit?" | `check("max_iterations")` |
 | "How many tokens has this conversation used?" | `check("_last_usage")` — cumulative across all turns |
 | "Where is your working directory?" | `check("workspace")` |
@@ -79,16 +79,17 @@ my(action="check", key="web_config.enable")
 
 Changes do not require a restart. `model_preset` is saved for the current session and
 applies to its next turn; other writable runtime tuning takes effect immediately.
-Direct `model` and `context_window_tokens` writes are rejected during an active session
-because those setters change the shared instance default. Configure a named preset for
-model or context-window changes instead.
+Direct `model` writes are rejected during an active session because that setter changes
+the shared instance default; switch models with `/model` (or the SDK's per-run `model`
+override). Use `model_preset` for generation settings, including a context-window
+override.
 
 ```text
 my(action="set", key="max_iterations", value=80)
 # → Bump iteration limit from 40 to 80
 
 my(action="set", key="model_preset", value="fast")
-# → Use a configured model preset for this session's next turn
+# → Apply a configured settings preset for this session's next turn (model unchanged)
 ```
 
 You can also store custom state in your scratchpad:
@@ -107,9 +108,9 @@ These parameters have type and range validation — invalid values are rejected:
 | Parameter | Type | Range | Purpose |
 |-----------|------|-------|---------|
 | `max_iterations` | int | 1–100 | Max tool calls per conversation turn |
-| `context_window_tokens` | int | 4,096–1,000,000 | Instance default; during a session, select through a preset |
-| `model` | str | non-empty | Instance default; during a session, select through a preset |
-| `model_preset` | str | configured preset name | Current session's preset for its next turn |
+| `context_window_tokens` | int | 4,096–1,000,000 | Instance default; during a session, override through a settings preset |
+| `model` | str | non-empty | Instance default; during a session, switch with `/model` |
+| `model_preset` | str | configured preset name | Current session's settings preset for its next turn |
 
 Other parameters (e.g. `workspace`, `provider_retry_mode`, `max_tool_result_chars`) can be set freely, as long as the value is JSON-safe.
 
@@ -120,14 +121,14 @@ Other parameters (e.g. `workspace`, `provider_retry_mode`, `max_tool_result_char
 ### "This task is complex, I need more room"
 
 ```text
-Agent: This codebase is large, let me switch this session to the configured deep preset.
+Agent: This codebase is large, let me apply the deep settings preset for more room.
 → my(action="set", key="model_preset", value="deep")
 ```
 
 ### "Simple question, don't waste compute"
 
 ```text
-Agent: This is a straightforward question, let me switch to the fast preset.
+Agent: This is a straightforward question, let me apply the fast settings preset.
 → my(action="set", key="model_preset", value="fast")
 ```
 
@@ -180,7 +181,7 @@ Agent: The code review is progressing well. The test task hasn't started yet.
 
 Core design principle: **The tool does not rewrite `config.json`.** Instance-wide
 changes live in memory only, while `model_preset` persists only as the current
-session's selector.
+session's settings selector.
 
 ### Off-limits (BLOCKED)
 

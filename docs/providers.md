@@ -2,7 +2,7 @@
 
 Use this page when the first reply fails because of provider/model mismatch, or when you want to adapt the concrete setup example to a different provider. If you already know which provider you want and only need a pasteable setup, use [`provider-cookbook.md`](./provider-cookbook.md).
 
-For normal local setup, run `mason onboard --wizard` to add provider credentials and create a model preset, or edit `config.json` directly. Use the JSON below for manual deployments, local endpoints, provider-specific fields, or diagnosis.
+For normal local setup, run `mason onboard --wizard` to add provider credentials and select a model, or edit `config.json` directly. Use the JSON below for manual deployments, local endpoints, provider-specific fields, or diagnosis.
 
 For every setup, answer three questions:
 
@@ -36,8 +36,6 @@ The docs show concrete provider names so the JSON is copyable, not because mason
   },
   "modelPresets": {
     "primary": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-opus-4.5",
       "maxTokens": 8192,
       "contextWindowTokens": 65536,
       "temperature": 0.1
@@ -45,13 +43,15 @@ The docs show concrete provider names so the JSON is copyable, not because mason
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "anthropic/claude-opus-4.5",
+      "provider": "openrouter"
     }
   }
 }
 ```
 
-The provider config gives mason credentials and endpoint details. The model preset names the provider/model pair. The agent defaults choose which named preset to use for normal turns. Replace the example provider and model together; mixing an API key from one provider with a model ID from another is the most common first-run failure.
+The provider config gives mason credentials and endpoint details. `agents.defaults.model` and `agents.defaults.provider` select the model; `modelPresets` optionally supplies generation settings. Replace the example provider and model together; mixing an API key from one provider with a model ID from another is the most common first-run failure.
 
 ## Provider, Model, API Key, and Base URL
 
@@ -84,15 +84,15 @@ Gateway-style setup for model IDs served through OpenRouter.
   },
   "modelPresets": {
     "primary": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-opus-4.5",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "anthropic/claude-opus-4.5",
+      "provider": "openrouter"
     }
   }
 }
@@ -137,15 +137,15 @@ the built-in `orcarouter` provider and use a model ID from OrcaRouter's catalog:
   },
   "modelPresets": {
     "primary": {
-      "provider": "orcarouter",
-      "model": "orcarouter/auto",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "orcarouter/auto",
+      "provider": "orcarouter"
     }
   }
 }
@@ -171,14 +171,14 @@ the full `provider/model` identifier listed by Eden AI:
   },
   "modelPresets": {
     "primary": {
-      "provider": "edenai",
-      "model": "anthropic/claude-sonnet-4-5",
       "maxTokens": 8192
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "anthropic/claude-sonnet-4-5",
+      "provider": "edenai"
     }
   }
 }
@@ -203,21 +203,21 @@ URLs in mason.
   },
   "modelPresets": {
     "primary": {
-      "provider": "opencode_zen",
-      "model": "opencode/deepseek-v4-pro",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "opencode/deepseek-v4-pro",
+      "provider": "opencode_zen"
     }
   }
 }
 ```
 
-For OpenCode Go, switch the provider block and preset:
+For OpenCode Go, switch the provider block and model selection:
 
 ```json
 {
@@ -228,10 +228,15 @@ For OpenCode Go, switch the provider block and preset:
   },
   "modelPresets": {
     "primary": {
-      "provider": "opencode_go",
-      "model": "opencode-go/deepseek-v4-flash",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
+    }
+  },
+  "agents": {
+    "defaults": {
+      "modelPreset": "primary",
+      "model": "opencode-go/deepseek-v4-flash",
+      "provider": "opencode_go"
     }
   }
 }
@@ -255,15 +260,15 @@ OpenAI-compatible provider path.
   },
   "modelPresets": {
     "primary": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-5",
       "maxTokens": 8192,
       "contextWindowTokens": 200000
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "claude-opus-4-5",
+      "provider": "anthropic"
     }
   }
 }
@@ -283,8 +288,15 @@ If you use an Anthropic-compatible proxy, keep the provider as `anthropic` and o
   },
   "modelPresets": {
     "primary": {
-      "provider": "anthropic",
-      "model": "claude-sonnet-4-5"
+      "maxTokens": 4096,
+      "temperature": 0.1
+    }
+  },
+  "agents": {
+    "defaults": {
+      "modelPreset": "primary",
+      "model": "claude-sonnet-4-5",
+      "provider": "anthropic"
     }
   }
 }
@@ -303,15 +315,15 @@ Arbitrary custom provider names are OpenAI-compatible only; they do not use the 
   },
   "modelPresets": {
     "primary": {
-      "provider": "openai",
-      "model": "gpt-5",
       "maxTokens": 8192,
       "contextWindowTokens": 128000
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "gpt-5",
+      "provider": "openai"
     }
   }
 }
@@ -335,15 +347,15 @@ The `custom` provider fits one OpenAI-compatible endpoint that is not represente
   },
   "modelPresets": {
     "primary": {
-      "provider": "custom",
-      "model": "provider-model-name",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "provider-model-name",
+      "provider": "custom"
     }
   }
 }
@@ -351,7 +363,7 @@ The `custom` provider fits one OpenAI-compatible endpoint that is not represente
 
 `custom` does not infer a default base URL. Set `apiBase`.
 
-If you have more than one custom OpenAI-compatible endpoint, give each endpoint its own provider key under `providers` and use that same key in the model preset. The key can be a name that makes sense in your environment, such as `companyProxy`, `tenant-a`, or `dev-local`.
+If you have more than one custom OpenAI-compatible endpoint, give each endpoint its own provider key under `providers` and select that key with `/model <provider> <model>` (or set it as `agents.defaults.provider`). The key can be a name that makes sense in your environment, such as `companyProxy`, `tenant-a`, or `dev-local`.
 
 ```json
 {
@@ -366,21 +378,15 @@ If you have more than one custom OpenAI-compatible endpoint, give each endpoint 
   },
   "modelPresets": {
     "company": {
-      "provider": "companyProxy",
-      "model": "gpt-4o-mini",
-      "maxTokens": 8192,
-      "contextWindowTokens": 65536
-    },
-    "tenantA": {
-      "provider": "tenant-a",
-      "model": "served-model-name",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "company"
+      "modelPreset": "company",
+      "model": "gpt-4o-mini",
+      "provider": "companyProxy"
     }
   }
 }
@@ -390,7 +396,7 @@ Custom provider keys are treated as direct OpenAI-compatible providers. `apiBase
 
 If your custom endpoint documents a nonstandard thinking toggle, set `providers.<name>.thinkingStyle` to `thinking_type`, `enable_thinking`, or `reasoning_split`; mason then maps `reasoningEffort` onto that provider-specific request body. Leave it unset for ordinary OpenAI-compatible endpoints.
 
-This named custom provider path is not for Anthropic-compatible endpoints. For Anthropic-compatible proxies, use `providers.anthropic.apiBase` and set the preset provider to `anthropic`.
+This named custom provider path is not for Anthropic-compatible endpoints. For Anthropic-compatible proxies, use `providers.anthropic.apiBase` and select `anthropic` as the provider.
 
 ### ModelScope
 
@@ -407,15 +413,15 @@ Create a ModelScope [access token](https://modelscope.cn/my/myaccesstoken), then
   },
   "modelPresets": {
     "primary": {
-      "provider": "modelscope",
-      "model": "Qwen/Qwen3-32B",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "Qwen/Qwen3-32B",
+      "provider": "modelscope"
     }
   }
 }
@@ -423,7 +429,7 @@ Create a ModelScope [access token](https://modelscope.cn/my/myaccesstoken), then
 
 Use an inference-enabled model ID exactly as ModelScope publishes it (usually `Namespace/model-name`). The default base URL is `https://api-inference.modelscope.cn/v1`; override `providers.modelscope.apiBase` only if your account routes through a different host. Chat model IDs may optionally be prefixed with `modelscope/`; mason strips that routing prefix before sending the request.
 
-ModelScope image generation reuses the same provider key but is configured under `tools.imageGeneration`, not in a model preset:
+ModelScope image generation reuses the same provider key but is configured under `tools.imageGeneration`, not in `modelPresets`:
 
 ```json
 {
@@ -452,15 +458,15 @@ Start Ollama separately, then point mason at the OpenAI-compatible endpoint.
   },
   "modelPresets": {
     "primary": {
-      "provider": "ollama",
-      "model": "llama3.2",
       "maxTokens": 4096,
       "contextWindowTokens": 32768
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "llama3.2",
+      "provider": "ollama"
     }
   }
 }
@@ -487,15 +493,15 @@ log pattern and a tested `llama3.1:8b` workaround.
   },
   "modelPresets": {
     "primary": {
-      "provider": "vllm",
-      "model": "served-model-name",
       "maxTokens": 8192,
       "contextWindowTokens": 65536
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "served-model-name",
+      "provider": "vllm"
     }
   }
 }
@@ -514,21 +520,21 @@ Some OpenAI-compatible local servers require any non-empty API key even when the
   },
   "modelPresets": {
     "primary": {
-      "provider": "lm_studio",
-      "model": "local-model",
       "maxTokens": 4096,
       "contextWindowTokens": 32768
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "local-model",
+      "provider": "lm_studio"
     }
   }
 }
 ```
 
-Config keys may be camelCase or snake_case. Provider names in model presets should use the registry name, such as `lm_studio`.
+Config keys may be camelCase or snake_case. Provider names in `agents.defaults` (or the `/model` selection) should use the registry name, such as `lm_studio`.
 
 ### AWS Bedrock
 
@@ -544,15 +550,15 @@ Bedrock can use the AWS credential chain, profile, region, or Bedrock bearer tok
   },
   "modelPresets": {
     "primary": {
-      "provider": "bedrock",
-      "model": "bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0",
       "maxTokens": 8192,
       "contextWindowTokens": 200000
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "modelPreset": "primary",
+      "model": "bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "provider": "bedrock"
     }
   }
 }
@@ -627,14 +633,14 @@ Each command authenticates the selected provider and makes its current default m
 
 ## Provider Resolution
 
-The recommended path is a named preset selected by `agents.defaults.modelPreset`. The effective model parameters come from:
+The model selection and the generation settings are separate:
 
-1. the named `modelPresets` entry referenced by `agents.defaults.modelPreset`;
-2. otherwise the implicit `default` preset built from `agents.defaults.model`, `provider`, `maxTokens`, `contextWindowTokens`, `temperature`, and related fields.
+1. `agents.defaults.model` and `agents.defaults.provider` select the model. At runtime, `/model <provider> <model>` overrides the selection for one session.
+2. `agents.defaults.modelPreset` optionally applies a generation-settings preset from the top-level `modelPresets` object. At runtime, `/presets <name>` applies one to the current session. Presets never select a provider or model.
 
 Provider selection follows this practical rule:
 
-- Explicit `provider` in the active preset or implicit default config wins.
+- An explicit `provider` in `agents.defaults` (or the `/model` selection) wins.
 - `provider: "auto"` tries model-name keywords, configured keys, local base URLs, and gateway providers.
 - Gateway providers such as OpenRouter and AiHubMix can route many model families, so the model name must be valid for that gateway.
 - Local providers should normally be explicit because generic local model names such as `llama3.2` do not always contain provider keywords.
@@ -647,88 +653,88 @@ Provider selection follows this practical rule:
 - With `provider: "auto"`, a prefix matching a configured built-in or named custom provider can select that provider. Named custom prefixes are stripped before request, so `companyProxy/gpt-4o-mini` is sent upstream as `gpt-4o-mini`.
 - With an explicit named custom provider, the model is sent as written; `provider: "companyProxy"` with `model: "openai/gpt-4o-mini"` sends `openai/gpt-4o-mini` to `companyProxy`.
 
-Pin `provider` in presets when using gateway catalog IDs such as `anthropic/claude-sonnet-4.5`.
+Pin `provider` in `agents.defaults` when using gateway catalog IDs such as `anthropic/claude-sonnet-4.5`.
 
-## Model Presets
+## Generation Presets
 
-Model presets are the recommended model configuration surface. Use them when you want named model choices, runtime `/model` switching, or reusable fallback targets.
-
-```json
-{
-  "modelPresets": {
-    "fast": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4.5",
-      "maxTokens": 4096,
-      "contextWindowTokens": 65536,
-      "temperature": 0.1
-    },
-    "deep": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-5",
-      "maxTokens": 8192,
-      "contextWindowTokens": 200000,
-      "temperature": 0.1
-    }
-  },
-  "agents": {
-    "defaults": {
-      "modelPreset": "fast"
-    }
-  }
-}
-```
-
-The preset name `default` is reserved for the implicit `agents.defaults` settings. Do not define `modelPresets.default`; use `/model default` to return to the direct `agents.defaults.*` fields in older configs.
-
-## Fallback Models
-
-Fallbacks are useful for transient provider failures, rate limits, or model availability issues. Keep fallbacks compatible with the task size and tool use. Prefer fallback presets so each candidate has a name and a complete provider, model, generation, and context-window configuration.
+Presets are standalone generation settings applied on top of whichever model is active. They never select a provider or model: use `/model` to choose a model and `/presets` to apply a preset. The same names can be used as new-session defaults.
 
 ```json
 {
   "modelPresets": {
     "fast": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4.5",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
     },
     "deep": {
-      "provider": "anthropic",
-      "model": "claude-opus-4-5",
       "maxTokens": 8192,
       "contextWindowTokens": 200000,
-      "temperature": 0.1
-    },
-    "localSmall": {
-      "provider": "ollama",
-      "model": "llama3.2",
-      "maxTokens": 4096,
-      "contextWindowTokens": 32768,
-      "temperature": 0.2
+      "temperature": 0.1,
+      "reasoningEffort": "high"
     }
   },
   "agents": {
     "defaults": {
       "modelPreset": "fast",
-      "fallbackModels": ["deep", "localSmall"]
+      "model": "anthropic/claude-sonnet-4.5",
+      "provider": "openrouter"
     }
   }
 }
 ```
 
-String entries in `fallbackModels` are preset names, not raw model names. mason tries them in order after the active preset. Each fallback preset uses its own `provider`, `model`, `maxTokens`, `contextWindowTokens`, `temperature`, and optional `reasoningEffort`.
+The preset name `default` is reserved for the implicit settings taken from `agents.defaults.*`. Do not define `modelPresets.default`; use `/presets default` to return to the direct `agents.defaults.*` settings in older configs.
 
-Use inline fallback objects only when a model is not worth naming as a preset:
+Older config files may still contain `model` and `provider` inside a preset. They remain loadable but are ignored: move that model into `agents.defaults.model`/`agents.defaults.provider` (or select it once with `/model`).
+
+## Fallback Models
+
+Fallbacks are useful for transient provider failures, rate limits, or model availability issues. Keep fallbacks compatible with the task size and tool use.
 
 ```json
 {
   "modelPresets": {
     "fast": {
-      "provider": "openrouter",
+      "maxTokens": 4096,
+      "contextWindowTokens": 65536,
+      "temperature": 0.1
+    }
+  },
+  "agents": {
+    "defaults": {
+      "modelPreset": "fast",
+      "fallbackModels": [
+        {
+          "model": "claude-opus-4-5",
+          "provider": "anthropic",
+          "maxTokens": 8192,
+          "contextWindowTokens": 200000,
+          "temperature": 0.1
+        },
+        {
+          "model": "llama3.2",
+          "provider": "ollama",
+          "maxTokens": 4096,
+          "contextWindowTokens": 32768,
+          "temperature": 0.2
+        }
+      ],
       "model": "anthropic/claude-sonnet-4.5",
+      "provider": "openrouter"
+    }
+  }
+}
+```
+
+String entries in `fallbackModels` are model IDs. Use an inline object when a fallback needs its own provider or generation settings. For migration, a string that matches a legacy preset name still resolves to that preset's old `model` binding.
+
+Use inline fallback objects so provider and settings travel with each candidate:
+
+```json
+{
+  "modelPresets": {
+    "fast": {
       "maxTokens": 4096,
       "contextWindowTokens": 65536
     }
@@ -743,7 +749,9 @@ Use inline fallback objects only when a model is not worth naming as a preset:
           "maxTokens": 4096,
           "contextWindowTokens": 262144
         }
-      ]
+      ],
+      "model": "anthropic/claude-sonnet-4.5",
+      "provider": "openrouter"
     }
   }
 }
@@ -767,7 +775,7 @@ If `mason agent -m "Hello!"` fails:
 | 401, unauthorized, invalid API key | Key is missing, expired, copied with whitespace, or stored under the wrong provider |
 | model not found | Model ID does not exist for the selected provider or gateway |
 | connection refused | Local provider server is not running or `apiBase` points to the wrong port |
-| provider not found | The active preset uses a misspelled provider; use registry names such as `openrouter`, `anthropic`, `ollama`, `vllm`, `lm_studio` |
+| provider not found | The selected model uses a misspelled provider; use registry names such as `openrouter`, `anthropic`, `ollama`, `vllm`, `lm_studio` |
 | works in CLI but not chat app | Provider is fine; debug gateway/channel setup in [`chat-apps.md`](./chat-apps.md) or [`troubleshooting.md`](./troubleshooting.md) |
 
 For the complete provider table and advanced provider-specific notes, see [`configuration.md#providers`](./configuration.md#providers).

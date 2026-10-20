@@ -127,7 +127,7 @@ Each pass also drops a readable snapshot of what it decided at
 `memory/consolidation/latest.md`.
 
 The consolidation prompt is chosen per call, so it can run with a different (often
-cheaper) model preset than the main conversation. It never raises into the gateway:
+cheaper) model than the main conversation. It never raises into the gateway:
 a model error, or output that does not parse, simply means nothing changed and the
 cursor stays where it was, so the same journal entries are retried next time.
 
@@ -232,11 +232,11 @@ demand.
 | `consolidation.enabled` | Register the periodic consolidation job |
 | `consolidation.intervalH` | How often consolidation runs, in hours |
 | `consolidation.cron` | Legacy cron expression override (takes precedence over `intervalH`) |
-| `consolidation.modelOverride` | Optional model preset name for consolidation runs |
+| `consolidation.modelOverride` | Optional model ID for consolidation runs |
 
-`modelOverride` selects a named entry from `model_presets`. It accepts preset names
-only; raw model identifiers are not supported. If omitted, consolidation uses the
-main agent's selected runtime.
+`modelOverride` accepts a model ID. For migration, a value that matches a legacy
+preset name resolves to that preset's old `model` binding. If omitted, consolidation
+uses the main agent's selected runtime.
 
 ## Upgrading From File-Based Memory
 

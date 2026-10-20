@@ -264,7 +264,12 @@ def _resolve_fallback_presets(config: Config, primary: ModelPresetConfig) -> lis
     presets: list[ModelPresetConfig] = []
     for fallback in config.agents.defaults.fallback_models:
         if isinstance(fallback, str):
-            presets.append(config.model_presets[fallback])
+            # Strings are model IDs. Legacy preset names keep resolving to their
+            # old model binding, but presets no longer define fallbacks.
+            model = config.resolve_model_reference(fallback)
+            presets.append(
+                primary.model_copy(update={"model": model, "provider": "auto"})
+            )
         else:
             presets.append(_inline_fallback_preset(primary, fallback))
     return presets
@@ -383,12 +388,26 @@ def build_provider_snapshot(
     *,
     preset_name: str | None = None,
     preset: ModelPresetConfig | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+    context_window_tokens: int | None = None,
 ) -> ProviderSnapshot:
-    resolved = _resolve_model_preset(config, preset_name=preset_name, preset=preset)
+    if model is not None:
+        generation = config.resolve_generation_preset(preset_name)
+        selected_provider = provider or generation.provider or "auto"
+        selected_window = (
+            context_window_tokens
+            or generation.context_window_tokens
+            or _model_context_window(config, model, selected_provider)
+            or config.agents.defaults.context_window_tokens
+        )
+        resolved = generation.to_model_preset(model, selected_provider, selected_window)
+    else:
+        resolved = _resolve_model_preset(config, preset_name=preset_name, preset=preset)
     selected_preset = (
-        config.agents.defaults.model_preset
-        if preset_name is None and preset is None
-        else preset_name
+        preset_name
+        if preset_name is not None
+        else (None if model is not None else config.agents.defaults.model_preset)
     )
     fallback_windows = [
         fallback.context_window_tokens
@@ -404,10 +423,28 @@ def build_provider_snapshot(
     )
 
 
+def _model_context_window(config: Config, model: str, provider: str) -> int | None:
+    """Return a known built-in context window without any network lookup."""
+    name = config.get_provider_name(
+        model, preset=ModelPresetConfig(model=model, provider=provider)
+    )
+    spec = find_by_name(name) if name else None
+    if spec is None:
+        return None
+    bare = model.split("/", 1)[-1]
+    for item in spec.builtin_models:
+        if item.id == model or item.id.split("/", 1)[-1] == bare:
+            return item.context_window
+    return None
+
+
 def load_provider_snapshot(
     config_path: Path | None = None,
     *,
     preset_name: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+    context_window_tokens: int | None = None,
 ) -> ProviderSnapshot:
     from mason.config.loader import load_config, resolve_config_env_vars
 
@@ -417,4 +454,7 @@ def load_provider_snapshot(
             config_path=config_path,
         ),
         preset_name=preset_name,
+        model=model,
+        provider=provider,
+        context_window_tokens=context_window_tokens,
     )

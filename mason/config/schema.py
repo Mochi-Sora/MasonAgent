@@ -64,7 +64,7 @@ class MemoryConsolidationConfig(Base):
     model_override: str | None = Field(
         default=None,
         validation_alias=AliasChoices("modelOverride", "model", "model_override"),
-    )  # Model preset name for consolidation runs
+    )  # Model ID for consolidation runs
 
     def build_schedule(self, timezone: str) -> CronSchedule:
         """Build the runtime schedule, preferring the legacy cron override if present."""
@@ -117,7 +117,7 @@ class InlineFallbackConfig(Base):
     """One inline fallback model configuration."""
 
     model: str
-    provider: str
+    provider: str = "auto"
     max_tokens: int | None = None
     context_window_tokens: int | None = None
     temperature: float | None = None
@@ -128,7 +128,12 @@ FallbackCandidate = str | InlineFallbackConfig
 
 
 class ModelPresetConfig(Base):
-    """A named set of model + generation parameters for quick switching."""
+    """Internal effective model selection plus generation parameters.
+
+    Config files no longer define presets with a model binding; the public
+    ``GenerationPresetConfig`` is settings-only. This type remains the shape the
+    provider/factory layer consumes once a model has been selected.
+    """
 
     model: str
     provider: str = "auto"
@@ -146,11 +151,55 @@ class ModelPresetConfig(Base):
         )
 
 
+class GenerationPresetConfig(Base):
+    """Standalone generation settings that apply to whichever model is active.
+
+    A preset never selects a provider or model. ``model`` and ``provider`` are
+    accepted only to keep pre-split config files loadable; runtime selection
+    ignores them except when resolving the legacy default model.
+    """
+
+    max_tokens: int = 8192
+    context_window_tokens: int | None = None  # None keeps the model's window
+    temperature: float = 0.1
+    reasoning_effort: str | None = None
+
+    # Deprecated: legacy model binding. Used only to migrate old fallback values.
+    model: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    provider: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    def to_generation_settings(self) -> Any:
+        from mason.providers.base import GenerationSettings
+        return GenerationSettings(
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            reasoning_effort=self.reasoning_effort,
+        )
+
+    def to_model_preset(
+        self,
+        model: str,
+        provider: str,
+        context_window_tokens: int,
+    ) -> ModelPresetConfig:
+        return ModelPresetConfig(
+            model=model,
+            provider=provider,
+            max_tokens=self.max_tokens,
+            context_window_tokens=context_window_tokens,
+            temperature=self.temperature,
+            reasoning_effort=self.reasoning_effort,
+        )
+
+
 class AgentDefaults(Base):
     """Default agent configuration."""
 
     workspace: str = "~/.mason/workspace"
-    model_preset: str | None = None  # Active preset name — takes precedence over fields below
+    model_preset: str | None = Field(
+        default=None,
+        description="Settings Preset",
+    )  # Active generation-settings preset (never selects a model)
     model: str = "anthropic/claude-opus-4-5"
     provider: str = (
         "auto"  # Provider name (e.g. "anthropic", "openrouter") or "auto" for auto-detection
@@ -472,7 +521,7 @@ class Config(BaseSettings):
     api: ApiConfig = Field(default_factory=ApiConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
-    model_presets: dict[str, ModelPresetConfig] = Field(
+    model_presets: dict[str, GenerationPresetConfig] = Field(
         default_factory=dict,
         validation_alias=AliasChoices("modelPresets", "model_presets"),
         serialization_alias="modelPresets",
@@ -502,35 +551,73 @@ class Config(BaseSettings):
         name = self.agents.defaults.model_preset
         if name and name != "default" and name not in self.model_presets:
             raise ValueError(f"model_preset {name!r} not found in model_presets")
-        consolidation_name = self.agents.defaults.memory.consolidation.model_override
-        if consolidation_name and consolidation_name != "default":
-            if consolidation_name not in self.model_presets:
-                raise ValueError(
-                    f"Memory consolidation model preset {consolidation_name!r} "
-                    "not found in model_presets"
-                )
+        consolidation = self.agents.defaults.memory.consolidation.model_override
+        if consolidation is not None and not consolidation.strip():
+            raise ValueError("memory consolidation model must be a non-empty string")
         for fallback in self.agents.defaults.fallback_models:
-            if isinstance(fallback, str) and fallback not in self.model_presets:
-                raise ValueError(f"fallback_models entry {fallback!r} not found in model_presets")
+            if isinstance(fallback, str) and not fallback.strip():
+                raise ValueError("fallback_models entries must be non-empty strings")
         return self
+
+    def default_model_selection(self) -> tuple[str, str]:
+        """Return the configured default model and provider.
+
+        Settings presets never select a model, including legacy presets that
+        still carry a ``model`` field. Use ``/model`` or ``agents.defaults`` to
+        choose the model.
+        """
+        defaults = self.agents.defaults
+        return defaults.model, defaults.provider
 
     def resolve_default_preset(self) -> ModelPresetConfig:
         """Return the implicit `default` preset from agents.defaults fields."""
         d = self.agents.defaults
+        model, provider = self.default_model_selection()
         return ModelPresetConfig(
-            model=d.model, provider=d.provider, max_tokens=d.max_tokens,
+            model=model, provider=provider, max_tokens=d.max_tokens,
             context_window_tokens=d.context_window_tokens,
             temperature=d.temperature, reasoning_effort=d.reasoning_effort,
         )
 
-    def resolve_preset(self, name: str | None = None) -> ModelPresetConfig:
-        """Return effective model params from a named preset or the implicit default."""
+    def resolve_generation_preset(self, name: str | None = None) -> GenerationPresetConfig:
+        """Return settings only; the model selection is never part of it."""
         name = self.agents.defaults.model_preset if name is None else name
         if not name or name == "default":
-            return self.resolve_default_preset()
+            d = self.agents.defaults
+            return GenerationPresetConfig(
+                max_tokens=d.max_tokens,
+                context_window_tokens=None,
+                temperature=d.temperature,
+                reasoning_effort=d.reasoning_effort,
+            )
         if name not in self.model_presets:
             raise KeyError(f"model_preset {name!r} not found in model_presets")
         return self.model_presets[name]
+
+    def resolve_preset(self, name: str | None = None) -> ModelPresetConfig:
+        """Return the default model selection plus one settings preset.
+
+        Presets are settings-only; a legacy ``model``/``provider`` field inside
+        a preset is ignored here. ``resolve_model_reference`` exists only to
+        migrate old fallback/consolidation values that still name a preset.
+        """
+        name = self.agents.defaults.model_preset if name is None else name
+        if not name or name == "default":
+            return self.resolve_default_preset()
+        generation = self.resolve_generation_preset(name)
+        model, provider = self.default_model_selection()
+        context_window = (
+            generation.context_window_tokens
+            or self.agents.defaults.context_window_tokens
+        )
+        return generation.to_model_preset(model, provider, context_window)
+
+    def resolve_model_reference(self, value: str) -> str:
+        """Resolve a model ID or a legacy preset name to a model ID."""
+        preset = self.model_presets.get(value)
+        if preset is not None and preset.model:
+            return preset.model
+        return value
 
     @property
     def workspace_path(self) -> Path:

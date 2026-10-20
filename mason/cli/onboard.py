@@ -33,7 +33,7 @@ from mason.cli.models import (
     get_model_context_limit,
 )
 from mason.config.loader import get_config_path, load_config, resolve_config_env_vars
-from mason.config.schema import Config, ModelPresetConfig
+from mason.config.schema import Config, GenerationPresetConfig
 from mason.providers.oauth_guidance import OAUTH_CLI_KIT_MISSING_MESSAGE
 
 console = Console()
@@ -1094,15 +1094,29 @@ def _validate_nonempty_name(text: str) -> bool | str:
     return True if text and text.strip() else "Name cannot be empty"
 
 
+def _preset_summary(preset: GenerationPresetConfig) -> str:
+    """One-line, settings-only summary of a generation preset."""
+    parts = [f"max {preset.max_tokens} tok", f"temp {preset.temperature:g}"]
+    if preset.reasoning_effort:
+        parts.append(f"reasoning {preset.reasoning_effort}")
+    if preset.context_window_tokens:
+        parts.append(f"ctx {preset.context_window_tokens}")
+    return ", ".join(parts)
+
+
+# Deprecated preset fields kept only for config compatibility; never editable.
+_PRESET_SKIP_FIELDS = frozenset({"model", "provider"})
+
+
 def _configure_model_presets(config: Config) -> None:
-    """Configure model presets (CRUD)."""
+    """Configure generation presets (settings-only CRUD)."""
     _sync_preset_cache(config)
 
     def get_preset_choices() -> tuple[list[str], dict[str, str]]:
         choices: list[str] = []
         choice_to_preset: dict[str, str] = {}
         for name, preset in config.model_presets.items():
-            choice = f"{name} - {preset.model}"
+            choice = f"{name} - {_preset_summary(preset)}"
             choices.append(choice)
             choice_to_preset[choice] = name
         choices.append("[+] Add new preset")
@@ -1114,8 +1128,8 @@ def _configure_model_presets(config: Config) -> None:
         try:
             console.clear()
             _show_section_header(
-                "Model Presets",
-                "Create, edit or delete named model presets for quick switching",
+                "Generation Presets",
+                "Create, edit or delete settings presets applied to the active model",
             )
             choices, choice_to_preset = get_preset_choices()
             default_choice = None
@@ -1151,8 +1165,13 @@ def _configure_model_presets(config: Config) -> None:
                     )
                     _pause()
                     continue
-                new_preset = ModelPresetConfig(model="")
-                updated = _configure_pydantic_model(new_preset, f"New Preset: {name}", config=config)
+                new_preset = GenerationPresetConfig()
+                updated = _configure_pydantic_model(
+                    new_preset,
+                    f"New Preset: {name}",
+                    skip_fields=set(_PRESET_SKIP_FIELDS),
+                    config=config,
+                )
                 if updated is not None:
                     config.model_presets[name] = updated
                     _sync_preset_cache(config)
@@ -1192,7 +1211,12 @@ def _configure_model_presets(config: Config) -> None:
                 continue
 
             if action == "Edit":
-                updated = _configure_pydantic_model(preset, f"Edit Preset: {preset_name}", config=config)
+                updated = _configure_pydantic_model(
+                    preset,
+                    f"Edit Preset: {preset_name}",
+                    skip_fields=set(_PRESET_SKIP_FIELDS),
+                    config=config,
+                )
                 if updated is not None:
                     config.model_presets[preset_name] = updated
                     _sync_preset_cache(config)
@@ -1587,11 +1611,11 @@ def _show_summary(config: Config) -> None:
         channel_rows.append((display, status))
     _print_summary_panel(channel_rows, "Chat Channels")
 
-    # Model Presets
+    # Generation Presets
     preset_rows: list[tuple[str, str]] = []
     for name, preset in config.model_presets.items():
-        preset_rows.append((name, f"{preset.model} - ctx {preset.context_window_tokens}"))
-    _print_summary_panel(preset_rows, "Model Presets")
+        preset_rows.append((name, _preset_summary(preset)))
+    _print_summary_panel(preset_rows, "Generation Presets")
 
     # Settings sections
     for title, model in [
@@ -1615,11 +1639,17 @@ def _pause(message: str = "Press Enter to continue...") -> None:
 
 
 def _set_primary_quick_start_preset(config: Config, provider_name: str, model: str) -> None:
-    """Store the primary preset used by Quick Start."""
-    config.model_presets["primary"] = ModelPresetConfig(
-        model=model,
-        provider=provider_name,
-    )
+    """Store the Quick Start model and a settings-only primary preset."""
+    defaults = config.agents.defaults
+    config.agents.defaults.model = model
+    config.agents.defaults.provider = provider_name
+    if "primary" not in config.model_presets:
+        config.model_presets["primary"] = GenerationPresetConfig(
+            max_tokens=defaults.max_tokens,
+            context_window_tokens=None,
+            temperature=defaults.temperature,
+            reasoning_effort=defaults.reasoning_effort,
+        )
     config.agents.defaults.model_preset = "primary"
     _sync_preset_cache(config)
 
@@ -1973,24 +2003,24 @@ def _configure_quick_start_provider(config: Config) -> bool | object:
 def _show_quick_start_summary(config: Config) -> None:
     """Show the small summary users need before returning to the menu."""
     _show_quick_start_progress(2)
-    preset = config.model_presets.get("primary")
     provider_label = "AI provider"
     credentials_ready = True
     credential_name = "API key"
-    if preset:
-        provider_config = getattr(config.providers, preset.provider, None)
-        provider_info = _get_quick_start_provider_info().get(preset.provider)
+    _model, provider_name = config.default_model_selection()
+    if provider_name:
+        provider_config = getattr(config.providers, provider_name, None)
+        provider_info = _get_quick_start_provider_info().get(provider_name)
         if provider_info:
             provider_label = provider_info.display_name
             if provider_info.is_oauth:
                 credential_name = "OAuth login"
-                credentials_ready = _quick_start_oauth_is_authenticated(config, preset.provider)
+                credentials_ready = _quick_start_oauth_is_authenticated(config, provider_name)
             else:
                 credentials_ready = provider_info.is_local or bool(
                     provider_config and provider_config.api_key
                 )
         else:
-            provider_label = _get_provider_names().get(preset.provider, preset.provider)
+            provider_label = _get_provider_names().get(provider_name, provider_name)
             credentials_ready = bool(provider_config and provider_config.api_key)
 
     status = "Ready"
@@ -2071,7 +2101,7 @@ def _configure_advanced_settings(config: Config) -> None:
     last_choice: str | None = None
     choices = [
         "[P] LLM Provider",
-        "[M] Model Presets",
+        "[M] Generation Presets",
         "[C] Chat Channel",
         "[H] Channel Common",
         "[A] Agent Settings",
@@ -2101,7 +2131,7 @@ def _configure_advanced_settings(config: Config) -> None:
 
         _advanced_dispatch: dict[str, Callable[[], None]] = {
             "[P] LLM Provider": lambda: _configure_providers(config),
-            "[M] Model Presets": lambda: _configure_model_presets(config),
+            "[M] Generation Presets": lambda: _configure_model_presets(config),
             "[C] Chat Channel": lambda: _configure_channels(config),
             "[H] Channel Common": lambda: _configure_general_settings(config, "Channel Common"),
             "[A] Agent Settings": lambda: _configure_general_settings(config, "Agent Settings"),

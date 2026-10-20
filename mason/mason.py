@@ -16,10 +16,7 @@ from mason.config.schema import Config
 from mason.providers.base import LLMUsage
 from mason.providers.image_generation import image_gen_provider_configs
 from mason.sdk.clients import MemoryClient, RuntimeClient, SessionClient
-from mason.sdk.runtime import (
-    build_process_direct_kwargs,
-    ensure_single_model_selector,
-)
+from mason.sdk.runtime import build_process_direct_kwargs
 from mason.sdk.streaming import RunStream, SDKStreamEmitter, SDKStreamingHook
 from mason.sdk.types import (
     STREAM_EVENT_REASONING_COMPLETED,
@@ -105,11 +102,11 @@ class Mason:
                 ``~/.mason/config.json``.
             workspace: Override the workspace directory from config.
             model: Override the instance default model.
-            model_preset: Override the instance default model preset.
+            model_preset: Apply a generation settings preset to the selected
+                model. Independent of ``model`` and may be combined with it.
         """
         from mason.config.loader import load_config, resolve_config_env_vars
 
-        ensure_single_model_selector(model=model, model_preset=model_preset)
         resolved: Path | None = None
         if config_path is not None:
             resolved = Path(config_path).expanduser().resolve()
@@ -124,12 +121,11 @@ class Mason:
             config.agents.defaults.workspace = str(
                 Path(workspace).expanduser().resolve()
             )
+        if model_preset is not None:
+            config.agents.defaults.model_preset = model_preset
         if model is not None:
-            config.agents.defaults.model_preset = None
             config.agents.defaults.model = model
             config.agents.defaults.provider = "auto"
-        elif model_preset is not None:
-            config.agents.defaults.model_preset = model_preset
 
         tools = ToolRegistry()
         mcp_provider = MCPProvider.from_config(config, tools)

@@ -87,25 +87,20 @@ The gateway keeps enabled channels and other long-running services alive. Its he
 
 ## Provider and Model Selection
 
-The active model should normally come from a named `modelPresets` entry selected by `agents.defaults.modelPreset`. Direct `agents.defaults.provider` and `agents.defaults.model` still form the implicit `default` preset for older or minimal configs. The active provider is resolved in this order:
+The active model is selected by `agents.defaults.model` and `agents.defaults.provider`; in chat, `/model <provider> <model>` overrides that for the current session. Generation settings are separate: `agents.defaults.modelPreset` (or `/presets <name>`) applies one of the top-level `modelPresets`, and a preset never changes the model. The active provider is resolved in this order:
 
-1. If the active preset provider or implicit default provider is not `"auto"`, mason uses that provider.
+1. If the explicit provider is not `"auto"`, mason uses that provider.
 2. If provider is `"auto"`, mason tries to infer the provider from the model name, configured API keys, local provider base URLs, or gateway providers.
-3. OAuth providers such as OpenAI Codex and GitHub Copilot require explicit login and explicit provider/model selection inside the active preset.
+3. OAuth providers such as OpenAI Codex and GitHub Copilot require explicit login and explicit provider/model selection.
 
-Pin the provider inside the preset when setting up for the first time. It is easier to debug:
+Pin the provider in `agents.defaults` when setting up for the first time. It is easier to debug:
 
 ```json
 {
-  "modelPresets": {
-    "primary": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-opus-4.5"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "model": "anthropic/claude-opus-4.5",
+      "provider": "openrouter"
     }
   }
 }

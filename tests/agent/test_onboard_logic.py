@@ -23,7 +23,7 @@ from mason.cli.onboard import (
     run_onboard,
 )
 from mason.config.loader import merge_missing_defaults
-from mason.config.schema import Config, ModelPresetConfig
+from mason.config.schema import Config, GenerationPresetConfig
 from mason.utils.helpers import sync_workspace_templates
 
 
@@ -1048,8 +1048,8 @@ class TestMainMenuUpdate:
             ("Model ID", "openai-codex/gpt-5.6-sol", "openai_codex")
         ]
         assert config.providers.openai_codex.api_key is None
-        assert config.model_presets["primary"].provider == "openai_codex"
-        assert config.model_presets["primary"].model == "openai-codex/gpt-5.6-sol"
+        assert config.agents.defaults.provider == "openai_codex"
+        assert config.agents.defaults.model == "openai-codex/gpt-5.6-sol"
 
     def test_quick_start_openai_codex_defaults_to_an_account_model(self, monkeypatch):
         """After login, Quick Start defaults to a model the account actually has."""
@@ -1080,7 +1080,7 @@ class TestMainMenuUpdate:
         assert model_prompts == [
             ("Model ID", "openai-codex/gpt-5.6-luna", "openai_codex")
         ]
-        assert config.model_presets["primary"].model == "openai-codex/gpt-5.6-luna"
+        assert config.agents.defaults.model == "openai-codex/gpt-5.6-luna"
 
     def test_quick_start_oauth_login_uses_device_flow_when_headless(self, monkeypatch):
         """A headless host must not wait for a localhost browser callback."""
@@ -1290,10 +1290,8 @@ class TestMainMenuUpdate:
     def test_quick_start_summary_reports_missing_codex_oauth(self, monkeypatch):
         """The review step should distinguish OAuth from an API-key setup."""
         config = Config()
-        config.model_presets["primary"] = ModelPresetConfig(
-            model="openai-codex/gpt-5.6-sol",
-            provider="openai_codex",
-        )
+        config.agents.defaults.model = "openai-codex/gpt-5.6-sol"
+        config.agents.defaults.provider = "openai_codex"
         captured: dict[str, list[tuple[str, str]]] = {}
 
         monkeypatch.setattr(onboard_wizard, "_show_quick_start_progress", lambda *_args: None)
@@ -1352,8 +1350,8 @@ class TestMainMenuUpdate:
         assert config.providers.deepseek.api_key == "sk-ds-test"
         assert config.providers.deepseek.api_base == "https://api.deepseek.com"
         assert config.agents.defaults.model_preset == "primary"
-        assert config.model_presets["primary"].provider == "deepseek"
-        assert config.model_presets["primary"].model == "deepseek-v4-flash"
+        assert config.agents.defaults.provider == "deepseek"
+        assert config.agents.defaults.model == "deepseek-v4-flash"
 
     def test_quick_start_provider_menu_escape_returns_back(self, monkeypatch):
         """Esc from the first Quick Start menu should return to the main menu."""
@@ -1406,8 +1404,8 @@ class TestMainMenuUpdate:
         assert model_prompts == [("Model ID", "", "openrouter")]
         assert config.providers.openrouter.api_key == "sk-or-test"
         assert config.providers.openrouter.api_base == "https://openrouter.ai/api/v1"
-        assert config.model_presets["primary"].provider == "openrouter"
-        assert config.model_presets["primary"].model == "openai/gpt-4o-mini"
+        assert config.agents.defaults.provider == "openrouter"
+        assert config.agents.defaults.model == "openai/gpt-4o-mini"
 
     def test_quick_start_local_provider_skips_api_key(self, monkeypatch):
         """Local providers should only need a model when they have a default base URL."""
@@ -1430,8 +1428,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.ollama.api_key is None
         assert config.providers.ollama.api_base == "http://localhost:11434/v1"
-        assert config.model_presets["primary"].provider == "ollama"
-        assert config.model_presets["primary"].model == "llama3.2"
+        assert config.agents.defaults.provider == "ollama"
+        assert config.agents.defaults.model == "llama3.2"
 
     def test_quick_start_openai_stores_key_and_model_without_base(self, monkeypatch):
         """OpenAI should support key-only setup without storing a default base URL."""
@@ -1450,8 +1448,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.openai.api_key == "sk-openai-test"
         assert config.providers.openai.api_base is None
-        assert config.model_presets["primary"].provider == "openai"
-        assert config.model_presets["primary"].model == "gpt-4o-mini"
+        assert config.agents.defaults.provider == "openai"
+        assert config.agents.defaults.model == "gpt-4o-mini"
 
     def test_quick_start_api_key_escape_returns_to_provider_choice(self, monkeypatch):
         """Esc from an API-key prompt should go back to provider selection."""
@@ -1479,7 +1477,7 @@ class TestMainMenuUpdate:
         assert selected_providers == ["DeepSeek", "OpenAI"]
         assert config.providers.deepseek.api_key is None
         assert config.providers.openai.api_key == "sk-openai-test"
-        assert config.model_presets["primary"].provider == "openai"
+        assert config.agents.defaults.provider == "openai"
 
     def test_quick_start_zhipu_coding_plan_uses_coding_base_url(self, monkeypatch):
         """Zhipu Coding Plan should not use the standard Zhipu base URL."""
@@ -1499,8 +1497,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.zhipu.api_key == "zhipu-key"
         assert config.providers.zhipu.api_base == "https://open.bigmodel.cn/api/coding/paas/v4"
-        assert config.model_presets["primary"].provider == "zhipu"
-        assert config.model_presets["primary"].model == "glm-4.6"
+        assert config.agents.defaults.provider == "zhipu"
+        assert config.agents.defaults.model == "glm-4.6"
 
     def test_quick_start_minimax_mainland_token_plan_uses_mainland_base_url(self, monkeypatch):
         """MiniMax mainland token plan should not use the global MiniMax base URL."""
@@ -1520,8 +1518,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.minimax.api_key == "minimax-key"
         assert config.providers.minimax.api_base == "https://api.minimaxi.com/v1"
-        assert config.model_presets["primary"].provider == "minimax"
-        assert config.model_presets["primary"].model == "MiniMax-M2"
+        assert config.agents.defaults.provider == "minimax"
+        assert config.agents.defaults.model == "MiniMax-M2"
 
     def test_quick_start_stepfun_step_plan_uses_plan_base_url(self, monkeypatch):
         """StepFun Step Plan should not use the standard StepFun base URL."""
@@ -1541,8 +1539,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.stepfun.api_key == "stepfun-key"
         assert config.providers.stepfun.api_base == "https://api.stepfun.ai/step_plan/v1"
-        assert config.model_presets["primary"].provider == "stepfun"
-        assert config.model_presets["primary"].model == "step-3.5-flash"
+        assert config.agents.defaults.provider == "stepfun"
+        assert config.agents.defaults.model == "step-3.5-flash"
 
     def test_quick_start_xiaomi_mimo_token_plan_uses_token_plan_base_url(self, monkeypatch):
         """Xiaomi MiMo Token Plan should not use the standard MiMo base URL."""
@@ -1562,8 +1560,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.xiaomi_mimo.api_key == "mimo-key"
         assert config.providers.xiaomi_mimo.api_base == "https://token-plan-sgp.xiaomimimo.com/v1"
-        assert config.model_presets["primary"].provider == "xiaomi_mimo"
-        assert config.model_presets["primary"].model == "mimo-v2.5-pro"
+        assert config.agents.defaults.provider == "xiaomi_mimo"
+        assert config.agents.defaults.model == "mimo-v2.5-pro"
 
     def test_quick_start_custom_base_url_asks_for_model_id(self, monkeypatch):
         """Custom providers should ask for base URL and model ID."""
@@ -1587,8 +1585,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.custom.api_key == "sk-custom-test"
         assert config.providers.custom.api_base == "https://api.example.test/v1"
-        assert config.model_presets["primary"].provider == "custom"
-        assert config.model_presets["primary"].model == "custom-model"
+        assert config.agents.defaults.provider == "custom"
+        assert config.agents.defaults.model == "custom-model"
 
     def test_quick_start_provider_without_default_base_url_prompts_for_base(self, monkeypatch):
         """Providers that require an endpoint should ask for a base URL in Quick Start."""
@@ -1608,8 +1606,8 @@ class TestMainMenuUpdate:
 
         assert config.providers.azure_openai.api_key == "azure-key"
         assert config.providers.azure_openai.api_base == "https://azure.example.test/openai"
-        assert config.model_presets["primary"].provider == "azure_openai"
-        assert config.model_presets["primary"].model == "deployment-name"
+        assert config.agents.defaults.provider == "azure_openai"
+        assert config.agents.defaults.model == "deployment-name"
 
     def test_quick_start_requires_api_key_before_setting_defaults(self, monkeypatch):
         """Quick Start should not create a ready-looking config without an API key."""
@@ -1645,10 +1643,8 @@ class TestMainMenuUpdate:
     def test_quick_start_summary_calls_out_missing_api_key(self, monkeypatch):
         """Quick Start summary should retain the missing-key status."""
         config = Config()
-        config.model_presets["primary"] = ModelPresetConfig(
-            model="deepseek-v4-flash",
-            provider="deepseek",
-        )
+        config.agents.defaults.model = "deepseek-v4-flash"
+        config.agents.defaults.provider = "deepseek"
 
         captured: dict[str, list[tuple[str, str]]] = {}
 
@@ -1972,11 +1968,10 @@ class TestModelPresetWizard:
     def test_sync_preset_cache(self):
         """_sync_preset_cache should populate the module-level cache."""
         from mason.cli.onboard import _MODEL_PRESET_CACHE, _sync_preset_cache
-        from mason.config.schema import ModelPresetConfig
 
         config = Config()
-        config.model_presets["fast"] = ModelPresetConfig(model="gpt-4.1-mini")
-        config.model_presets["power"] = ModelPresetConfig(model="gpt-4.1")
+        config.model_presets["fast"] = GenerationPresetConfig()
+        config.model_presets["power"] = GenerationPresetConfig()
         _sync_preset_cache(config)
         assert _MODEL_PRESET_CACHE == {"fast", "power"}
         _MODEL_PRESET_CACHE.clear()
@@ -1984,7 +1979,6 @@ class TestModelPresetWizard:
     def test_model_preset_add(self, monkeypatch):
         """_configure_model_presets should add a new preset."""
         from mason.cli.onboard import _MODEL_PRESET_CACHE, _configure_model_presets
-        from mason.config.schema import ModelPresetConfig
 
         config = Config()
         _MODEL_PRESET_CACHE.clear()
@@ -2006,7 +2000,7 @@ class TestModelPresetWizard:
             return FakePrompt(next(responses))
 
         def fake_configure(*_model, **_kwargs):
-            return ModelPresetConfig(model="gpt-test", temperature=0.5)
+            return GenerationPresetConfig(temperature=0.5)
 
         def fake_select_with_back(*_args, **_kwargs):
             return next(responses)
@@ -2020,22 +2014,24 @@ class TestModelPresetWizard:
         _configure_model_presets(config)
 
         assert "my-preset" in config.model_presets
-        assert config.model_presets["my-preset"].model == "gpt-test"
         assert config.model_presets["my-preset"].temperature == 0.5
         _MODEL_PRESET_CACHE.clear()
 
     def test_model_preset_delete(self, monkeypatch):
         """_configure_model_presets should delete an existing preset."""
-        from mason.cli.onboard import _MODEL_PRESET_CACHE, _configure_model_presets
-        from mason.config.schema import ModelPresetConfig
+        from mason.cli.onboard import (
+            _MODEL_PRESET_CACHE,
+            _configure_model_presets,
+            _preset_summary,
+        )
 
         config = Config()
-        config.model_presets["old - preset"] = ModelPresetConfig(model="x")
+        config.model_presets["old - preset"] = GenerationPresetConfig()
         _MODEL_PRESET_CACHE.clear()
         _MODEL_PRESET_CACHE.update({"old - preset", "default"})
 
         responses = iter([
-            "old - preset - x",
+            f"old - preset - {_preset_summary(config.model_presets['old - preset'])}",
             "Delete",
             True,
             "<- Back",
@@ -2113,14 +2109,13 @@ class TestModelPresetWizard:
         assert callable(_configure_model_presets)
 
     def test_run_onboard_model_presets_edit(self, monkeypatch):
-        """run_onboard should handle [M] Model Presets through Advanced Settings."""
-        from mason.config.schema import ModelPresetConfig
+        """run_onboard should handle [M] Generation Presets through Advanced Settings."""
 
         initial_config = Config()
 
         responses = iter([
             "[A] Advanced Settings",
-            "[M] Model Presets",
+            "[M] Generation Presets",
             KeyboardInterrupt(),
             "[S] Save and Exit",
         ])
@@ -2135,7 +2130,7 @@ class TestModelPresetWizard:
 
         def fake_configure_model_presets(config):
             preset_mutated["n"] += 1
-            config.model_presets["test"] = ModelPresetConfig(model="gpt-test")
+            config.model_presets["test"] = GenerationPresetConfig()
 
         monkeypatch.setattr(onboard_wizard, "_select_with_back", fake_select_with_back)
         monkeypatch.setattr(onboard_wizard, "_configure_model_presets", fake_configure_model_presets)

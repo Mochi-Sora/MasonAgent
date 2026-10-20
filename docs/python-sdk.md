@@ -220,7 +220,7 @@ stable `session_key`, stream events, keep the final `RunResult`, and let
 | Tools | Capabilities the agent may call, such as file access, shell, web, or custom tools from your config. |
 | Memory | Working state and the SQLite-backed memory tier managed by mason. |
 | Stream event | A typed event such as `text.delta`, `tool.started`, or `run.completed`. |
-| Model override | A temporary model or model preset used for one SDK instance or one run. |
+| Model override | A temporary model and/or generation-settings preset used for one SDK instance or one run. |
 
 For most users, the mental model is:
 
@@ -288,15 +288,16 @@ Override the model for one run without changing the instance default:
 result = await bot.run("Summarize this file", model="openai/gpt-4.1-mini")
 ```
 
-Model presets from `config.json` work the same way:
+Generation presets from `config.json` apply settings to whichever model is active:
 
 ```python
-bot = Mason.from_config(model_preset="fast")
+bot = Mason.from_config(model="openai/gpt-4.1-mini", model_preset="fast")
 
 result = await bot.run("Think deeply about this bug", model_preset="reasoning")
 ```
 
-`model` and `model_preset` are mutually exclusive.
+`model` and `model_preset` are independent: `model` selects the model and
+`model_preset` supplies generation settings for it. They may be combined.
 
 For first setup, prefer named presets in `config.json`. Mixing an API key from
 one provider with a model ID from another is the most common first-run failure.
@@ -485,10 +486,10 @@ Create a `Mason` instance from a config file.
 | `config_path` | `str \| Path \| None` | `None` | Path to `config.json`. Defaults to `~/.mason/config.json`. |
 | `workspace` | `str \| Path \| None` | `None` | Override the workspace directory from config. |
 | `model` | `str \| None` | `None` | Override the instance default model. |
-| `model_preset` | `str \| None` | `None` | Override the instance default model preset from `config.json`. |
+| `model_preset` | `str \| None` | `None` | Apply a generation-settings preset to the selected model. |
 
-Raises `FileNotFoundError` if an explicit config path does not exist.
-Raises `ValueError` if both `model` and `model_preset` are provided.
+Raises `FileNotFoundError` if an explicit config path does not exist. `model` and
+`model_preset` are independent and may be combined.
 
 ### `await bot.run(...)`
 
@@ -506,12 +507,12 @@ Run the agent once and return a `RunResult`.
 | `attributes` | `Mapping[str, Any] \| None` | `None` | Caller-owned request data for host integrations. It is available to context providers and turn-hook factories, but is not added to trusted message metadata or persisted in session messages. |
 | `hooks` | `list[AgentHook] \| None` | `None` | Lifecycle hooks for this run only. |
 | `model` | `str \| None` | `None` | Override the model for this run only. |
-| `model_preset` | `str \| None` | `None` | Override the model preset for this run only. |
+| `model_preset` | `str \| None` | `None` | Apply a generation-settings preset for this run only. |
 
 Without an override, a run uses the preset saved in its session, or the configured
 default when that session has no saved selection. `model` and `model_preset` are
-mutually exclusive per-run overrides; they do not change the saved session selection
-or `bot.runtime.model` after the run completes.
+independent per-run overrides; neither changes the saved session selection or
+`bot.runtime.model` after the run completes.
 
 ### `await bot.run_streamed(...)`
 

@@ -38,7 +38,7 @@ the focused guides first and come back here for exact fields and defaults.
 | Tune process-level behavior with env vars | [Runtime Environment Variables](#runtime-environment-variables) |
 | Trace model calls | [Langfuse Observability](#langfuse-observability) |
 | Configure credentials and endpoints | [Providers](#providers) |
-| Name and switch model choices | [Model Presets](#model-presets) |
+| Name and switch model choices | [Generation Presets](#model-presets) |
 | Add fallback chains | [Model Fallbacks](#model-fallbacks) |
 | Configure voice transcription | [Transcription Settings](#transcription-settings) |
 | Tune channel defaults | [Channel Settings](#channel-settings) |
@@ -59,8 +59,8 @@ Start from the task below. Most advanced changes touch one config section and on
 
 | Task | First keys to check | Verify with | Deep dive |
 |---|---|---|---|
-| Make the first model reply work | `providers.<name>.apiKey`, optional `providers.<name>.apiBase`, `modelPresets.<preset>`, `agents.defaults.modelPreset` | `mason status`, then `mason agent -m "Hello!"` | [Providers](#providers), [Model Presets](#model-presets) |
-| Add fallback models | `modelPresets.<fallback>`, `agents.defaults.fallbackModels` | `mason status`, then a normal agent run | [Model Fallbacks](#model-fallbacks) |
+| Make the first model reply work | `providers.<name>.apiKey`, optional `providers.<name>.apiBase`, `agents.defaults.model`, `agents.defaults.provider`, optional `modelPresets.<preset>` + `agents.defaults.modelPreset` | `mason status`, then `mason agent -m "Hello!"` | [Providers](#providers), [Generation Presets](#model-presets) |
+| Add fallback models | `agents.defaults.fallbackModels` | `mason status`, then a normal agent run | [Model Fallbacks](#model-fallbacks) |
 | Keep secrets out of the config file | `${ENV_VAR}` placeholders inside any string value | Start mason from the same environment that sets the variable | [Environment Variables for Secrets](#environment-variables-for-secrets) |
 | Connect one chat app | `channels.<channel>.enabled`, channel credentials, optional pairing or `channels.<channel>.allowFrom` | `mason channels status`, then `mason gateway --verbose` | [Channel Settings](#channel-settings), [Chat Apps](./chat-apps.md) |
 | Enable voice transcription | `transcription.enabled`, `transcription.provider`, matching `providers.<name>.apiKey` | Send or upload a short voice message through a configured surface | [Transcription Settings](#transcription-settings) |
@@ -261,7 +261,7 @@ Tracing covers the providers that go through mason's OpenAI-compatible client pa
 > - **Step Fun (Mainland China)**: If your API key is from Step Fun's mainland China platform (stepfun.com), set `"apiBase": "https://api.stepfun.com/v1"` in your stepfun provider config.
 > - **Xiaomi MiMo thinking mode**: MiMo models (e.g. `mimo-v2.5-pro`) default to enabled thinking. Use `agents.defaults.reasoningEffort: "none"` to disable it, or `"low"` / `"medium"` / `"high"` to keep it on. Omitting the field preserves the provider's per-model default.
 > - **Xiaomi MiMo Token Plan**: If you're on MiMo's token plan, set `"apiBase": "https://token-plan-sgp.xiaomimimo.com/v1"` in your xiaomi_mimo provider config.
-> - **Custom OpenAI-compatible providers**: Besides the built-in `custom` provider, any extra key under `providers` can define its own OpenAI-compatible endpoint. For example, `providers.companyProxy.apiBase` plus `modelPresets.primary.provider: "companyProxy"` creates a separate custom provider. Set `apiBase`; set `apiKey` only when the endpoint requires it. This named-custom path uses the OpenAI-compatible request format only. For Anthropic-compatible proxies, use `providers.anthropic.apiBase` with `provider: "anthropic"`.
+> - **Custom OpenAI-compatible providers**: Besides the built-in `custom` provider, any extra key under `providers` can define its own OpenAI-compatible endpoint. For example, `providers.companyProxy.apiBase` plus `agents.defaults.provider: "companyProxy"` creates a separate custom provider. Set `apiBase`; set `apiKey` only when the endpoint requires it. This named-custom path uses the OpenAI-compatible request format only. For Anthropic-compatible proxies, use `providers.anthropic.apiBase` with `provider: "anthropic"`.
 > - **Provider-scoped proxy**: `providers.<name>.proxy` routes only that provider through an HTTP proxy. It is supported for OpenAI-compatible providers, `openai_codex`, and `xai_grok`. Native provider backends such as `anthropic`, `bedrock`, `azure_openai`, and `github_copilot` reject `proxy`.
 
 | Provider | Purpose | Get API Key |
@@ -411,15 +411,10 @@ The `azure_openai` provider talks to your Azure OpenAI resource via the OpenAI *
       "apiBase": "https://my-resource.openai.azure.com"
     }
   },
-  "modelPresets": {
-    "azure": {
-      "provider": "azure_openai",
-      "model": "my-gpt-5-deployment"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "azure"
+      "model": "my-gpt-5-deployment",
+      "provider": "azure_openai"
     }
   }
 }
@@ -436,15 +431,10 @@ Omit `apiKey` (or leave it empty / unset). The provider falls back to [`DefaultA
       "apiBase": "https://my-resource.openai.azure.com"
     }
   },
-  "modelPresets": {
-    "azure": {
-      "provider": "azure_openai",
-      "model": "my-gpt-5-deployment"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "azure"
+      "model": "my-gpt-5-deployment",
+      "provider": "azure_openai"
     }
   }
 }
@@ -487,15 +477,15 @@ Skywork uses APIFree's OpenAI-compatible Agent API endpoint. Configure the provi
   },
   "modelPresets": {
     "skywork": {
-      "provider": "skywork",
-      "model": "skywork-ai/skyclaw-v1",
       "maxTokens": 32768,
       "contextWindowTokens": 131072
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "skywork"
+      "modelPreset": "skywork",
+      "model": "skywork-ai/skyclaw-v1",
+      "provider": "skywork"
     }
   }
 }
@@ -560,14 +550,14 @@ For a non-Anthropic model such as Amazon Nova:
   },
   "modelPresets": {
     "bedrockNova": {
-      "provider": "bedrock",
-      "model": "bedrock/amazon.nova-lite-v1:0",
       "reasoningEffort": null
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "bedrockNova"
+      "modelPreset": "bedrockNova",
+      "model": "bedrock/amazon.nova-lite-v1:0",
+      "provider": "bedrock"
     }
   }
 }
@@ -585,14 +575,14 @@ With a Bedrock API key:
   },
   "modelPresets": {
     "bedrockNova": {
-      "provider": "bedrock",
-      "model": "bedrock/amazon.nova-lite-v1:0",
       "reasoningEffort": null
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "bedrockNova"
+      "modelPreset": "bedrockNova",
+      "model": "bedrock/amazon.nova-lite-v1:0",
+      "provider": "bedrock"
     }
   }
 }
@@ -608,15 +598,10 @@ With a named AWS profile:
       "profile": "my-bedrock-profile"
     }
   },
-  "modelPresets": {
-    "bedrockNova": {
-      "provider": "bedrock",
-      "model": "bedrock/amazon.nova-lite-v1:0"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "bedrockNova"
+      "model": "bedrock/amazon.nova-lite-v1:0",
+      "provider": "bedrock"
     }
   }
 }
@@ -633,15 +618,15 @@ With a named AWS profile:
   },
   "modelPresets": {
     "bedrockClaude": {
-      "provider": "bedrock",
-      "model": "bedrock/global.anthropic.claude-opus-4-7",
       "reasoningEffort": "medium",
       "maxTokens": 8192
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "bedrockClaude"
+      "modelPreset": "bedrockClaude",
+      "model": "bedrock/global.anthropic.claude-opus-4-7",
+      "provider": "bedrock"
     }
   }
 }
@@ -835,15 +820,10 @@ mason provider login github-copilot
 **2. Set model** (merge into `~/.mason/config.json`):
 ```json
 {
-  "modelPresets": {
-    "copilot": {
-      "provider": "github_copilot",
-      "model": "github-copilot/gpt-4.1"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "copilot"
+      "model": "github-copilot/gpt-4.1",
+      "provider": "github_copilot"
     }
   }
 }
@@ -886,15 +866,10 @@ OpenCode Zen:
       "apiKey": "${OPENCODE_API_KEY}"
     }
   },
-  "modelPresets": {
-    "opencodeZen": {
-      "provider": "opencode",
-      "model": "opencode/deepseek-v4-pro"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "opencodeZen"
+      "model": "opencode/deepseek-v4-pro",
+      "provider": "opencode"
     }
   }
 }
@@ -911,15 +886,10 @@ OpenCode Go:
       "apiKey": "${OPENCODE_API_KEY}"
     }
   },
-  "modelPresets": {
-    "opencodeGo": {
-      "provider": "opencode_go",
-      "model": "opencode-go/deepseek-v4-flash"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "opencodeGo"
+      "model": "opencode-go/deepseek-v4-flash",
+      "provider": "opencode_go"
     }
   }
 }
@@ -947,15 +917,15 @@ LongCat is available through mason's built-in OpenAI-compatible provider flow. T
   },
   "modelPresets": {
     "longcat": {
-      "provider": "longcat",
-      "model": "LongCat-2.0-Preview",
       "maxTokens": 8192,
       "contextWindowTokens": 1048576
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "longcat"
+      "modelPreset": "longcat",
+      "model": "LongCat-2.0-Preview",
+      "provider": "longcat"
     }
   }
 }
@@ -982,13 +952,14 @@ Xiaomi MiMo models are automatically detected by the `xiaomi_mimo` provider when
 >   },
 >   "modelPresets": {
 >     "mimo": {
->       "provider": "xiaomi_mimo",
->       "model": "xiaomi/mimo-v2.5-pro"
+>       "maxTokens": 8192
 >     }
 >   },
 >   "agents": {
 >     "defaults": {
->       "modelPreset": "mimo"
+>       "modelPreset": "mimo",
+>       "model": "xiaomi/mimo-v2.5-pro",
+>       "provider": "xiaomi_mimo"
 >     }
 >   }
 > }
@@ -1011,15 +982,10 @@ Step Plan is StepFun's subscription-based service for high-frequency AI develope
       "apiBase": "https://api.stepfun.ai/step_plan/v1"
     }
   },
-  "modelPresets": {
-    "stepfun": {
-      "provider": "stepfun",
-      "model": "step-3.5-flash"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "stepfun"
+      "model": "step-3.5-flash",
+      "provider": "stepfun"
     }
   }
 }
@@ -1041,15 +1007,10 @@ Ant Ling is available through mason's built-in OpenAI-compatible provider flow. 
       "apiKey": "${ANT_LING_API_KEY}"
     }
   },
-  "modelPresets": {
-    "antLing": {
-      "provider": "ant_ling",
-      "model": "Ling-2.6-flash"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "antLing"
+      "model": "Ling-2.6-flash",
+      "provider": "ant_ling"
     }
   }
 }
@@ -1072,15 +1033,10 @@ Connects directly to any OpenAI-compatible endpoint — llama.cpp, Together AI, 
       "apiBase": "https://api.your-provider.com/v1"
     }
   },
-  "modelPresets": {
-    "custom": {
-      "provider": "custom",
-      "model": "your-model-name"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "custom"
+      "model": "your-model-name",
+      "provider": "custom"
     }
   }
 }
@@ -1103,19 +1059,20 @@ Connects directly to any OpenAI-compatible endpoint — llama.cpp, Together AI, 
 >   },
 >   "modelPresets": {
 >     "responsesProxy": {
->       "provider": "azure_openai",
->       "model": "your-model-name"
+>       "maxTokens": 8192
 >     }
 >   },
 >   "agents": {
 >     "defaults": {
->       "modelPreset": "responsesProxy"
+>       "modelPreset": "responsesProxy",
+>       "model": "your-model-name",
+>       "provider": "azure_openai"
 >     }
 >   }
 > }
 > ```
 >
-> Anthropic-compatible endpoints are separate: use `providers.anthropic.apiBase` and set the preset provider to `anthropic`. Arbitrary custom provider names do not use the Anthropic Messages API format.
+> Anthropic-compatible endpoints are separate: use `providers.anthropic.apiBase` and select `anthropic` as the provider. Arbitrary custom provider names do not use the Anthropic Messages API format.
 >
 > In short: **chat-completions-compatible endpoint → `custom` or a named custom provider**; **Responses-compatible endpoint → `azure_openai`**; **Anthropic-compatible endpoint → `anthropic` with `apiBase`**.
 
@@ -1151,9 +1108,14 @@ If a custom OpenAI-compatible endpoint exposes a provider-specific thinking togg
   },
   "modelPresets": {
     "company": {
-      "provider": "companyProxy",
-      "model": "served-model-name",
       "reasoningEffort": "high"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "modelPreset": "company",
+      "model": "served-model-name",
+      "provider": "companyProxy"
     }
   }
 }
@@ -1183,15 +1145,10 @@ ollama run llama3.2
       "apiBase": "http://localhost:11434"
     }
   },
-  "modelPresets": {
-    "ollama": {
-      "provider": "ollama",
-      "model": "llama3.2"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "ollama"
+      "model": "llama3.2",
+      "provider": "ollama"
     }
   }
 }
@@ -1221,15 +1178,10 @@ ollama run llama3.2
       "apiBase": "http://localhost:1234/v1"
     }
   },
-  "modelPresets": {
-    "lmStudio": {
-      "provider": "lm_studio",
-      "model": "local-model"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "lmStudio"
+      "model": "local-model",
+      "provider": "lm_studio"
     }
   }
 }
@@ -1261,15 +1213,10 @@ ollama run llama3.2
       "apiBase": "http://localhost:1337/v1"
     }
   },
-  "modelPresets": {
-    "atomic": {
-      "provider": "atomic_chat",
-      "model": "qwen3-32b"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "atomic"
+      "model": "qwen3-32b",
+      "provider": "atomic_chat"
     }
   }
 }
@@ -1343,15 +1290,10 @@ docker run -d \
       "apiBase": "http://localhost:8000/v3"
     }
   },
-  "modelPresets": {
-    "ovms": {
-      "provider": "ovms",
-      "model": "openai/gpt-oss-20b"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "ovms"
+      "model": "openai/gpt-oss-20b",
+      "provider": "ovms"
     }
   }
 }
@@ -1388,15 +1330,10 @@ vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000
 *Model preset:*
 ```json
 {
-  "modelPresets": {
-    "vllm": {
-      "provider": "vllm",
-      "model": "meta-llama/Llama-3.1-8B-Instruct"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "vllm"
+      "model": "meta-llama/Llama-3.1-8B-Instruct",
+      "provider": "vllm"
     }
   }
 }
@@ -1406,109 +1343,97 @@ vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000
 
 Contributor notes for adding new providers live in [`development.md`](./development.md#adding-an-llm-provider).
 
-## Model Presets
+<a id="model-presets"></a>
+## Generation Presets
 
-Model presets let you name a complete model configuration and select one per session with `/model <preset>`. They are the recommended way to configure models because the same names can be reused for new-session defaults, chat-command switching, and fallback chains.
-
-Existing configs do not need to change. Direct `agents.defaults.model`, `provider`, `maxTokens`, `contextWindowTokens`, `temperature`, and `reasoningEffort` fields still define the implicit `default` preset. For new configs, prefer top-level `modelPresets` plus `agents.defaults.modelPreset`.
+Generation presets are named, standalone settings that apply to whichever model is active. They never select a provider or model. Choose a model with `agents.defaults.model` and `agents.defaults.provider` (or `/model`), then apply a preset with `agents.defaults.modelPreset` (or `/presets <name>`).
 
 ```json
 {
   "modelPresets": {
     "fast": {
-      "model": "gpt-4.1-mini",
-      "provider": "openai",
       "maxTokens": 4096,
       "contextWindowTokens": 128000,
       "temperature": 0.2,
       "reasoningEffort": "low"
     },
     "deep": {
-      "model": "claude-opus-4-5",
-      "provider": "anthropic",
       "maxTokens": 8192,
-      "contextWindowTokens": 200000,
+      "temperature": 0.1,
       "reasoningEffort": "high"
-    },
-    "localSmall": {
-      "model": "llama3.2",
-      "provider": "ollama",
-      "maxTokens": 4096,
-      "contextWindowTokens": 32768,
-      "temperature": 0.2
     }
   },
   "agents": {
     "defaults": {
-      "modelPreset": "fast",
-      "fallbackModels": ["deep", "localSmall"]
+      "model": "gpt-4.1-mini",
+      "provider": "openai",
+      "modelPreset": "fast"
     }
   }
 }
 ```
 
-`modelPresets` is a top-level object. Each key (`fast`, `deep`, `coding`, etc.) is the preset's one canonical name: it is shown in the interface, passed to `/model <name>`, and referenced by defaults, fallbacks, sessions, and memory consolidation. New and renamed presets must be unique ignoring case. Existing keys accepted by earlier releases remain loadable so upgrades do not break startup. Each preset supports:
-
-Older configs may still contain a `label` inside a preset. It is accepted when loading for compatibility but ignored; the object key remains the canonical name.
+`modelPresets` is a top-level object. Each key (`fast`, `deep`, `coding`, etc.) is the preset's one canonical name: it is shown in the interface, passed to `/presets <name>`, and referenced by defaults, sessions, and memory consolidation. New and renamed presets must be unique ignoring case. Existing keys accepted by earlier releases remain loadable so upgrades do not break startup. Each preset supports:
 
 | Field | Description |
 |-------|-------------|
-| `model` | Model name to use for this preset. |
-| `provider` | Provider name, or `"auto"` to use provider auto-detection. |
 | `maxTokens` | Maximum completion/output tokens. |
-| `contextWindowTokens` | Context window size used by prompt building and consolidation decisions. |
+| `contextWindowTokens` | Optional context-window override. Omit or set `null` to keep the selected model's own window. |
 | `temperature` | Sampling temperature. |
 | `reasoningEffort` | Optional reasoning/thinking setting. Provider support varies. |
 
-`default` is reserved and always means the implicit preset built from direct `agents.defaults.*` fields; do not define `modelPresets.default`. Use `/model default` to switch back to those direct fields in an existing config.
+Older configs may still contain `model`, `provider`, or `label` inside a preset. They are accepted when loading but ignored at runtime: move the model into `agents.defaults.model`/`agents.defaults.provider` (or select it with `/model`).
 
-Set `agents.defaults.modelPreset` to choose the preset followed by sessions that have no saved model selection. When `modelPreset` is `null` or omitted, such sessions follow the implicit `default` preset from direct `agents.defaults.*` fields. `/model <preset>` saves an override in the current session, so its future turns keep that preset across process restarts while other sessions remain unchanged. The command does not write the selection back to `config.json`.
+`default` is reserved and always means the implicit settings built from direct `agents.defaults.*` fields; do not define `modelPresets.default`. Use `/presets default` to return to those settings in an existing config.
+
+Set `agents.defaults.modelPreset` to choose the preset followed by sessions that have no saved selection. When `modelPreset` is `null` or omitted, such sessions use the settings from direct `agents.defaults.*` fields. `/presets <name>` saves an override in the current session, so its future turns keep that preset across process restarts while other sessions remain unchanged. The command does not write the selection back to `config.json` and never changes the model.
 
 ### Model Fallbacks
 
-`agents.defaults.fallbackModels` defines an ordered failover chain for the active model configuration. The primary model is still selected by `agents.defaults.modelPreset` or, in older configs, by the implicit `default` preset from direct `agents.defaults.*` fields.
+`agents.defaults.fallbackModels` defines an ordered failover chain for the active model. The primary model is selected by `agents.defaults.model` plus `agents.defaults.provider` (or by `/model` for a session).
 
 Each fallback candidate can be either:
 
-- A preset name from `modelPresets`, such as `"deep"`. This is the recommended form. The preset's full model, provider, generation, and context-window config is used.
-- An inline fallback object with at least `provider` and `model`. Optional `maxTokens`, `contextWindowTokens`, and `temperature` fields inherit from the active primary config when omitted. `reasoningEffort` does not inherit; omit it to leave reasoning off for that fallback, or set it explicitly for models that support reasoning.
+- A model ID string, such as `"gpt-4.1-mini"`. A string that matches a legacy preset name resolves to that preset's old `model` binding for migration.
+- An inline fallback object with at least `model`; add `provider` when the provider cannot be inferred. Optional `maxTokens`, `contextWindowTokens`, and `temperature` fields inherit from the active primary config when omitted. `reasoningEffort` does not inherit; omit it to leave reasoning off for that fallback, or set it explicitly for models that support reasoning.
 
-Preset fallback chain:
+Fallback chain:
 
 ```json
 {
   "modelPresets": {
     "fast": {
-      "model": "gpt-4.1-mini",
-      "provider": "openai",
       "maxTokens": 4096,
       "contextWindowTokens": 128000,
       "temperature": 0.2
-    },
-    "deep": {
-      "model": "claude-opus-4-5",
-      "provider": "anthropic",
-      "maxTokens": 8192,
-      "contextWindowTokens": 200000,
-      "reasoningEffort": "high"
-    },
-    "localSmall": {
-      "model": "llama3.2",
-      "provider": "ollama",
-      "maxTokens": 4096,
-      "contextWindowTokens": 32768
     }
   },
   "agents": {
     "defaults": {
       "modelPreset": "fast",
-      "fallbackModels": ["deep", "localSmall"]
+      "fallbackModels": [
+        {
+          "model": "claude-opus-4-5",
+          "provider": "anthropic",
+          "maxTokens": 8192,
+          "contextWindowTokens": 200000,
+          "reasoningEffort": "high"
+        },
+        {
+          "model": "llama3.2",
+          "provider": "ollama",
+          "maxTokens": 4096,
+          "contextWindowTokens": 32768
+        }
+      ],
+      "model": "gpt-4.1-mini",
+      "provider": "openai"
     }
   }
 }
 ```
 
-String entries are preset names, not raw model names. In the example above, `"deep"` means `modelPresets.deep`; mason will not interpret it as a provider model ID. Changing a preset updates both `/model <preset>` switching and any fallback chain that references it.
+String entries are model IDs. In the example above, `"deep"` is treated as a model ID; a value that matches a legacy preset name resolves to that preset's old model binding for migration. Use an inline object when a fallback needs its own provider or settings.
 
 Inline fallback object:
 
@@ -1516,8 +1441,6 @@ Inline fallback object:
 {
   "modelPresets": {
     "fast": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4.5",
       "maxTokens": 4096,
       "contextWindowTokens": 65536
     }
@@ -1532,13 +1455,15 @@ Inline fallback object:
           "maxTokens": 4096,
           "contextWindowTokens": 262144
         }
-      ]
+      ],
+      "model": "anthropic/claude-sonnet-4.5",
+      "provider": "openrouter"
     }
   }
 }
 ```
 
-Use inline objects only when a fallback is not worth naming as a reusable preset. `fallbackModels` belongs under `agents.defaults`, not inside individual `modelPresets` entries.
+Prefer inline objects for fallbacks so the provider and settings travel with each candidate. `fallbackModels` belongs under `agents.defaults`, not inside individual `modelPresets` entries.
 
 Failover normally runs when the primary provider returns a fallbackable model/provider error before any answer text has been streamed. Stream-stall timeouts are the recovery exception: if the provider already emitted partial answer text and then stalls, mason closes the current stream segment and retries/fails over in a new segment. Typical fallback cases include timeouts, connection errors, 5xx server errors, 429 rate limits, overloads, authentication/permission failures such as invalid or expired credentials, and quota/balance exhaustion. It does not run for malformed requests, content filtering/refusals, or context-length/message-format errors.
 
@@ -2281,12 +2206,12 @@ The notification gate runs on a built-in system prompt. Advanced users can overr
 
 ## Agent Defaults
 
-Core `agents.defaults.*` fields that do not have their own section on this page. When `agents.defaults.modelPreset` is set, the named preset supplies model, provider, and generation values and takes precedence over these fields; without it, they form the implicit `default` preset described in [Model Presets](#model-presets).
+Core `agents.defaults.*` fields that do not have their own section on this page. `model` and `provider` select the model; `modelPreset` optionally applies generation settings from [Generation Presets](#model-presets) without changing that selection.
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `agents.defaults.workspace` | `~/.mason/workspace` | Directory the agent works in: its identity files (`AGENTS.md`, `SOUL.md`, `USER.md`), `memory/`, `skills/`, and `cron/` live here, and relative file paths resolve against it. |
-| `agents.defaults.model` | `anthropic/claude-opus-4-5` | Model for the implicit `default` preset. |
+| `agents.defaults.model` | `anthropic/claude-opus-4-5` | Model to use. Select it at runtime with `/model <provider> <model>`. |
 | `agents.defaults.provider` | `"auto"` | Provider name such as `deepseek` or `openrouter`, or `"auto"` to detect the provider from the model name. |
 | `agents.defaults.maxTokens` | `8192` | Maximum completion/output tokens per model call. |
 | `agents.defaults.contextWindowTokens` | `200000` | Context window size used for prompt budgeting and compaction decisions. |
@@ -2298,7 +2223,7 @@ Core `agents.defaults.*` fields that do not have their own section on this page.
 | `agents.defaults.botName` | `"mason"` | Display name shown in CLI prompts. |
 | `agents.defaults.botIcon` | `"🐈"` | Icon shown next to the bot name in the CLI; set to `""` to omit it. |
 
-The remaining `agents.defaults.*` keys have topic sections on this page: `modelPreset` and `fallbackModels` under [Model Presets](#model-presets), `maxConcurrentSubagents` under [Subagent Concurrency](#subagent-concurrency), `sessionReplay` and `sessionReplayMaxTokens` under [Session Replay Budget](#session-replay-budget), `idleCompactAfterMinutes`, `idleCompactCheckIntervalSeconds`, and `sessionTtlMinutes` under [Auto Compact](#auto-compact), `memory.*` under [Memory](#memory), `timezone` and `timezoneMode` under [Timezone](#timezone), `unifiedSession` under [Unified Session](#unified-session), `disabledSkills` under [Disabled Skills](#disabled-skills), and `toolHintMaxLength` under [Tool Hint Max Length](#tool-hint-max-length).
+The remaining `agents.defaults.*` keys have topic sections on this page: `modelPreset` and `fallbackModels` under [Generation Presets](#model-presets), `maxConcurrentSubagents` under [Subagent Concurrency](#subagent-concurrency), `sessionReplay` and `sessionReplayMaxTokens` under [Session Replay Budget](#session-replay-budget), `idleCompactAfterMinutes`, `idleCompactCheckIntervalSeconds`, and `sessionTtlMinutes` under [Auto Compact](#auto-compact), `memory.*` under [Memory](#memory), `timezone` and `timezoneMode` under [Timezone](#timezone), `unifiedSession` under [Unified Session](#unified-session), `disabledSkills` under [Disabled Skills](#disabled-skills), and `toolHintMaxLength` under [Tool Hint Max Length](#tool-hint-max-length).
 
 
 ## Subagent Concurrency
@@ -2421,7 +2346,7 @@ Consolidation is the periodic LLM pass that curates structured memory: it promot
 | `agents.defaults.memory.backupDir` | unset | Backup directory. Unset uses `<workspace>/backups/memory`. |
 | `agents.defaults.memory.consolidation.enabled` | `true` | Register the periodic consolidation job. Set to `false` to keep capture and recall without automatic curation. |
 | `agents.defaults.memory.consolidation.intervalH` | `2` | Hours between consolidation runs. Minimum `1`. |
-| `agents.defaults.memory.consolidation.modelOverride` | unset | Model preset used for consolidation runs. Unset uses the main model. |
+| `agents.defaults.memory.consolidation.modelOverride` | unset | Model ID used for consolidation runs. Unset uses the main model. |
 | `agents.defaults.memory.consolidation.cron` | unset | Legacy cron expression. When set, it overrides `intervalH`. |
 
 The daily rollover is a protected cron system job (`memory_rollover`, daily at 00:00 in `agents.defaults.timezone`) plus a startup check. Before writing the compressed full backup, it runs a narrow maintenance pass that only deduplicates memories and flags contradictions; full promotion, synthesis, retention, and gap handling stay on the two-hour consolidation schedule. The rollover then writes the backup, clears the working state in place, and runs `PRAGMA optimize` and an FTS5 merge pass; the verbatim journal and structured memory are untouched.

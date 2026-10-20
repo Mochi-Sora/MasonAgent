@@ -10,8 +10,11 @@ These commands work inside chat channels and interactive agent sessions:
 | `/restart` | Restart the bot |
 | `/status` | Show bot status |
 | `/history [n]` | Show the last N persisted conversation messages (default `10`, max `50`) |
-| `/model` | Show the current model and available model presets |
-| `/model <preset>` | Switch and persist the model preset for the current session |
+| `/model` | Show the current model, provider, and available providers |
+| `/model <provider>` | List models for a provider |
+| `/model <provider> <model>` | Switch and persist the model for the current session |
+| `/presets` | Show generation presets and the active one |
+| `/presets <name>` | Apply a settings preset to the current session without changing the model |
 | `/skill` | List enabled skills and their descriptions |
 | `/goal <goal>` | Treat the request as a long-running goal |
 | `/evaluator-prompt [init]` | Customize the heartbeat notification-gate prompt for this workspace |
@@ -36,7 +39,7 @@ To see who's waiting, use `/pairing`. To remove someone later, use `/pairing rev
 
 See [Configuration: Pairing](./configuration.md#pairing) for the full setup guide.
 
-## Model Presets
+## Model and Presets
 
 Use `/model` to inspect the current runtime model:
 
@@ -44,17 +47,28 @@ Use `/model` to inspect the current runtime model:
 /model
 ```
 
-The response shows the current session's model and preset, plus the available preset names. Each key under the top-level `modelPresets` config is the preset's canonical name everywhere mason displays or references it. `default` is always available and represents the model settings from direct `agents.defaults.*` fields.
+The response shows the current session's model, provider, and settings preset, plus the configured providers. Model selection and generation settings are independent.
 
-To switch presets for future turns:
+To choose a model, name a provider and a model:
 
 ```text
-/model fast
-/model deep
-/model default
+/model openrouter anthropic/claude-sonnet-4.5
+/model ollama llama3.2
 ```
 
-Preset names come from the top-level `modelPresets` config. Switching affects only the current session and persists the selection in that session, so later turns keep using it across process restarts. It does not rewrite `config.json`, does not change other sessions, and does not alter an in-progress turn's captured model. Sessions without a saved selection follow `agents.defaults.modelPreset` (or the implicit `default` preset when it is omitted). See [Configuration: Model presets](./configuration.md#model-presets) for setup details.
+`/model <provider>` lists the models mason can discover for that provider. A bare model ID uses the session's current provider, and `provider/model` is accepted when the prefix names a known provider. Switching affects only the current session and persists the selection in that session, so later turns keep using it across process restarts. It does not rewrite `config.json`, does not change other sessions, and does not alter an in-progress turn's captured model.
+
+Generation settings live in standalone presets. A preset never selects a model:
+
+```text
+/presets
+/presets fast
+/presets default
+```
+
+`/presets` lists each preset's `maxTokens`, `temperature`, `reasoningEffort`, and context-window override. `/presets <name>` applies those settings to the current session's model and persists the choice; `/presets default` returns to the settings from `agents.defaults.*`.
+
+Preset names come from the top-level `modelPresets` config. See [Configuration: Generation presets](./configuration.md#model-presets) for setup details.
 
 ## Local triggers
 

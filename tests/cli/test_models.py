@@ -8,7 +8,7 @@ from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 
 from mason.cli import models, onboard
-from mason.config.schema import Config, ModelPresetConfig
+from mason.config.schema import Config, GenerationPresetConfig
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def catalog_http(monkeypatch):
             {"id": "beta"},
         ]})
 
-    monkeypatch.setattr(models.httpx, "get", get)
+    monkeypatch.setattr("mason.providers.model_catalog.httpx.get", get)
     return calls
 
 
@@ -45,7 +45,7 @@ def test_catalog_uses_unsaved_endpoint_and_credentials(catalog_http):
 
 def test_auto_provider_uses_edited_model_not_active_preset(catalog_http):
     config = configured()
-    config.model_presets["active"] = ModelPresetConfig(model="unrelated", provider="anthropic")
+    config.model_presets["active"] = GenerationPresetConfig()
     config.agents.defaults.model_preset = "active"
     assert models.get_model_context_limit("custom/alpha", "auto", config=config) == 123456
 
@@ -69,7 +69,7 @@ def test_discovery_failure_keeps_manual_input(monkeypatch):
     def unavailable(*args, **kwargs):
         raise httpx.ConnectError("offline")
 
-    monkeypatch.setattr(models.httpx, "get", unavailable)
+    monkeypatch.setattr("mason.providers.model_catalog.httpx.get", unavailable)
     assert models.get_model_catalog(configured(), "custom") == []
     assert models.get_model_context_limit("alpha", "custom", config=configured()) is None
 

@@ -50,7 +50,7 @@ Keep the installer terminal open and follow the setup prompts to:
 
 1. Choose the provider or endpoint that owns your credential.
 2. Enter its API key or base URL when required.
-3. Create or select a model preset using a model ID that provider can run.
+3. Choose a model ID that provider can run and (optionally) a generation settings preset.
 4. Save the configuration.
 
 First-run setup creates or updates:
@@ -82,7 +82,7 @@ mason status
 You want:
 
 - a check mark for **Config** and **Workspace**;
-- the model or preset you selected;
+- the model you selected and any active settings preset;
 - a configured state for the provider used by that model.
 
 Most other providers can say `not set`. This command validates local setup but does not call the model.
@@ -184,7 +184,7 @@ For development details, follow [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## Manual Configuration Fallback
 
-Use this only when the wizard is unavailable or you intentionally manage JSON. First run `mason onboard`, then merge a provider and a named model preset into `~/.mason/config.json`.
+Use this only when the wizard is unavailable or you intentionally manage JSON. First run `mason onboard`, then merge a provider and model selection into `~/.mason/config.json`.
 
 A generic OpenAI-compatible setup has this shape:
 
@@ -196,15 +196,10 @@ A generic OpenAI-compatible setup has this shape:
       "apiBase": "https://api.example.com/v1"
     }
   },
-  "modelPresets": {
-    "primary": {
-      "provider": "custom",
-      "model": "model-id-from-your-provider"
-    }
-  },
   "agents": {
     "defaults": {
-      "modelPreset": "primary"
+      "model": "model-id-from-your-provider",
+      "provider": "custom"
     }
   }
 }
@@ -239,7 +234,7 @@ mason agent -m "Hello!"
 | `mason: command not found` | Reuse the installer command or method-specific runner described under [Other Install Methods](#other-install-methods) |
 | JSON parse error | Check commas and braces; remember that docs examples are usually snippets |
 | `401` or invalid API key | Verify the selected provider owns that key and remove accidental spaces |
-| Model not found | Use a model ID available from the provider selected in the active preset |
+| Model not found | Use a model ID available from the provider you selected |
 | A chat app does not answer | Run `mason channels status`, then check the channel credentials in `config.json` |
 
 Continue with the ordered [Troubleshooting guide](./troubleshooting.md) if the cause is still unclear.

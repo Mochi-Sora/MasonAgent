@@ -1,12 +1,12 @@
 # How to Configure an OpenAI-Compatible Provider in mason
 
 mason can call OpenAI-compatible model providers by configuring an `apiBase`,
-optional `apiKey`, and a model preset that references that provider name.
+optional `apiKey`, and a model selection that references that provider name.
 
 ## What you will build
 
 - a custom provider entry
-- a model preset pointing at that provider
+- `agents.defaults.model`/`provider` pointing at that provider
 - one successful `mason agent` run
 
 ## When to use this
@@ -41,8 +41,6 @@ Merge this into `~/.mason/config.json`:
   },
   "modelPresets": {
     "Custom": {
-      "provider": "custom",
-      "model": "provider-model-name",
       "maxTokens": 4096,
       "contextWindowTokens": 65536,
       "temperature": 0.1
@@ -50,7 +48,9 @@ Merge this into `~/.mason/config.json`:
   },
   "agents": {
     "defaults": {
-      "modelPreset": "Custom"
+      "modelPreset": "Custom",
+      "model": "provider-model-name",
+      "provider": "custom"
     }
   }
 }

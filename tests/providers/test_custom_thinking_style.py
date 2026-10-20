@@ -88,12 +88,13 @@ class TestCustomProviderThinkingStyle:
                 "agents": {
                     "defaults": {
                         "modelPreset": "primary",
-                        "fallbackModels": ["fallback"],
+                        "fallbackModels": [
+                            {"model": "tenant-model", "provider": "tenant"},
+                        ],
                     }
                 },
                 "modelPresets": {
                     "primary": {"model": "openai/gpt-4.1", "provider": "openai"},
-                    "fallback": {"model": "tenant-model", "provider": "tenant"},
                 },
                 "providers": {
                     "openai": {"apiKey": "sk-openai"},

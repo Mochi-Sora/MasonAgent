@@ -9,7 +9,7 @@ import dataclasses
 import os
 import time
 import weakref
-from collections.abc import Coroutine, Iterable, Mapping
+from collections.abc import Coroutine, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, nullcontext, suppress
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -55,12 +55,18 @@ from mason.bus.outbound_events import (
 from mason.bus.queue import MessageBus
 from mason.command import CommandContext, CommandRouter, register_builtin_commands
 from mason.command.router import normalize_command_text
-from mason.config.schema import AgentDefaults, ModelPresetConfig
+from mason.config.schema import AgentDefaults, GenerationPresetConfig
 from mason.events import NO_EVENTS, AgentEvent, EventSink
 from mason.llm_usage.context import source_from_request
 from mason.memory.state import DEFAULT_STATE_MAX_CHARS
 from mason.providers.base import LLMProvider, LLMUsage, ProviderConversationState
 from mason.providers.factory import ProviderSnapshot
+from mason.providers.model_catalog import (
+    ModelInfo,
+    ProviderChoice,
+    available_providers,
+    get_model_catalog,
+)
 from mason.runtime_context import (
     RUNTIME_CONTEXT_HISTORY_META,
     RUNTIME_CONTEXT_MESSAGE_META,
@@ -83,8 +89,11 @@ from mason.session.history_visibility import HIDDEN_HISTORY_META
 from mason.session.keys import UNIFIED_SESSION_KEY, remember_last_channel
 from mason.session.manager import SESSION_CACHE_MAX_SIZE, Session, SessionManager
 from mason.session.model_selection import (
+    SESSION_MODEL_METADATA_KEY,
     SESSION_MODEL_PRESET_METADATA_KEY,
+    SESSION_MODEL_PROVIDER_METADATA_KEY,
     model_preset_from_metadata,
+    model_selection_from_metadata,
 )
 from mason.session.recovery import (
     PENDING_FOLLOWUP_ID_KEY,
@@ -235,8 +244,8 @@ class AgentLoop:
         return self.runtime_resolver.runtime.context_window_tokens
 
     @property
-    def model_presets(self) -> Mapping[str, ModelPresetConfig]:
-        """Configured model presets exposed for selection and display."""
+    def model_presets(self) -> Mapping[str, GenerationPresetConfig]:
+        """Configured settings presets exposed for selection and display."""
         return self.runtime_resolver.model_presets
 
     @property
@@ -300,10 +309,13 @@ class AgentLoop:
         image_generation_provider_configs: dict[str, ProviderConfig] | None = None,
         provider_snapshot_loader: Callable[..., ProviderSnapshot] | None = None,
         provider_signature: tuple[object, ...] | None = None,
-        model_presets: dict[str, ModelPresetConfig] | None = None,
+        model_presets: dict[str, GenerationPresetConfig] | None = None,
         preset_catalog_loader: preset_helpers.PresetCatalogLoader | None = None,
         model_preset: str | None = None,
         preset_snapshot_loader: preset_helpers.PresetSnapshotLoader | None = None,
+        selection_snapshot_loader: preset_helpers.SelectionSnapshotLoader | None = None,
+        model_catalog: Callable[[str], Sequence[ModelInfo]] | None = None,
+        provider_choices: Callable[[], Sequence[ProviderChoice]] | None = None,
         turn_delivery_factory: TurnDeliveryFactory | None = None,
         runtime_model_publisher: Callable[[str, str | None], None] | None = None,
         restart_mode: str = "auto",
@@ -356,8 +368,12 @@ class AgentLoop:
             configured_default_preset=model_preset,
             provider_snapshot_loader=provider_snapshot_loader,
             preset_snapshot_loader=preset_snapshot_loader,
+            selection_snapshot_loader=selection_snapshot_loader,
         )
-        self.consolidation_model_preset = consolidation_model_preset
+        self.consolidation_model = consolidation_model_preset
+        self._default_model_preset = model_preset or "default"
+        self.model_catalog = model_catalog
+        self.provider_choices = provider_choices
         self.max_tool_result_chars = (
             max_tool_result_chars
             if max_tool_result_chars is not None
@@ -544,7 +560,13 @@ class AgentLoop:
             memory_snapshot_enabled=defaults.memory.snapshot_enabled,
             memory_snapshot_keep=defaults.memory.snapshot_keep,
             memory_backup_dir=defaults.memory.backup_dir,
-            consolidation_model_preset=defaults.memory.consolidation.model_override,
+            consolidation_model_preset=(
+                config.resolve_model_reference(
+                    defaults.memory.consolidation.model_override
+                )
+                if defaults.memory.consolidation.model_override
+                else None
+            ),
             session_ttl_minutes=defaults.session_ttl_minutes,
             session_replay_max_tokens=defaults.session_replay_max_tokens,
             session_replay=defaults.session_replay,
@@ -555,6 +577,9 @@ class AgentLoop:
             restart_mode=config.gateway.restart_mode,
             provider_snapshot_loader=provider_snapshot_loader,
             preset_snapshot_loader=preset_snapshot_loader,
+            selection_snapshot_loader=preset_helpers.make_selection_snapshot_loader(config),
+            model_catalog=lambda provider: get_model_catalog(config, provider),
+            provider_choices=lambda: available_providers(config),
             tool_registry=tool_registry,
             **extra,
         )
@@ -581,32 +606,90 @@ class AgentLoop:
         recover_removed: bool = True,
     ) -> LLMRuntime:
         """Resolve the immutable runtime selected by one session."""
-        name = model_preset_from_metadata(session.metadata)
-        if name is None:
+        model, provider = model_selection_from_metadata(session.metadata)
+        preset = model_preset_from_metadata(session.metadata)
+        if model is None and preset is None:
             return self.llm_runtime()
+        effective_model = model or self.runtime_resolver.peek_default_model()
+        effective_preset = preset or self._default_model_preset
         try:
-            return self.runtime_resolver.resolve_preset(name)
+            return self.runtime_resolver.resolve_selection(
+                effective_model,
+                provider=provider,
+                preset=effective_preset,
+            )
         except KeyError:
-            if not recover_removed or name in self.runtime_resolver.model_presets:
+            if not recover_removed or preset in self.runtime_resolver.model_presets:
                 raise
             logger.warning(
-                "Session '{}' references removed model preset '{}'; falling back to default",
+                "Session '{}' references removed settings preset '{}'; keeping its model",
                 session.key,
-                name,
+                preset,
             )
             session.metadata.pop(SESSION_MODEL_PRESET_METADATA_KEY, None)
             self.sessions.save(session)
-            return self.llm_runtime()
+            return self.runtime_resolver.resolve_selection(
+                effective_model,
+                provider=provider,
+                preset="default",
+            )
+
+    def _session_preset_name(self, session: Session) -> str:
+        """Return the session's settings preset, dropping a removed one."""
+        fallback = self._default_model_preset
+        if fallback != "default" and fallback not in self.runtime_resolver.model_presets:
+            fallback = "default"
+        preset = model_preset_from_metadata(session.metadata) or fallback
+        if preset != "default" and preset not in self.runtime_resolver.model_presets:
+            logger.warning(
+                "Session '{}' references removed settings preset '{}'; using default",
+                session.key,
+                preset,
+            )
+            session.metadata.pop(SESSION_MODEL_PRESET_METADATA_KEY, None)
+            self.sessions.save(session)
+            return fallback
+        return preset
+
+    def set_session_model(
+        self,
+        session_key: str,
+        model: str,
+        *,
+        provider: str | None = None,
+    ) -> LLMRuntime:
+        """Validate and persist one session's model selection."""
+        session = self.sessions.get_or_create(session_key)
+        preset = self._session_preset_name(session)
+        runtime = self.runtime_resolver.resolve_selection(
+            model,
+            provider=provider,
+            preset=preset,
+        )
+        session.metadata[SESSION_MODEL_METADATA_KEY] = runtime.model
+        if provider:
+            session.metadata[SESSION_MODEL_PROVIDER_METADATA_KEY] = provider
+        else:
+            session.metadata.pop(SESSION_MODEL_PROVIDER_METADATA_KEY, None)
+        self.sessions.save(session)
+        return runtime
 
     def set_session_model_preset(
         self,
         session_key: str,
         name: str,
     ) -> LLMRuntime:
-        """Validate and persist one session's preset selection."""
-        runtime = self.runtime_resolver.resolve_preset(name)
+        """Apply a settings preset to the session's current model."""
         session = self.sessions.get_or_create(session_key)
-        session.metadata[SESSION_MODEL_PRESET_METADATA_KEY] = runtime.model_preset
+        model, provider = model_selection_from_metadata(session.metadata)
+        runtime = self.runtime_resolver.resolve_selection(
+            model or self.runtime_resolver.runtime.model,
+            provider=provider,
+            preset=name,
+        )
+        session.metadata[SESSION_MODEL_PRESET_METADATA_KEY] = (
+            runtime.model_preset or "default"
+        )
         self.sessions.save(session)
         return runtime
 
@@ -631,9 +714,27 @@ class AgentLoop:
         *,
         publish_update: bool = True,
     ) -> LLMRuntime:
-        """Select a named default runtime for future turns."""
+        """Apply a settings preset to the default model for future turns."""
         old_model = self.model
         runtime = self.runtime_resolver.select_preset(name)
+        self._publish_runtime_selection(runtime, publish_update=publish_update)
+        logger.info(
+            "Runtime model switched for next turn: {} -> {}",
+            old_model,
+            runtime.model,
+        )
+        return runtime
+
+    def set_model(
+        self,
+        model: str,
+        *,
+        provider: str | None = None,
+        publish_update: bool = True,
+    ) -> LLMRuntime:
+        """Select the default model while keeping the active settings preset."""
+        old_model = self.model
+        runtime = self.runtime_resolver.select_model(model, provider=provider)
         self._publish_runtime_selection(runtime, publish_update=publish_update)
         logger.info(
             "Runtime model switched for next turn: {} -> {}",
@@ -647,10 +748,13 @@ class AgentLoop:
         return self.runtime_resolver.select_model(model)
 
     def consolidation_runtime(self) -> LLMRuntime | None:
-        """Resolve the optional preset used for memory consolidation runs."""
-        if not self.consolidation_model_preset:
+        """Resolve the optional model used for memory consolidation runs."""
+        if not self.consolidation_model:
             return None
-        return self.runtime_resolver.resolve_preset(self.consolidation_model_preset)
+        return self.runtime_resolver.resolve_selection(
+            self.consolidation_model,
+            preset=self._default_model_preset,
+        )
 
     def _build_capability_gate(self, tools: ToolRegistry) -> CapabilityGate | None:
         """Gate tools for one run so only discovered capabilities reach the model."""

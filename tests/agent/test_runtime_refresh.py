@@ -10,7 +10,7 @@ from mason.agent.loop import AgentLoop
 from mason.bus.queue import MessageBus
 from mason.bus.runtime_events import RuntimeModelChanged
 from mason.config.errors import ConfigLoadError
-from mason.config.schema import ModelPresetConfig
+from mason.config.schema import GenerationPresetConfig
 from mason.providers.base import GenerationSettings
 from mason.providers.factory import ProviderSnapshot, load_provider_snapshot
 from mason.session.model_selection import (
@@ -131,7 +131,7 @@ def test_same_snapshot_default_clears_preset_and_publishes_update(tmp_path: Path
         context_window_tokens=1000,
         provider_signature=("base-model", "auto", "initial"),
         provider_snapshot_loader=lambda: fast_snapshot,
-        model_presets={"fast": ModelPresetConfig(model="fast-model")},
+        model_presets={"fast": GenerationPresetConfig(max_tokens=4096)},
         model_preset="fast",
         preset_snapshot_loader=lambda _name: fast_snapshot,
         runtime_model_publisher=lambda model, preset: published.append((model, preset)),
@@ -173,10 +173,7 @@ def test_named_default_refresh_is_used_by_sessions_without_override(tmp_path: Pa
         context_window_tokens=16_000,
         provider_signature=shared_signature,
         provider_snapshot_loader=lambda: default_snapshot,
-        model_presets={
-            name: ModelPresetConfig(model=snapshot.model)
-            for name, snapshot in snapshots.items()
-        },
+        model_presets={name: GenerationPresetConfig() for name in snapshots},
         model_preset="fast",
         preset_snapshot_loader=snapshots.__getitem__,
     )
@@ -195,17 +192,20 @@ async def test_config_invalidation_defers_canonical_notification_until_default_r
     tmp_path: Path,
 ) -> None:
     provider = _provider("model-a")
-    catalog = {"fast": ModelPresetConfig(model="model-a")}
+    catalog = {"fast": GenerationPresetConfig(max_tokens=4096)}
     current_model = "model-a"
     published: list[RuntimeModelChanged] = []
 
-    def load_preset(_name: str) -> ProviderSnapshot:
+    def load_selection(model: str, _provider: str | None, preset: str | None) -> ProviderSnapshot:
         return ProviderSnapshot(
             provider=provider,
-            model=current_model,
+            model=model,
             context_window_tokens=16_000,
-            signature=(current_model, "auto"),
-            model_preset="fast",
+            signature=(model, preset),
+            generation=catalog.get(
+                preset or "default", GenerationPresetConfig()
+            ).to_generation_settings(),
+            model_preset=preset,
         )
 
     loop = AgentLoop(
@@ -215,17 +215,16 @@ async def test_config_invalidation_defers_canonical_notification_until_default_r
         model="model-a",
         context_window_tokens=16_000,
         provider_signature=("model-a", "auto"),
-        provider_snapshot_loader=lambda: load_preset("fast"),
+        provider_snapshot_loader=lambda: load_selection(current_model, None, "fast"),
         model_presets=catalog,
         preset_catalog_loader=lambda: catalog,
         model_preset="fast",
-        preset_snapshot_loader=load_preset,
+        selection_snapshot_loader=load_selection,
     )
     loop.bus.subscribe(published.append, RuntimeModelChanged)
     session = loop.sessions.get_or_create("websocket:chat")
     session.metadata[SESSION_MODEL_PRESET_METADATA_KEY] = "fast"
     current_model = "model-b"
-    catalog["fast"] = ModelPresetConfig(model="model-b")
 
     loop.invalidate_runtime_config()
     runtime = loop.runtime_for_session(session)
@@ -233,7 +232,7 @@ async def test_config_invalidation_defers_canonical_notification_until_default_r
 
     assert published == []
     assert runtime.model == "model-b"
-    assert loop.model_presets["fast"].model == "model-b"
+    assert loop.model_presets["fast"].max_tokens == 4096
 
     assert loop.llm_runtime().model == "model-b"
     await asyncio.sleep(0)
@@ -246,17 +245,20 @@ async def test_config_invalidation_defers_canonical_notification_until_default_r
 @pytest.mark.asyncio
 async def test_config_refresh_publishes_renamed_canonical_preset(tmp_path: Path) -> None:
     provider = _provider("model-a")
-    catalog = {"fast": ModelPresetConfig(model="model-a")}
+    catalog = {"fast": GenerationPresetConfig(max_tokens=4096)}
     default_name = "fast"
     published: list[RuntimeModelChanged] = []
 
-    def load_preset(name: str) -> ProviderSnapshot:
+    def load_selection(model: str, _provider: str | None, preset: str | None) -> ProviderSnapshot:
         return ProviderSnapshot(
             provider=provider,
-            model=catalog[name].model,
+            model=model,
             context_window_tokens=16_000,
-            signature=(name, catalog[name].model),
-            model_preset=name,
+            signature=(model, preset),
+            generation=catalog.get(
+                preset or "default", GenerationPresetConfig()
+            ).to_generation_settings(),
+            model_preset=preset,
         )
 
     loop = AgentLoop(
@@ -265,12 +267,12 @@ async def test_config_refresh_publishes_renamed_canonical_preset(tmp_path: Path)
         workspace=tmp_path,
         model="model-a",
         context_window_tokens=16_000,
-        provider_signature=("fast", "model-a"),
-        provider_snapshot_loader=lambda: load_preset(default_name),
+        provider_signature=("model-a", "fast"),
+        provider_snapshot_loader=lambda: load_selection("model-a", None, default_name),
         model_presets=catalog,
         preset_catalog_loader=lambda: catalog,
         model_preset="fast",
-        preset_snapshot_loader=load_preset,
+        selection_snapshot_loader=load_selection,
     )
     loop.bus.subscribe(published.append, RuntimeModelChanged)
     catalog["Codex"] = catalog.pop("fast")

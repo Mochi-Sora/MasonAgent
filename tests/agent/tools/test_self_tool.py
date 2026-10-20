@@ -14,7 +14,7 @@ from mason.agent.tools.runtime_control import AgentRuntimeControl
 from mason.agent.tools.self import MyTool
 from mason.agent.tools.shell import ExecToolConfig
 from mason.agent.tools.web import WebSearchConfig, WebToolsConfig
-from mason.config.schema import ModelPresetConfig
+from mason.config.schema import GenerationPresetConfig
 from mason.providers.base import LLMUsage
 
 # ---------------------------------------------------------------------------
@@ -1031,28 +1031,28 @@ class TestSecurityAttributeProtection:
     @pytest.mark.asyncio
     async def test_modify_model_presets_dotpath_blocked(self):
         """The config-derived model preset catalog is inspectable but not mutable."""
-        presets = {"fast": ModelPresetConfig(model="fast-model")}
+        presets = {"fast": GenerationPresetConfig(max_tokens=4096)}
         tool = _make_tool(loop=_make_mock_loop(model_presets=presets))
 
         result = await tool.execute(
             action="set",
             key="model_presets.other",
-            value={"model": "other-model"},
+            value={"max_tokens": 1024},
         )
 
         assert "read-only" in result
-        assert presets == {"fast": ModelPresetConfig(model="fast-model")}
+        assert presets == {"fast": GenerationPresetConfig(max_tokens=4096)}
 
     @pytest.mark.asyncio
     async def test_inspect_read_only_model_preset_dotpath(self):
         presets = MappingProxyType({
-            "fast": ModelPresetConfig(model="fast-model"),
+            "fast": GenerationPresetConfig(max_tokens=4096),
         })
         tool = _make_tool(loop=_make_mock_loop(model_presets=presets))
 
-        result = await tool.execute(action="check", key="model_presets.fast.model")
+        result = await tool.execute(action="check", key="model_presets.fast.max_tokens")
 
-        assert result == "model_presets.fast.model: 'fast-model'"
+        assert result == "model_presets.fast.max_tokens: 4096"
 
 
 # ---------------------------------------------------------------------------

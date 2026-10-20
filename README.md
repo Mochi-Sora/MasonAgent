@@ -86,7 +86,7 @@ flowchart TD
   structured facts, events, summaries, relationships, and open knowledge gaps derived from it.
   Nothing is purged on a schedule; the backup is for corruption recovery, not a second tier.
 - **Consolidation is the dream pass.** Every two hours, and once more before the daily
-  rollover, a model pass (the main model, or a cheaper preset you choose) reviews new journal
+  rollover, a model pass (the main model, or a cheaper model you choose) reviews new journal
   entries and returns a bounded JSON plan: promote durable facts, deduplicate, resolve or flag
   contradictions, connect related memories, synthesise broader memories, assess retention,
   record knowledge gaps, and distil tiny reusable skills into `skills/`. It is cursor-gated,
@@ -121,8 +121,8 @@ restores the classic always-loaded behaviour.
   TTL-based idle auto-compaction and `/compact`. Compaction writes an archived summary that
   the next turns replay in place of the compacted history.
 - **Providers** are pluggable (`anthropic`, OpenAI-compatible and Responses APIs, Azure,
-  Bedrock, GitHub Copilot, OpenAI Codex, xAI and more), selected through model presets;
-  consolidation can run on a different preset than the conversation.
+  Bedrock, GitHub Copilot, OpenAI Codex, xAI and more), selected per provider and model;
+  consolidation can run on a different model than the conversation.
 - **Surfaces today:** the CLI (`mason agent`, `mason gateway`, `mason serve` for the
   OpenAI-compatible API), the messaging channels above, and the Python SDK. Mason is
   terminal- and chat-first: it deliberately ships **no WebUI and no TUI**.

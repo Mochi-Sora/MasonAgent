@@ -93,7 +93,7 @@ Example config fragment:
 }
 ```
 
-The copied base config can keep using the same `modelPresets` and `agents.defaults.modelPreset`. If this instance needs a different model, add another preset and set `agents.defaults.modelPreset` to that preset name.
+The copied base config can keep using the same `modelPresets` and `agents.defaults.modelPreset`. If this instance needs a different model, change `agents.defaults.model` and `agents.defaults.provider` (or select it once with `/model`).
 
 Start separate instances:
 

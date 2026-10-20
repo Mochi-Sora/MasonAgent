@@ -160,13 +160,13 @@ class MyTool(Tool):
             "Scratchpad keys persist across turns but not restarts.\n"
             "Current routing metadata is available read-only via request.channel, "
             "request.chat_id, and request.sender_id.\n"
-            "Use model_preset for session-scoped model or context changes; direct "
+            "Use model_preset for session-scoped settings changes; direct "
             "model/context_window_tokens writes are disabled during active sessions.\n"
             "Note: web_config and exec_config are readable but read-only.\n"
             "\n"
             "When to use:\n"
             "- User asks about your model or settings → check that key.\n"
-            "- User asks to switch to a named model preset → set model_preset to that preset name.\n"
+            "- User asks to switch to a named settings preset → set model_preset to that preset name.\n"
             "- A tool fails or behaves unexpectedly → check the related config to diagnose.\n"
             "- User asks you to remember a preference for this session → set to store it in your scratchpad.\n"
             "- About to start a large task → check context_window_tokens and max_iterations first."
@@ -195,7 +195,7 @@ class MyTool(Tool):
                     "type": "string",
                     "description": "Dot-path for check/set. Examples: 'max_iterations', 'workspace', 'provider_retry_mode'. "
                     "Use 'request.channel', 'request.chat_id', or 'request.sender_id' for current routing metadata. "
-                    "Use 'model_preset' to switch named model presets. For check without key, shows all config values.",
+                    "Use 'model_preset' to apply a named settings preset. For check without key, shows all config values.",
                 },
                 "value": {"description": "New value (for set). Type must match target (int for max_iterations/context_window_tokens, str for model/model_preset)."},
             },
@@ -510,14 +510,16 @@ class MyTool(Tool):
         if session_key:
             self._audit("modify", f"model_preset = {name!r}")
             return (
-                f"Set model_preset = {name!r} for the next turn; "
-                f"model will be {runtime.model!r}; "
-                f"context_window_tokens will be {runtime.context_window_tokens!r}"
+                f"Applied settings preset {name!r} for the next turn; "
+                f"model stays {runtime.model!r}; "
+                f"max_tokens={runtime.generation.max_tokens!r}, "
+                f"context_window_tokens={runtime.context_window_tokens!r}"
             )
         self._audit("modify", f"model_preset: {old!r} -> {name!r}")
         return (
-            f"Set model_preset = {name!r} (was {old!r}); model is now {runtime.model!r}; "
-            f"context_window_tokens is now {runtime.context_window_tokens!r}"
+            f"Applied settings preset {name!r} (was {old!r}); model stays "
+            f"{runtime.model!r}; context_window_tokens is now "
+            f"{runtime.context_window_tokens!r}"
         )
 
     def _modify_restricted(self, key: str, value: Any) -> str:

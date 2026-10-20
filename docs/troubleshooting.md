@@ -80,9 +80,9 @@ Read it like this:
 |---|---|---|
 | `Config` | It points to the config file you meant to use and shows `✓`. | Run `mason onboard`, or pass `--config` to `mason agent`, `gateway`, or `serve` when testing a non-default instance. |
 | `Workspace` | It points to the workspace you meant to use and shows `✓`. | Run `mason onboard`, create the folder, fix permissions, or pass `--workspace` on commands that support it. |
-| `Model` | It shows the active model or the preset name you expect. | Set `agents.defaults.modelPreset` to the intended preset, or check `/model` if you changed models during a chat session. |
+| `Model` | It shows the active model you expect, and the active settings preset. | Set `agents.defaults.model`/`provider` for the model, or `agents.defaults.modelPreset` for settings; check `/model` and `/presets` if you changed them during a chat session. |
 | `Agent` | It says `provider/model configuration is ready`. | Follow the printed CLI setup route, then run `mason status` again. |
-| Provider rows | The provider used by the active preset shows `✓`, an OAuth marker, or a local URL. | Configure only the active provider first. It is normal for unused providers to say `not set`. |
+| Provider rows | The provider used by the active model shows `✓`, an OAuth marker, or a local URL. | Configure only the active provider first. It is normal for unused providers to say `not set`. |
 
 If `mason status` looks right but `mason agent -m "Hello!"` fails, the install and config paths are probably fine. Continue with [Provider and Model Problems](#provider-and-model-problems).
 
@@ -130,7 +130,7 @@ Common config mistakes:
 | Symptom | Check |
 |---|---|
 | JSON parse error | Validate commas, braces, and quotes. Most docs examples are partial snippets to merge. |
-| Unknown or missing provider | Use provider registry names such as `openrouter`, `anthropic`, `openai`, `ollama`, `vllm`, `lm_studio`, or define a custom OpenAI-compatible provider key under `providers` and reference that exact key from the active preset. |
+| Unknown or missing provider | Use provider registry names such as `openrouter`, `anthropic`, `openai`, `ollama`, `vllm`, `lm_studio`, or define a custom OpenAI-compatible provider key under `providers` and select that exact key as `agents.defaults.provider`. |
 | snake_case vs camelCase confusion | Both are accepted, but docs use camelCase because mason writes config with aliases such as `apiKey`, `modelPresets`, `intervalS`. |
 | Environment variable error | `${VAR_NAME}` references are resolved at startup. Set the variable before running mason. |
 | Edited config but behavior did not change | Restart `mason gateway`; long-running processes read config at startup. |
@@ -165,7 +165,7 @@ If you need a known-good snippet instead of diagnosis, use [`provider-cookbook.m
 |---|---|
 | 401, unauthorized, invalid API key | Key is missing, expired, pasted with whitespace, or under the wrong provider key. |
 | Model not found | The model ID belongs to a different provider or gateway. |
-| Provider cannot be inferred | Pin `modelPresets.<name>.provider` in the active preset instead of using `"auto"`. For legacy direct configs, pin `agents.defaults.provider`. |
+| Provider cannot be inferred | Pin `agents.defaults.provider` instead of using `"auto"`. |
 | Local model connection refused | Ollama, vLLM, LM Studio, or another local server is not running, or `apiBase` points to the wrong port. |
 | Bedrock validation error | Check AWS region, credentials, model access, model ID, and whether the model supports Converse. |
 | OAuth provider fails | Run the matching login command: `openai-codex`, `xai-grok`, or `github-copilot`, normally with `--set-main`. |
@@ -173,7 +173,7 @@ If you need a known-good snippet instead of diagnosis, use [`provider-cookbook.m
 | Codex login runs on a remote/headless machine | Run `mason provider login openai-codex --device` (device code, no callback listener). Alternatively open ChatGPT in your local browser and paste the full `http://localhost:1455/auth/callback?...` URL back into the terminal. |
 | Codex login runs in Docker | Start the container with `docker run -it` so the OAuth flow has an interactive terminal. |
 | Codex says a model is not supported with a ChatGPT account | Model availability depends on the ChatGPT plan. Run `mason provider login openai-codex --set-main` after login; it picks a model from the account's live catalog, or pass `--model openai-codex/<model>` explicitly. Do not use the direct-API `openai/...` prefix with Codex OAuth. |
-| Config says `providers.openai_codex` conflicts with the built-in provider | Under `providers`, keep only the canonical `openaiCodex` settings key and remove a duplicate `openai_codex` key. A model preset's `provider` value remains `openai_codex`. |
+| Config says `providers.openai_codex` conflicts with the built-in provider | Under `providers`, keep only the canonical `openaiCodex` settings key and remove a duplicate `openai_codex` key. `agents.defaults.provider` remains `openai_codex`. |
 | xAI OAuth needs a proxy | Set `providers.xaiGrok.proxy` before login. It applies to OAuth discovery, token exchange/refresh, and Grok subscription requests. |
 | xAI login runs on a remote/headless machine | Run `mason provider login xai-grok` interactively, open the printed URL elsewhere, and paste the final callback URL or authorization code when prompted. |
 | xAI returns 403 or subscription access denied | Confirm the signed-in account has an eligible X Premium / Grok subscription, then run `mason provider login xai-grok` again. This provider does not use an xAI API key or X Developer OAuth. |

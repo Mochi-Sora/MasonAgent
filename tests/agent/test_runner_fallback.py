@@ -192,14 +192,15 @@ async def test_fallback_preserves_the_operation_event_sink():
     assert fallback.context_calls[0].events is events
 
 
-def test_fallback_model_preset_ref_must_exist() -> None:
+def test_fallback_model_refs_are_model_ids_not_required_presets() -> None:
     from mason.config.schema import Config
 
-    with pytest.raises(ValueError, match="fallback_models.*not found"):
-        Config.model_validate({
-            "agents": {"defaults": {"fallbackModels": ["missing"]}},
-            "modelPresets": {},
-        })
+    config = Config.model_validate({
+        "agents": {"defaults": {"fallbackModels": ["missing-provider/some-model"]}},
+        "modelPresets": {},
+    })
+
+    assert config.agents.defaults.fallback_models == ["missing-provider/some-model"]
 
 
 def test_provider_signature_tracks_fallback_presets_and_provider_config() -> None:
@@ -209,13 +210,14 @@ def test_provider_signature_tracks_fallback_presets_and_provider_config() -> Non
     base = {
         "agents": {
             "defaults": {
+                "model": "openai/gpt-4.1",
+                "provider": "openai",
                 "modelPreset": "fast",
-                "fallbackModels": ["deep"],
+                "fallbackModels": ["anthropic/claude-sonnet-4-6"],
             }
         },
         "modelPresets": {
-            "fast": {"model": "openai/gpt-4.1", "provider": "openai"},
-            "deep": {"model": "anthropic/claude-sonnet-4-6", "provider": "anthropic"},
+            "fast": {"maxTokens": 4096},
         },
         "providers": {
             "openai": {"apiKey": "primary-key"},
@@ -224,10 +226,11 @@ def test_provider_signature_tracks_fallback_presets_and_provider_config() -> Non
     }
     changed_fallback = {
         **base,
-        "agents": {"defaults": {"modelPreset": "fast", "fallbackModels": ["backup"]}},
-        "modelPresets": {
-            **base["modelPresets"],
-            "backup": {"model": "deepseek/deepseek-chat", "provider": "deepseek"},
+        "agents": {
+            "defaults": {
+                **base["agents"]["defaults"],
+                "fallbackModels": ["deepseek/deepseek-chat"],
+            }
         },
         "providers": {
             **base["providers"],
@@ -255,21 +258,17 @@ def test_provider_snapshot_uses_smallest_fallback_context_window() -> None:
     config = Config.model_validate({
         "agents": {
             "defaults": {
-                "modelPreset": "fast",
-                "fallbackModels": ["deep"],
-            }
-        },
-        "modelPresets": {
-            "fast": {
                 "model": "openai/gpt-4.1",
                 "provider": "openai",
                 "contextWindowTokens": 128000,
-            },
-            "deep": {
-                "model": "deepseek/deepseek-chat",
-                "provider": "deepseek",
-                "contextWindowTokens": 64000,
-            },
+                "fallbackModels": [
+                    {
+                        "provider": "deepseek",
+                        "model": "deepseek/deepseek-chat",
+                        "contextWindowTokens": 64000,
+                    }
+                ],
+            }
         },
         "providers": {
             "openai": {"apiKey": "primary-key"},
@@ -292,13 +291,12 @@ def test_factory_injects_configured_identity_into_primary_and_fallback_leaves() 
     config = Config.model_validate({
         "agents": {
             "defaults": {
-                "modelPreset": "primary",
-                "fallbackModels": ["backup"],
+                "model": "primary-model",
+                "provider": "primary_edge",
+                "fallbackModels": [
+                    {"model": "backup-model", "provider": "backup_edge"}
+                ],
             }
-        },
-        "modelPresets": {
-            "primary": {"model": "primary-model", "provider": "primary_edge"},
-            "backup": {"model": "backup-model", "provider": "backup_edge"},
         },
         "providers": {
             "primary_edge": {
@@ -327,6 +325,9 @@ def test_inline_fallback_reasoning_effort_does_not_inherit_primary() -> None:
     config = Config.model_validate({
         "agents": {
             "defaults": {
+                "model": "anthropic/claude-opus-4-5",
+                "provider": "anthropic",
+                "reasoningEffort": "high",
                 "modelPreset": "fast",
                 "fallbackModels": [
                     {"provider": "openai", "model": "gpt-4.1"}
@@ -334,11 +335,7 @@ def test_inline_fallback_reasoning_effort_does_not_inherit_primary() -> None:
             }
         },
         "modelPresets": {
-            "fast": {
-                "model": "anthropic/claude-opus-4-5",
-                "provider": "anthropic",
-                "reasoningEffort": "high",
-            }
+            "fast": {"reasoningEffort": "high"},
         },
         "providers": {
             "anthropic": {"apiKey": "primary-key"},
