@@ -358,7 +358,7 @@ def test_snapshot_captures_uncheckpointed_wal_and_roundtrips(db: MemoryDB, tmp_p
     assert db.get_meta("last_snapshot_at") is not None
 
 
-def test_backup_is_separate_and_contains_verbatim_only(db: MemoryDB, tmp_path: Path) -> None:
+def test_backup_is_a_full_compressed_copy(db: MemoryDB, tmp_path: Path) -> None:
     db.capture_messages("cli:1", [_msg("user", "raw turn")], now=_NOW)
     db.insert_memory("structured fact", now=_NOW)
 
@@ -380,14 +380,15 @@ def test_backup_is_separate_and_contains_verbatim_only(db: MemoryDB, tmp_path: P
             for row in copy.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
         }
         rows = copy.execute("SELECT content FROM episodes").fetchall()
+        memories = copy.execute("SELECT text FROM memories").fetchall()
         kind = copy.execute("SELECT value FROM meta WHERE key = 'backup_kind'").fetchone()
     finally:
         copy.close()
-    assert "episodes" in tables
-    assert "memories" not in tables
+    assert {"episodes", "memories", "edges"} <= tables
     assert {"episodes_day_idx", "episodes_session_idx"} <= indices
     assert rows == [("raw turn",)]
-    assert kind == ("verbatim",)
+    assert memories == [("structured fact",)]
+    assert kind == ("full",)
 
 
 def test_snapshot_prunes_to_newest(db: MemoryDB) -> None:

@@ -2390,7 +2390,7 @@ mason keeps memory in one SQLite database under `<workspace>/memory/memory.db`. 
 | Verbatim journal | Every turn of every conversation captured verbatim and kept indefinitely. The agent searches it with `recall_backup`; an empty query lists the latest turns. |
 | Working state | A compact scratchpad in `memory/state.md` (about 2 KB) injected into the system prompt. The agent rewrites it with `update_state`; the daily rollover empties it in place. |
 
-Consolidation is the periodic LLM pass that curates structured memory: it promotes worthwhile journal entries, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and writes small generated skills under `skills/<name>/SKILL.md`. It runs on a cron system job and once more right before the daily rollover. The daily rollover writes a compressed, verbatim-only backup to `memory.backupDir` (default `<workspace>/backups/memory/`), empties the working state, and runs SQLite optimisation. It never purges the journal.
+Consolidation is the periodic LLM pass that curates structured memory: it promotes worthwhile journal entries, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and writes small generated skills under `skills/<name>/SKILL.md`. It runs on a cron system job. The daily rollover runs only a narrow dedupe/contradiction pass, then writes a compressed, lossless full copy of the database to `memory.backupDir` (default `<workspace>/backups/memory/`), empties the working state, and runs SQLite optimisation. It never purges the journal.
 
 ```json
 {
@@ -2416,7 +2416,7 @@ Consolidation is the periodic LLM pass that curates structured memory: it promot
 |--------|---------|-------------|
 | `agents.defaults.memory.enabled` | `true` | Capture turns into the journal and expose the memory tools. Set to `false` to disable the memory subsystem. |
 | `agents.defaults.memory.stateMaxChars` | `2048` | Maximum characters kept in the working state. Range: 256–16384. |
-| `agents.defaults.memory.snapshotEnabled` | `true` | Write a compressed verbatim backup at each daily rollover. |
+| `agents.defaults.memory.snapshotEnabled` | `true` | Write a compressed, lossless full copy of the database at each daily rollover. |
 | `agents.defaults.memory.snapshotKeep` | `7` | Number of daily compressed backups retained. |
 | `agents.defaults.memory.backupDir` | unset | Backup directory. Unset uses `<workspace>/backups/memory`. |
 | `agents.defaults.memory.consolidation.enabled` | `true` | Register the periodic consolidation job. Set to `false` to keep capture and recall without automatic curation. |
@@ -2424,7 +2424,7 @@ Consolidation is the periodic LLM pass that curates structured memory: it promot
 | `agents.defaults.memory.consolidation.modelOverride` | unset | Model preset used for consolidation runs. Unset uses the main model. |
 | `agents.defaults.memory.consolidation.cron` | unset | Legacy cron expression. When set, it overrides `intervalH`. |
 
-The daily rollover is a protected cron system job (`memory_rollover`, daily at 00:00 in `agents.defaults.timezone`) plus a startup check. It writes the backup, clears the working state in place, and runs `PRAGMA optimize` and an FTS5 merge pass; the verbatim journal and structured memory are untouched.
+The daily rollover is a protected cron system job (`memory_rollover`, daily at 00:00 in `agents.defaults.timezone`) plus a startup check. Before writing the compressed full backup, it runs a narrow maintenance pass that only deduplicates memories and flags contradictions; full promotion, synthesis, retention, and gap handling stay on the two-hour consolidation schedule. The rollover then writes the backup, clears the working state in place, and runs `PRAGMA optimize` and an FTS5 merge pass; the verbatim journal and structured memory are untouched.
 
 On upgrade, a customized `memory/MEMORY.md` is imported into structured memory once and moved to `memory/legacy/`; `memory/history.jsonl` is imported as verbatim episodes and also moved there. An untouched bundled `MEMORY.md` template is skipped. `MEMORY.md` is no longer a file you edit for durable knowledge: durable user facts belong in `USER.md`, and the agent's own memory is automatic — ask it to remember something, and it lands in the working state and, eventually, structured memory. `memory/history.jsonl` remains only as the archive of conversation summaries written by session compaction.
 

@@ -17,10 +17,10 @@ FTS index has nothing to offer (for example CJK queries). Standard-library
 ``sqlite3`` only — WAL plus a busy timeout keeps the single file safe to share
 between the gateway, CLI, and SDK processes.
 
-A separate compressed backup of the verbatim journal is written to a sibling
+A separate compressed backup of the entire database is written to a sibling
 ``backups/memory`` directory (``memory.backupDir`` overrides it). It is a
-lossless ``.db.gz`` export, never a live copy, so a corrupted page in the active
-file cannot take the backup with it.
+lossless ``.db.gz`` copy taken with ``VACUUM INTO``, never a live copy, so a
+corrupted page in the active file cannot take the backup with it.
 """
 
 from __future__ import annotations
@@ -64,8 +64,7 @@ _WAL_AUTOCHECKPOINT_PAGES = 256
 _WAL_WARN_BYTES = 8 * 1024 * 1024
 _JOURNAL_SIZE_LIMIT_BYTES = 4 * 1024 * 1024
 _BACKUP_DIRNAME = "backups"
-_BACKUP_KIND = "verbatim"
-_BACKUP_SCHEMA_VERSION = 1
+_BACKUP_KIND = "full"
 _BACKUP_SUFFIX = ".db.gz"
 _DEFAULT_SNAPSHOT_KEEP = 7
 _WAL_CHECKPOINT_META_KEY = "wal_checkpoint_at"
@@ -77,6 +76,12 @@ _CHECKPOINT_MODES = ("PASSIVE", "FULL", "RESTART", "TRUNCATE")
 CONSOLIDATION_LAST_OK_META_KEY = "consolidation_last_ok_at"
 CONSOLIDATION_LAST_ATTEMPT_META_KEY = "consolidation_last_attempt_at"
 CONSOLIDATION_LAST_ERROR_META_KEY = "consolidation_last_error"
+
+# Nightly maintenance is deliberately separate from consolidation: it only
+# deduplicates and flags contradictions, and it never advances the cursor.
+MAINTENANCE_LAST_OK_META_KEY = "maintenance_last_ok_at"
+MAINTENANCE_LAST_ATTEMPT_META_KEY = "maintenance_last_attempt_at"
+MAINTENANCE_LAST_ERROR_META_KEY = "maintenance_last_error"
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -159,27 +164,9 @@ CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE ON memories BEGIN
 END;
 """
 
-# The backup is a standalone, self-describing SQLite file. It deliberately
-# contains the verbatim journal only: structured knowledge can be rebuilt from
-# it, while prompt content that never became a memory stays out of the archive.
-_BACKUP_DDL = """
-CREATE TABLE IF NOT EXISTS backup_db.meta (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS backup_db.episodes (
-    id INTEGER PRIMARY KEY,
-    day TEXT NOT NULL,
-    session_key TEXT NOT NULL,
-    ts TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS backup_db.episodes_day_idx ON episodes(day);
-CREATE INDEX IF NOT EXISTS backup_db.episodes_session_idx ON episodes(session_key, id);
-"""
+# The backup is a full, consistent copy of the active database. It contains the
+# verbatim journal and the structured graph exactly as they were at the moment of
+# the copy; the only additions are two metadata rows identifying the copy.
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,7 +459,7 @@ def _update_memory_text(
 
 
 class MemoryDB:
-    """SQLite storage for the single memory tier and its verbatim backup.
+    """SQLite storage for the single memory tier and its compressed full backup.
 
     The connection is opened lazily and cached per process. All public methods
     are safe to call from any thread; they serialize on an internal lock.
@@ -631,14 +618,14 @@ class MemoryDB:
         keep: int = _DEFAULT_SNAPSHOT_KEEP,
         now: datetime | None = None,
     ) -> Path | None:
-        """Write a compressed, lossless backup of the verbatim journal.
+        """Write a compressed, lossless full copy of the database.
 
-        The export reads committed WAL frames through the live connection, writes a
-        standalone SQLite file containing ``episodes`` only, and gzips it. Structured
-        memories are derived data and are intentionally excluded: they can be rebuilt
-        from the verbatim journal, while the journal itself cannot. Backups older than
-        *keep* are pruned. Returns the ``.db.gz`` path, or None when the store is
-        disabled or the export failed.
+        ``VACUUM INTO`` captures committed WAL frames too, so the copy is a
+        consistent snapshot rather than a hand-copied file that might be missing
+        recent writes. The copy contains the verbatim journal and the structured
+        graph; it is gzipped without losing anything. Backups older than *keep*
+        are pruned. Returns the ``.db.gz`` path, or None when the store is
+        disabled or the copy failed.
         """
         if not self.enabled:
             return None
@@ -651,41 +638,35 @@ class MemoryDB:
         compressed = target.with_name(f"{target.name}.{os.getpid()}.tmp")
 
         with tempfile.TemporaryDirectory(prefix="mason-memory-backup-") as raw_dir:
-            raw_path = Path(raw_dir) / "verbatim.db"
+            raw_path = Path(raw_dir) / "memory.db"
             with self._lock:
                 connection = self._connect()
                 try:
-                    connection.execute("ATTACH DATABASE ? AS backup_db", (str(raw_path),))
-                    try:
-                        connection.executescript(_BACKUP_DDL)
-                        connection.execute(
-                            "INSERT INTO backup_db.episodes"
-                            " (id, day, session_key, ts, role, content, content_hash, created_at)"
-                            " SELECT id, day, session_key, ts, role, content, content_hash,"
-                            " created_at FROM main.episodes ORDER BY id"
-                        )
-                        connection.executemany(
-                            "INSERT INTO backup_db.meta(key, value) VALUES (?, ?)",
-                            (
-                                ("backup_kind", _BACKUP_KIND),
-                                ("schema_version", str(_BACKUP_SCHEMA_VERSION)),
-                                ("created_at", moment.isoformat()),
-                            ),
-                        )
-                    finally:
-                        with suppress(sqlite3.Error):
-                            connection.execute("DETACH DATABASE backup_db")
+                    connection.execute("VACUUM INTO ?", (str(raw_path),))
                 except sqlite3.Error:
-                    logger.exception("Memory backup export failed at {}", target)
+                    logger.exception("Memory backup copy failed at {}", target)
                     return None
 
             try:
+                copy = sqlite3.connect(raw_path)
+                try:
+                    copy.executemany(
+                        "INSERT INTO meta(key, value) VALUES (?, ?)"
+                        " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (
+                            ("backup_kind", _BACKUP_KIND),
+                            ("backup_created_at", moment.isoformat()),
+                        ),
+                    )
+                    copy.commit()
+                finally:
+                    copy.close()
                 with raw_path.open("rb") as source, gzip.open(
                     compressed, "wb", compresslevel=6
                 ) as sink:
                     shutil.copyfileobj(source, sink)
                 compressed.replace(target)
-            except OSError:
+            except (OSError, sqlite3.Error):
                 logger.exception("Memory backup compression failed at {}", target)
                 return None
             finally:
@@ -697,7 +678,7 @@ class MemoryDB:
             target.chmod(0o600)
         if dest is None:
             self._prune_snapshots(directory, keep=max(1, int(keep)))
-        logger.info("Memory verbatim backup written to {}", target)
+        logger.info("Memory backup written to {}", target)
         return target
 
     @staticmethod
@@ -1628,6 +1609,9 @@ class MemoryDB:
                 "consolidation_last_attempt_at": None,
                 "consolidation_last_ok_at": None,
                 "consolidation_last_error": None,
+                "maintenance_last_attempt_at": None,
+                "maintenance_last_ok_at": None,
+                "maintenance_last_error": None,
                 "db_bytes": 0,
                 "wal_bytes": 0,
                 "last_checkpoint": None,
@@ -1674,6 +1658,11 @@ class MemoryDB:
             ),
             "consolidation_last_ok_at": self.get_meta(CONSOLIDATION_LAST_OK_META_KEY),
             "consolidation_last_error": self.get_meta(CONSOLIDATION_LAST_ERROR_META_KEY),
+            "maintenance_last_attempt_at": self.get_meta(
+                MAINTENANCE_LAST_ATTEMPT_META_KEY,
+            ),
+            "maintenance_last_ok_at": self.get_meta(MAINTENANCE_LAST_OK_META_KEY),
+            "maintenance_last_error": self.get_meta(MAINTENANCE_LAST_ERROR_META_KEY),
             "db_bytes": self._file_bytes(self.path),
             "wal_bytes": self._wal_bytes(),
             "last_checkpoint": self.get_meta(_WAL_CHECKPOINT_META_KEY),

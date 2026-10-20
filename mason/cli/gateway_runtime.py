@@ -510,6 +510,25 @@ def _run_gateway(
         except Exception:
             logger.exception("Memory consolidation failed")
 
+    async def _run_memory_maintenance() -> None:
+        """Nightly light pass: dedupe and flag contradictions before the backup."""
+        if not memory_consolidation_enabled:
+            return
+        from mason.memory.consolidation import MemoryConsolidator
+
+        runtime = agent.consolidation_runtime() or agent.llm_runtime()
+        consolidator = MemoryConsolidator(
+            agent.context.workspace,
+            agent.context.memory_db,
+            state=agent.context.memory_state,
+        )
+        try:
+            result = await consolidator.run_maintenance(runtime)
+            if not result.ok:
+                logger.warning("Memory maintenance: {}", result.summary())
+        except Exception:
+            logger.exception("Memory maintenance failed")
+
     async def on_cron_job(job: CronJob) -> str | CronRunResult | None:
         """Execute a cron job through the agent."""
         async def _silent(*_args: Any, **_kwargs: Any) -> None:
@@ -520,10 +539,12 @@ def _run_gateway(
             await _run_memory_consolidation()
             return None
 
-        # Rollover writes the compressed verbatim backup and empties the working
-        # state. Consolidation gets a last chance at the outgoing day first.
+        # Rollover writes a compressed full backup and empties the working state.
+        # A narrow nightly pass (dedupe + contradiction flags) runs first so the
+        # backup reflects the cleaned graph; full consolidation stays on its own
+        # two-hour schedule.
         if job.name == "memory_rollover":
-            await _run_memory_consolidation()
+            await _run_memory_maintenance()
             memory_db = agent.context.memory_db
             if memory_db.enabled:
                 maybe_rollover(

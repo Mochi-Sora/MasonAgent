@@ -91,9 +91,10 @@ flowchart TD
   contradictions, connect related memories, synthesise broader memories, assess retention,
   record knowledge gaps, and distil tiny reusable skills into `skills/`. It is cursor-gated,
   so an idle agent costs nothing.
-- **The rollover** writes a compressed, verbatim-only backup to `<workspace>/backups/memory/`,
-  empties `state.md` in place, and runs SQLite optimisation. The journal and structured memory
-  are untouched.
+- **The rollover** first runs a narrow nightly pass — deduplicate structured memories and flag
+  contradictions, nothing else — then writes a compressed, lossless full copy of the database to
+  `<workspace>/backups/memory/`, empties `state.md` in place, and runs SQLite optimisation. The
+  journal and structured memory are untouched.
 - **Recall is on demand.** The model is told, in its prompt, that it must search before
   claiming it does not remember something.
 - Retrieval is SQLite FTS5 — millisecond lookups, not file scans. The memory subsystem is

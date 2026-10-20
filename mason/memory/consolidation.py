@@ -1,11 +1,16 @@
-"""Periodic consolidation of long-term memory.
+"""Periodic consolidation and nightly maintenance of memory.
 
-Once per interval — and once more before each daily rollover — the job reviews
-the backup episodes recorded since its cursor and asks the configured model for
-a bounded JSON plan: promote durable memories, merge duplicates, rewrite vague
-entries, link related ones, drop stale ones, and distill tiny skills from stable
-patterns. The plan is applied transactionally and the cursor advances only after
-a successful run, so a failed run simply retries the same batch next time.
+Once per interval the consolidation job reviews the verbatim episodes recorded
+since its cursor and asks the configured model for a bounded JSON plan: promote
+durable memories, merge duplicates, resolve or flag contradictions, synthesise
+broader memories, assess retention, record knowledge gaps, link related entries,
+and distill tiny skills from stable patterns. The plan is applied transactionally
+and the cursor advances only after a successful run, so a failed run simply
+retries the same batch next time.
+
+The daily rollover calls a separate, narrower maintenance pass: it reviews the
+current structured graph and may only deduplicate and flag contradictions. It
+never advances the cursor and never archives anything.
 """
 
 from __future__ import annotations
@@ -28,6 +33,9 @@ from mason.memory.store import (
     CONSOLIDATION_LAST_ATTEMPT_META_KEY,
     CONSOLIDATION_LAST_ERROR_META_KEY,
     CONSOLIDATION_LAST_OK_META_KEY,
+    MAINTENANCE_LAST_ATTEMPT_META_KEY,
+    MAINTENANCE_LAST_ERROR_META_KEY,
+    MAINTENANCE_LAST_OK_META_KEY,
     EpisodeHit,
     MemoryDB,
     MemoryHit,
@@ -42,6 +50,7 @@ if TYPE_CHECKING:
     from mason.utils.llm_runtime import LLMRuntime
 
 _CONSOLIDATION_PROMPT = render_template("agent/consolidation.md", strip=True)
+_MAINTENANCE_PROMPT = render_template("agent/memory_maintenance.md", strip=True)
 
 _BATCH_EPISODES = 40
 _MAX_MEMORIES = 150
@@ -81,14 +90,17 @@ class ConsolidationResult:
     retired_skills: tuple[str, ...] = ()
     snapshot: str | None = None
     error: str | None = None
+    mode: str = "consolidation"
 
     def summary(self) -> str:
         if not self.ok:
             return f"failed after {self.episodes} episode(s): {self.error}"
-        if not self.episodes:
-            return "nothing new to consolidate"
         applied = dict(self.applied or {})
         parts = [f"{key}={value}" for key, value in applied.items() if value]
+        if self.mode == "maintenance":
+            return "maintenance: " + (", ".join(parts) or "no changes")
+        if not self.episodes:
+            return "nothing new to consolidate"
         if self.skills:
             parts.append(f"skills={len(self.skills)}")
         if self.retired_skills:
@@ -161,6 +173,42 @@ class MemoryConsolidator:
         logger.info("Memory consolidation: {}", result.summary())
         return result
 
+    async def run_maintenance(
+        self, runtime: LLMRuntime, *, now: datetime | None = None
+    ) -> ConsolidationResult:
+        """Nightly light pass: deduplicate and flag contradictions only.
+
+        This runs against the current structured graph rather than the episode
+        cursor, so it still does useful work when no new turns arrived. It never
+        promotes, rewrites, archives, scores retention, records gaps, or writes
+        skills; contradictions are only flagged, never auto-superseded.
+        """
+        moment = now or datetime.now()
+        cursor = self.db.consolidation_cursor()
+        memories = self.db.list_memories(
+            statuses=("active", "candidate"), limit=_MAX_MEMORIES
+        )
+        if len(memories) < 2:
+            self.db.set_meta(MAINTENANCE_LAST_ATTEMPT_META_KEY, moment.isoformat())
+            return ConsolidationResult(ok=True, cursor=cursor, mode="maintenance")
+        prompt = "\n".join(["## Structured memory", *self._memory_lines(memories)])
+        plan, error = await self._request_plan(
+            runtime, prompt, system_prompt=_MAINTENANCE_PROMPT
+        )
+        if plan is None:
+            self._record_maintenance_failure(error, moment)
+            logger.warning("Memory maintenance skipped: {}", error)
+            return ConsolidationResult(
+                ok=False, cursor=cursor, error=error, mode="maintenance"
+            )
+        applied = self.db.apply_plan(_maintenance_plan(plan), now=now)
+        self._record_maintenance_success(moment)
+        result = ConsolidationResult(
+            ok=True, cursor=cursor, applied=applied, mode="maintenance"
+        )
+        logger.info("Memory maintenance: {}", result.summary())
+        return result
+
     def _record_success(self, moment: datetime) -> None:
         stamp = moment.isoformat()
         self.db.set_meta(CONSOLIDATION_LAST_OK_META_KEY, stamp)
@@ -170,6 +218,16 @@ class MemoryConsolidator:
     def _record_failure(self, error: str | None, moment: datetime) -> None:
         self.db.set_meta(CONSOLIDATION_LAST_ATTEMPT_META_KEY, moment.isoformat())
         self.db.set_meta(CONSOLIDATION_LAST_ERROR_META_KEY, (error or "unknown")[:500])
+
+    def _record_maintenance_success(self, moment: datetime) -> None:
+        stamp = moment.isoformat()
+        self.db.set_meta(MAINTENANCE_LAST_OK_META_KEY, stamp)
+        self.db.set_meta(MAINTENANCE_LAST_ATTEMPT_META_KEY, stamp)
+        self.db.set_meta(MAINTENANCE_LAST_ERROR_META_KEY, "")
+
+    def _record_maintenance_failure(self, error: str | None, moment: datetime) -> None:
+        self.db.set_meta(MAINTENANCE_LAST_ATTEMPT_META_KEY, moment.isoformat())
+        self.db.set_meta(MAINTENANCE_LAST_ERROR_META_KEY, (error or "unknown")[:500])
 
     # -- prompt ---------------------------------------------------------------
 
@@ -241,9 +299,11 @@ class MemoryConsolidator:
         self,
         runtime: LLMRuntime,
         prompt: str,
+        *,
+        system_prompt: str = _CONSOLIDATION_PROMPT,
     ) -> tuple[Mapping[str, object] | None, str | None]:
         messages = [
-            {"role": "system", "content": _CONSOLIDATION_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ]
         try:
@@ -360,6 +420,29 @@ def _preview(text: str, limit: int) -> str:
     head = int(usable * _PREVIEW_HEAD_RATIO)
     tail = usable - head
     return text[:head].rstrip() + marker + text[-tail:].lstrip()
+
+
+def _maintenance_plan(plan: Mapping[str, object]) -> dict[str, object]:
+    """Keep only the two actions the nightly maintenance pass is allowed to take.
+
+    Contradictions are always flagged, never superseded: the nightly job may
+    lower confidence and record the conflict, but it must not archive memories
+    on its own. Enforcement lives here as well as in the prompt so a model that
+    overreaches cannot delete anything.
+    """
+    filtered: dict[str, object] = {}
+    merges = plan_entries(plan, "merges")
+    if merges:
+        filtered["merges"] = merges
+    contradictions: list[dict[str, object]] = []
+    for item in plan_entries(plan, "contradictions"):
+        entry = dict(item)
+        if entry.get("resolution") != "coexist":
+            entry["resolution"] = "flag"
+        contradictions.append(entry)
+    if contradictions:
+        filtered["contradictions"] = contradictions
+    return filtered
 
 
 def parse_plan(text: str) -> Mapping[str, object] | None:

@@ -227,6 +227,69 @@ async def test_prompt_carries_turns_and_current_memories(
     assert "existing durable fact" in call["messages"][1]["content"]
 
 
+async def test_nightly_maintenance_only_merges_and_flags_contradictions(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    keep = db.insert_memory("user prefers dark mode", now=_NOW)
+    duplicate = db.insert_memory("user likes dark themes", now=_NOW)
+    berlin = db.insert_memory("user is based in Berlin", now=_NOW)
+    paris = db.insert_memory("user is based in Paris", now=_NOW)
+    assert keep and duplicate and berlin and paris
+    mock_provider.chat_stream_with_retry.return_value = _plan_response({
+        "promotions": [{"text": "must be ignored"}],
+        "merges": [{"keep": keep, "merge": [duplicate]}],
+        "contradictions": [
+            {"keep": berlin, "contradicts": [paris], "resolution": "supersede"}
+        ],
+        "retention": [{"id": paris, "action": "archive"}],
+    })
+
+    result = await MemoryConsolidator(tmp_path, db).run_maintenance(runtime, now=_NOW)
+
+    assert result.ok is True
+    assert result.mode == "maintenance"
+    assert result.applied is not None
+    assert result.applied["merges"] == 1
+    assert result.applied["contradictions"] == 1
+    # The nightly pass may not promote, score retention, or archive anything.
+    assert result.applied["promotions"] == 0
+    assert result.applied["retention"] == 0
+    assert db.search_memories("must be ignored") == []
+    # `supersede` is downgraded to `flag`: the contradicted entry stays searchable.
+    assert [hit.text for hit in db.search_memories("Paris")] == ["user is based in Paris"]
+    assert db.stats()["contradictions"] == 1
+    assert db.stats()["maintenance_last_ok_at"] == _NOW.isoformat()
+
+
+async def test_nightly_maintenance_noops_with_fewer_than_two_memories(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    db.insert_memory("only one memory", now=_NOW)
+
+    result = await MemoryConsolidator(tmp_path, db).run_maintenance(runtime, now=_NOW)
+
+    assert result.ok is True
+    assert result.mode == "maintenance"
+    mock_provider.chat_stream_with_retry.assert_not_awaited()
+    assert db.stats()["maintenance_last_attempt_at"] == _NOW.isoformat()
+
+
+async def test_nightly_maintenance_failure_is_reported_not_raised(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    db.insert_memory("first fact", now=_NOW)
+    db.insert_memory("second fact", now=_NOW)
+    mock_provider.chat_stream_with_retry.side_effect = RuntimeError("api down")
+
+    result = await MemoryConsolidator(tmp_path, db).run_maintenance(runtime, now=_NOW)
+
+    assert result.ok is False
+    assert result.mode == "maintenance"
+    assert result.error is not None and "model call failed" in result.error
+    assert db.stats()["maintenance_last_ok_at"] is None
+    assert "model call failed" in str(db.stats()["maintenance_last_error"])
+
+
 async def test_dream_pass_synthesises_resolves_gaps_and_assesses_retention(
     tmp_path: Path, db: MemoryDB, runtime, mock_provider
 ) -> None:

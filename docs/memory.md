@@ -1,7 +1,7 @@
 # AI Agent Memory in mason
 
 This page explains how mason implements long-term AI agent memory: the working
-state, the single SQLite memory tier, and the compressed verbatim backup that
+state, the single SQLite memory tier, and the compressed full backup that
 protects it.
 
 Good memory is not a pile of notes. It is a quiet system of attention. It notices
@@ -23,8 +23,9 @@ knowledge derived from it.
 Two more surfaces sit alongside them: `memory/DATES.md` holds dated commitments
 (searched on demand with `search_dates`, because a date is the whole point and
 curation favors timeless facts), and `memory/state_history.md` keeps the last 20
-working-state versions so an overwrite can be undone. A compressed, verbatim-only
-backup is written daily to `backups/memory/` for disaster recovery.
+working-state versions so an overwrite can be undone. A compressed, lossless
+full copy of the database is written daily to `backups/memory/` for disaster
+recovery.
 
 ### Working state
 
@@ -92,9 +93,9 @@ never hidden behind capability discovery):
 
 Consolidation is the slow, thoughtful layer — the pass that replaced the older
 Dream process. It turns the permanent journal into durable knowledge. It runs on a
-cron system job (every two hours by default) and immediately before each daily
-rollover, and its output is written back through the same store the model reads
-from.
+cron system job (every two hours by default), and its output is written back
+through the same store the model reads from. The daily rollover runs a narrower
+dedupe/contradiction pass before the backup.
 
 In one pass it:
 
@@ -130,21 +131,38 @@ cheaper) model preset than the main conversation. It never raises into the gatew
 a model error, or output that does not parse, simply means nothing changed and the
 cursor stays where it was, so the same journal entries are retried next time.
 
+### Nightly maintenance
+
+The daily rollover runs a deliberately narrower pass before it writes the backup.
+This pass reviews only structured memory and can do exactly two things:
+
+- **deduplicate** exact or near-duplicate entries, and
+- **flag contradictions** (or mark them as coexisting in different contexts).
+
+It cannot promote, rewrite, archive, score retention, record gaps, or write
+skills, and contradictions are never auto-superseded: the nightly job lowers
+confidence and records the conflict, leaving the final decision to a later full
+consolidation pass. It works from the current graph rather than the episode cursor,
+so it still does useful work when no new turns arrived.
+
 ## Daily Rollover
 
 Once a day — at `00:00` in the configured timezone, and on gateway startup when a
 day was missed — mason rolls memory over:
 
-- writes a compressed, verbatim-only backup of the journal to
+- runs a narrow maintenance pass that only deduplicates structured memories and
+  flags contradictions (no promotions, retention scoring, syntheses, gaps, or
+  skills),
+- writes a compressed, lossless full copy of the database to
   `backups/memory/memory-YYYY-MM-DD.db.gz`,
 - empties `memory/state.md` in place,
 - runs SQLite's `PRAGMA optimize`, an FTS5 merge pass, and a WAL checkpoint,
 - keeps the journal and structured memory exactly as they were.
 
-The backup is lossless and self-describing: it contains the `episodes` table plus
-metadata identifying it as a verbatim backup. Structured memories are deliberately
-excluded because they can be rebuilt from the journal. Backups are retained
-according to `snapshotKeep` (default 7) and written with owner-only permissions.
+The backup is lossless and self-describing: it is a complete SQLite copy of the
+active database — verbatim journal, structured memories, edges, and indexes — with
+metadata recording that it is a full backup. Backups are retained according to
+`snapshotKeep` (default 7) and written with owner-only permissions.
 
 ## The Files
 
@@ -159,7 +177,7 @@ workspace/
 ├── USER.md                  # Stable knowledge about the user
 ├── skills/                  # User skills and generated skills
 ├── backups/
-│   └── memory/              # Compressed verbatim backups (recovery only)
+│   └── memory/              # Compressed full backups (recovery only)
 │       └── memory-YYYY-MM-DD.db.gz
 └── memory/
     ├── state.md             # Working state, rewritten by the model
@@ -208,7 +226,7 @@ demand.
 |-------|---------|
 | `enabled` | Capture turns and expose the memory tools. When false, no database or state is used |
 | `stateMaxChars` | Size cap for the working state (256–16384, default 2048) |
-| `snapshotEnabled` | Write a compressed verbatim backup at each daily rollover |
+| `snapshotEnabled` | Write a compressed, lossless full copy of the database at each daily rollover |
 | `snapshotKeep` | Number of daily compressed backups retained |
 | `backupDir` | Backup directory; unset uses `<workspace>/backups/memory` |
 | `consolidation.enabled` | Register the periodic consolidation job |

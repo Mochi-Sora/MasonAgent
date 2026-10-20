@@ -2,8 +2,9 @@
 
 The active database is unbounded: verbatim episodes are the source of truth and
 are never discarded automatically. Once a day the gateway writes a compressed,
-verbatim-only backup outside ``memory/``, empties the working state in place, and
-runs SQLite's own optimisation pass. The structured memory graph is left alone.
+lossless copy of the whole database outside ``memory/``, empties the working state
+in place, and runs SQLite's own optimisation pass. The structured memory graph is
+left alone.
 
 A gateway that was offline over midnight runs the same check on startup.
 """
@@ -35,9 +36,9 @@ def maybe_rollover(
     """Run the daily maintenance at most once per day; returns True when it ran.
 
     The verbatim journal is not purged. *snapshot_enabled* writes the compressed
-    verbatim backup before the state is cleared; *snapshot_keep* is how many
-    daily backups remain. The working state is emptied in place so its path
-    stays stable across days.
+    full backup before the state is cleared; *snapshot_keep* is how many daily
+    backups remain. The working state is emptied in place so its path stays
+    stable across days.
     """
     if not memory_db.enabled:
         return False
