@@ -79,6 +79,19 @@ def test_unconfigured_provider_does_not_fetch(catalog_http):
     assert catalog_http == []
 
 
+def test_available_providers_only_marks_signed_in_oauth(monkeypatch):
+    monkeypatch.setattr(
+        "mason.providers.model_catalog.oauth_login_status",
+        lambda name: name == "openai_codex",
+    )
+
+    choices = {choice.name: choice for choice in models.available_providers(Config())}
+
+    assert choices["openai_codex"].configured
+    assert not choices["xai_grok"].configured
+    assert not choices["github_copilot"].configured
+
+
 def test_quick_start_discovery_uses_draft_without_committing_on_back(monkeypatch):
     config = Config()
     before = config.model_dump()

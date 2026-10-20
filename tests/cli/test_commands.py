@@ -325,6 +325,28 @@ def test_status_uses_explicit_config_and_workspace(tmp_path: Path):
     assert str(config_workspace) not in compact_output
 
 
+def test_status_checks_oauth_login_state(tmp_path: Path, monkeypatch):
+    from mason.providers import oauth_status
+
+    config_path = tmp_path / "config.json"
+    config = Config()
+    config.agents.defaults.workspace = str(tmp_path / "workspace")
+    config_path.write_text(json.dumps(config.model_dump(mode="json", by_alias=True)))
+    monkeypatch.setattr(
+        oauth_status,
+        "oauth_login_status",
+        lambda name: name == "openai_codex",
+    )
+
+    result = runner.invoke(app, ["status", "--config", str(config_path)])
+
+    assert result.exit_code == 0
+    output = _strip_ansi(result.stdout)
+    assert "OpenAI Codex: ✓ (OAuth)" in output
+    assert "xAI Grok: not signed in" in output
+    assert "GitHub Copilot: not signed in" in output
+
+
 def test_onboard_interactive_discard_does_not_save_or_create_workspace(mock_paths, monkeypatch):
     config_file, workspace_dir, _ = mock_paths
 

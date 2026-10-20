@@ -756,6 +756,7 @@ def status(
     if config_path.exists():
         from mason.config.errors import ConfigLoadError
         from mason.config.loader import resolve_config_env_vars, resolve_env_refs
+        from mason.providers.oauth_status import oauth_login_status
         from mason.providers.registry import PROVIDERS
 
         _model, _preset_tag = _model_display(loaded)
@@ -786,7 +787,10 @@ def status(
             if p is None:
                 continue
             if spec.is_oauth:
-                console.print(f"{spec.label}: [green]✓ (OAuth)[/green]")
+                if oauth_login_status(spec.name):
+                    console.print(f"{spec.label}: [green]✓ (OAuth)[/green]")
+                else:
+                    console.print(f"{spec.label}: [dim]not signed in[/dim]")
             elif spec.is_local:
                 # Local deployments show api_base instead of api_key
                 if resolve_env_refs(p.api_base or ""):

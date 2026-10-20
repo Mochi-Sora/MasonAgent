@@ -10,6 +10,7 @@ from typing import cast
 import httpx
 
 from mason.config.schema import Config, ModelPresetConfig, ProviderConfig
+from mason.providers.oauth_status import oauth_login_status
 from mason.providers.registry import (
     PROVIDERS,
     ProviderSpec,
@@ -243,7 +244,7 @@ def available_providers(config: Config) -> list[ProviderChoice]:
             provider_config.api_key
             or spec.is_local
             or spec.is_direct
-            or spec.is_oauth
+            or (spec.is_oauth and oauth_login_status(spec.name))
         )
         choices.append(
             ProviderChoice(

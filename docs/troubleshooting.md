@@ -82,7 +82,7 @@ Read it like this:
 | `Workspace` | It points to the workspace you meant to use and shows `✓`. | Run `mason onboard`, create the folder, fix permissions, or pass `--workspace` on commands that support it. |
 | `Model` | It shows the active model you expect, and the active settings preset. | Set `agents.defaults.model`/`provider` for the model, or `agents.defaults.modelPreset` for settings; check `/model` and `/presets` if you changed them during a chat session. |
 | `Agent` | It says `provider/model configuration is ready`. | Follow the printed CLI setup route, then run `mason status` again. |
-| Provider rows | The provider used by the active model shows `✓`, an OAuth marker, or a local URL. | Configure only the active provider first. It is normal for unused providers to say `not set`. |
+| Provider rows | The provider used by the active model shows `✓`, an OAuth marker when signed in, or a local URL. OAuth providers with no local credentials show `not signed in`. | Configure only the active provider first. It is normal for unused providers to say `not set`. |
 
 If `mason status` looks right but `mason agent -m "Hello!"` fails, the install and config paths are probably fine. Continue with [Provider and Model Problems](#provider-and-model-problems).
 
