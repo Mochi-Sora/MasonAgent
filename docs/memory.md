@@ -256,8 +256,9 @@ longer a memory surface; durable facts about the user belong in `USER.md`.
 Upgrading from the earlier two-tier SQLite store needs no migration: the same
 `episodes`, `memories`, and `edges` tables are reused. The difference is lifetime
 policy — episodes are no longer purged — and the compression/optimisation pass.
-Any old snapshots in `memory/backups/*.db` remain readable, but new backups are
-written to `backups/memory/*.db.gz`.
+Uncompressed snapshots in `memory/backups/*.db` are moved and gzipped into
+`backups/memory/*.db.gz` on the next start, so backup health and retention keep
+working after the upgrade.
 
 ## Commands
 

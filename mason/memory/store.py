@@ -475,6 +475,8 @@ class MemoryDB:
         self.path = path
         self.enabled = enabled
         self.backup_dir = backup_dir or self._default_backup_dir(path)
+        if enabled and backup_dir is None:
+            self._migrate_legacy_backups()
         self._lock = threading.RLock()
         self._connection: sqlite3.Connection | None = None
         self._connection_pid: int | None = None
@@ -486,6 +488,53 @@ class MemoryDB:
         parent = path.parent
         base = parent.parent if parent.name == "memory" else parent
         return base / _BACKUP_DIRNAME / "memory"
+
+    def _migrate_legacy_backups(self) -> None:
+        """Move pre-snapshot-layout ``memory/backups/*.db`` files to the current dir.
+
+        Older installs kept uncompressed full copies beside the database. The
+        current layout stores ``.db.gz`` files in ``<workspace>/backups/memory``;
+        compressing and moving the old copies keeps backup health, retention,
+        and pruning working across the upgrade.
+        """
+        parent = self.path.parent
+        if parent.name != "memory":
+            return
+        legacy = parent / _BACKUP_DIRNAME
+        if not legacy.is_dir() or legacy == self.backup_dir:
+            return
+        try:
+            sources = sorted(legacy.glob("memory-*.db"))
+        except OSError:
+            return
+        if not sources:
+            return
+        try:
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+            with suppress(OSError):
+                self.backup_dir.chmod(0o700)
+        except OSError:
+            logger.warning("Could not create memory backup directory {}", self.backup_dir)
+            return
+        for source in sources:
+            target = self.backup_dir / f"{source.name}.gz"
+            if target.exists():
+                continue
+            temp = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+            try:
+                with source.open("rb") as raw, gzip.open(temp, "wb") as compressed:
+                    shutil.copyfileobj(raw, compressed)
+                os.replace(temp, target)
+                with suppress(OSError):
+                    target.chmod(0o600)
+            except OSError:
+                logger.warning("Could not migrate legacy memory backup {}", source)
+                with suppress(OSError):
+                    temp.unlink()
+                continue
+            with suppress(OSError):
+                source.unlink()
+            logger.info("Migrated legacy memory backup {} -> {}", source, target)
 
     # -- connection management ------------------------------------------------
 

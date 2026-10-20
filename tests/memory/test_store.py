@@ -401,6 +401,40 @@ def test_snapshot_prunes_to_newest(db: MemoryDB) -> None:
     ]
 
 
+def test_legacy_uncompressed_backups_are_migrated(tmp_path: Path) -> None:
+    memory_dir = tmp_path / "memory"
+    legacy = memory_dir / "backups"
+    legacy.mkdir(parents=True)
+    payload = b"SQLite format 3\x00legacy-backup"
+    source = legacy / "memory-2026-01-01.db"
+    source.write_bytes(payload)
+
+    store = MemoryDB(memory_dir / "memory.db")
+    try:
+        migrated = store.backup_dir / "memory-2026-01-01.db.gz"
+        assert migrated.exists()
+        assert gzip.decompress(migrated.read_bytes()) == payload
+        assert not source.exists()
+        assert store.stats()["backups"] == 1
+    finally:
+        store.close()
+
+
+def test_explicit_backup_dir_does_not_migrate_legacy_files(tmp_path: Path) -> None:
+    memory_dir = tmp_path / "memory"
+    legacy = memory_dir / "backups"
+    legacy.mkdir(parents=True)
+    source = legacy / "memory-2026-01-01.db"
+    source.write_bytes(b"legacy")
+
+    store = MemoryDB(memory_dir / "memory.db", backup_dir=tmp_path / "elsewhere")
+    try:
+        assert source.exists()
+        assert not (tmp_path / "elsewhere" / "memory-2026-01-01.db.gz").exists()
+    finally:
+        store.close()
+
+
 def test_checkpoint_truncates_wal(db: MemoryDB) -> None:
     db.capture_messages("cli:1", [_msg("user", "durable")], now=_NOW)
     assert db._wal_bytes() > 0
