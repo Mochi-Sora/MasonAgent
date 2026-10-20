@@ -1,7 +1,8 @@
-"""Tests for the daily memory rollover."""
+"""Tests for the daily memory maintenance pass."""
 
 from __future__ import annotations
 
+import gzip
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -11,7 +12,7 @@ from mason.memory.state import MemoryState
 from mason.memory.store import MemoryDB
 
 
-def test_rollover_clears_state_and_keeps_unconsolidated_backup(tmp_path: Path) -> None:
+def test_rollover_clears_state_and_keeps_the_verbatim_journal(tmp_path: Path) -> None:
     db = MemoryDB(tmp_path / "memory" / "memory.db")
     state = MemoryState(tmp_path)
     state.write("active goal")
@@ -23,29 +24,13 @@ def test_rollover_clears_state_and_keeps_unconsolidated_backup(tmp_path: Path) -
 
     assert maybe_rollover(db, state, now=datetime(2026, 1, 2, 12, 0)) is True
     assert state.read() == ""
-    # Nothing has been consolidated yet, so the purge keeps the old backup.
+    # The verbatim journal is the source of truth and is never purged.
     assert db.counts() == {"episodes": 1, "memories": 1, "edges": 0}
+    assert db.search_episodes("yesterday") != []
     # Same day: no-op.
     assert maybe_rollover(db, state, now=datetime(2026, 1, 2, 23, 59)) is False
-    # Once consolidation has considered the episode, the next day's purge drops it.
-    db.set_consolidation_cursor(1)
     assert maybe_rollover(db, state, now=datetime(2026, 1, 3, 0, 1)) is True
-    assert db.counts() == {"episodes": 0, "memories": 1, "edges": 0}
-    db.close()
-
-
-def test_rollover_is_strictly_daily_without_consolidation(tmp_path: Path) -> None:
-    db = MemoryDB(tmp_path / "memory" / "memory.db")
-    state = MemoryState(tmp_path)
-    db.capture_messages(
-        "cli:1",
-        [{"role": "user", "content": "old", "timestamp": "2026-01-01T10:00:00"}],
-    )
-    assert (
-        maybe_rollover(db, state, consolidation_enabled=False, now=datetime(2026, 1, 2))
-        is True
-    )
-    assert db.counts()["episodes"] == 0
+    assert db.counts() == {"episodes": 1, "memories": 1, "edges": 0}
     db.close()
 
 
@@ -58,22 +43,21 @@ def test_disabled_store_never_rolls_over(tmp_path: Path) -> None:
     db.close()
 
 
-def test_rollover_snapshots_before_purge(tmp_path: Path) -> None:
-    """The daily purge is destructive, so the snapshot must run first."""
+def test_rollover_writes_a_compressed_verbatim_backup(tmp_path: Path) -> None:
     db = MemoryDB(tmp_path / "memory" / "memory.db")
     state = MemoryState(tmp_path)
     db.capture_messages(
         "cli:1",
         [{"role": "user", "content": "outgoing day", "timestamp": "2026-01-01T10:00:00"}],
     )
-    db.set_consolidation_cursor(1)  # make the episode eligible for the purge
 
     assert maybe_rollover(db, state, now=datetime(2026, 1, 2, 0, 1)) is True
-    assert db.counts()["episodes"] == 0
 
-    snapshot = tmp_path / "memory" / "backups" / "memory-2026-01-02.db"
-    assert snapshot.exists()
-    copy = sqlite3.connect(snapshot)
+    backup = tmp_path / "backups" / "memory" / "memory-2026-01-02.db.gz"
+    assert backup.exists()
+    restored = tmp_path / "restored.db"
+    restored.write_bytes(gzip.decompress(backup.read_bytes()))
+    copy = sqlite3.connect(restored)
     try:
         rows = copy.execute("SELECT content FROM episodes").fetchall()
     finally:
@@ -82,7 +66,7 @@ def test_rollover_snapshots_before_purge(tmp_path: Path) -> None:
     db.close()
 
 
-def test_rollover_can_skip_snapshot(tmp_path: Path) -> None:
+def test_rollover_can_skip_the_backup(tmp_path: Path) -> None:
     db = MemoryDB(tmp_path / "memory" / "memory.db")
     state = MemoryState(tmp_path)
     db.capture_messages(
@@ -91,35 +75,22 @@ def test_rollover_can_skip_snapshot(tmp_path: Path) -> None:
     assert maybe_rollover(
         db, state, snapshot_enabled=False, now=datetime(2026, 1, 2, 12, 0),
     ) is True
-    assert not (tmp_path / "memory" / "backups").exists()
+    assert not (tmp_path / "backups").exists()
     db.close()
 
 
-def test_retention_window_keeps_yesterday_recallable(tmp_path: Path) -> None:
-    """A question the day after must still reach yesterday's verbatim turns."""
-    db = MemoryDB(tmp_path / "memory" / "memory.db")
-    state = MemoryState(tmp_path)
-    db.capture_messages(
-        "cli:1",
-        [{"role": "user", "content": "late night decision", "timestamp": "2026-01-02T23:50:00"}],
-    )
-    db.set_consolidation_cursor(1)  # eligible for purging under day-scoped retention
-
-    assert maybe_rollover(db, state, retention_days=2, now=datetime(2026, 1, 3, 0, 1)) is True
-
-    assert db.search_episodes("late night") != []  # still reachable via recall_backup
-    db.close()
-
-
-def test_retention_window_eventually_discards_old_days(tmp_path: Path) -> None:
+def test_explicit_admin_purge_is_not_part_of_rollover(tmp_path: Path) -> None:
     db = MemoryDB(tmp_path / "memory" / "memory.db")
     state = MemoryState(tmp_path)
     db.capture_messages(
         "cli:1",
         [{"role": "user", "content": "ancient turn", "timestamp": "2026-01-01T09:00:00"}],
     )
-    db.set_consolidation_cursor(1)
 
-    assert maybe_rollover(db, state, retention_days=2, now=datetime(2026, 1, 3, 0, 1)) is True
+    assert maybe_rollover(db, state, now=datetime(2026, 1, 3, 0, 1)) is True
+    assert db.counts()["episodes"] == 1
+
+    # The admin escape hatch still works when a user explicitly wants to forget.
+    assert db.rollover("2026-01-03", retain_days=1) == 1
     assert db.counts()["episodes"] == 0
     db.close()

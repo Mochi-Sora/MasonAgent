@@ -133,7 +133,17 @@ async def test_recall_memory_respects_limit(db: MemoryDB) -> None:
 async def test_recall_memory_no_matches(db: MemoryDB) -> None:
     db.insert_memory("user prefers dark mode", now=_NOW)
     result = await RecallMemoryTool(db).execute(query="zzz_absent")
-    assert result == "No matching long-term memories."
+    assert result == "No matching memories."
+
+
+async def test_recall_memory_lists_open_gaps_by_kind(db: MemoryDB) -> None:
+    db.insert_memory(
+        "which timezone does the user deploy from?", kind="gap", status="open", now=_NOW
+    )
+    result = await RecallMemoryTool(db).execute(kind="gap")
+    assert "which timezone" in result
+    assert "gap" in result
+    assert "open" in result
 
 
 async def test_recall_memory_records_usage(db: MemoryDB) -> None:
@@ -208,9 +218,11 @@ async def test_recall_backup_searches_and_filters_session(db: MemoryDB) -> None:
 
 async def test_recall_backup_distinguishes_no_match_from_empty(db: MemoryDB) -> None:
     tool = RecallBackupTool(db)
-    assert await tool.execute() == "The recent backup is empty."
+    assert await tool.execute() == "The verbatim journal is empty."
     db.capture_messages("cli:1", [_msg("user", "something", _iso("2026-01-02"))])
-    assert await tool.execute(query="zzz_absent") == "Nothing in the recent backup matches that."
+    assert await tool.execute(query="zzz_absent") == (
+        "Nothing in the verbatim journal matches that."
+    )
 
 
 async def test_recall_backup_skips_tool_payloads(db: MemoryDB) -> None:

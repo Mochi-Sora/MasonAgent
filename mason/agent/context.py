@@ -107,25 +107,34 @@ class ContextBuilder:
         disabled_skills: list[str] | None = None,
         memory_enabled: bool = True,
         memory_state_max_chars: int = DEFAULT_STATE_MAX_CHARS,
-        memory_consolidation_enabled: bool = True,
         memory_snapshot_enabled: bool = True,
         memory_snapshot_keep: int = 7,
-        memory_backup_retention_days: int = 1,
+        memory_backup_dir: str | None = None,
         lazy_capabilities: bool = True,
     ):
         self.workspace = workspace
         self.timezone = timezone
         self.memory = MemoryStore(workspace)
-        self.memory_db = MemoryDB(workspace / "memory" / "memory.db", enabled=memory_enabled)
+        self.memory_db = MemoryDB(
+            workspace / "memory" / "memory.db",
+            enabled=memory_enabled,
+            backup_dir=self._resolve_backup_dir(workspace, memory_backup_dir),
+        )
         self.memory_state = MemoryState(workspace, max_chars=memory_state_max_chars)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
-        self._consolidation_enabled = memory_consolidation_enabled
         self._snapshot_enabled = memory_snapshot_enabled
         self._snapshot_keep = memory_snapshot_keep
-        self._retention_days = max(1, int(memory_backup_retention_days))
         self._lazy_capabilities = lazy_capabilities
         if memory_enabled:
             self._maintain_memory()
+
+    @staticmethod
+    def _resolve_backup_dir(workspace: Path, configured: str | None) -> Path | None:
+        """Resolve a configured backup directory against the agent workspace."""
+        if not configured:
+            return None
+        candidate = Path(configured).expanduser()
+        return candidate if candidate.is_absolute() else workspace / candidate
 
     def _maintain_memory(self) -> None:
         """Best-effort startup maintenance: legacy import plus the daily rollover."""
@@ -135,10 +144,8 @@ class ContextBuilder:
                 maybe_rollover(
                     self.memory_db,
                     self.memory_state,
-                    consolidation_enabled=self._consolidation_enabled,
                     snapshot_enabled=self._snapshot_enabled,
                     snapshot_keep=self._snapshot_keep,
-                    retention_days=self._retention_days,
                 )
         except Exception:
             logger.exception("Memory maintenance failed")

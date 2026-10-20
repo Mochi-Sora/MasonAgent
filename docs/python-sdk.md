@@ -218,7 +218,7 @@ stable `session_key`, stream events, keep the final `RunResult`, and let
 | `session_key` | The conversation history key. Reuse it to continue a thread; change it to isolate a thread. |
 | Workspace | The local directory where file tools and shell tools operate. |
 | Tools | Capabilities the agent may call, such as file access, shell, web, or custom tools from your config. |
-| Memory | Working state and SQLite-backed long-term memory managed by mason. |
+| Memory | Working state and the SQLite-backed memory tier managed by mason. |
 | Stream event | A typed event such as `text.delta`, `tool.started`, or `run.completed`. |
 | Model override | A temporary model or model preset used for one SDK instance or one run. |
 

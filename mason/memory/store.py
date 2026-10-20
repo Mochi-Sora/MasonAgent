@@ -1,13 +1,14 @@
 """SQLite-backed memory storage for mason.
 
-One database file (``<workspace>/memory/memory.db``) holds two tiers:
+One database file (``<workspace>/memory/memory.db``) is the single memory tier.
+It holds two representations of the same memory, not two lifetimes:
 
-* ``episodes`` — the deterministic backup tier. Every persisted turn is captured
-  verbatim (minus tool payloads), indexed with FTS5, and recallable on demand.
-  :meth:`MemoryDB.rollover` bounds it to a trailing retention window (today plus
-  a few days), oldest days first.
-* ``memories`` + ``edges`` — the curated long-term graph. Only the consolidation
-  job writes it; ``edges`` records provenance links back to episodes.
+* ``episodes`` — the verbatim journal. Every persisted turn is captured as-is
+  (minus tool payloads), indexed with FTS5, and kept indefinitely. It is the
+  source of truth that consolidation reads and that ``recall_backup`` searches.
+* ``memories`` + ``edges`` — structured knowledge derived from the journal:
+  facts, preferences, decisions, events, summaries, open knowledge gaps, and
+  the relationships between them. Only the consolidation pass writes it.
 
 Retrieval must stay interactive: the schema is created once (gated on
 ``PRAGMA user_version``), the connection is cached per process, every query is
@@ -15,14 +16,22 @@ index-backed and ``LIMIT``-bounded, and the ``LIKE`` fallback only runs when the
 FTS index has nothing to offer (for example CJK queries). Standard-library
 ``sqlite3`` only — WAL plus a busy timeout keeps the single file safe to share
 between the gateway, CLI, and SDK processes.
+
+A separate compressed backup of the verbatim journal is written to a sibling
+``backups/memory`` directory (``memory.backupDir`` overrides it). It is a
+lossless ``.db.gz`` export, never a live copy, so a corrupted page in the active
+file cannot take the backup with it.
 """
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import os
 import re
+import shutil
 import sqlite3
+import tempfile
 import threading
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -49,10 +58,15 @@ _MAX_FTS_TOKENS = 24
 _TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 # Durability tuning: keep the WAL bounded without waiting on SQLite's default
-# 1000-page trigger, warn when it still grows, and snapshot into a subdirectory.
+# 1000-page trigger, warn when it still grows, and keep compressed backups in a
+# sibling directory so a corrupt active file never takes them with it.
 _WAL_AUTOCHECKPOINT_PAGES = 256
 _WAL_WARN_BYTES = 8 * 1024 * 1024
-_SNAPSHOT_DIR = "backups"
+_JOURNAL_SIZE_LIMIT_BYTES = 4 * 1024 * 1024
+_BACKUP_DIRNAME = "backups"
+_BACKUP_KIND = "verbatim"
+_BACKUP_SCHEMA_VERSION = 1
+_BACKUP_SUFFIX = ".db.gz"
 _DEFAULT_SNAPSHOT_KEEP = 7
 _WAL_CHECKPOINT_META_KEY = "wal_checkpoint_at"
 _SNAPSHOT_META_KEY = "last_snapshot_at"
@@ -143,6 +157,28 @@ CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE ON memories BEGIN
     INSERT INTO memories_fts(memories_fts, rowid, text) VALUES ('delete', old.id, old.text);
     INSERT INTO memories_fts(rowid, text) VALUES (new.id, new.text);
 END;
+"""
+
+# The backup is a standalone, self-describing SQLite file. It deliberately
+# contains the verbatim journal only: structured knowledge can be rebuilt from
+# it, while prompt content that never became a memory stays out of the archive.
+_BACKUP_DDL = """
+CREATE TABLE IF NOT EXISTS backup_db.meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS backup_db.episodes (
+    id INTEGER PRIMARY KEY,
+    day TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS backup_db.episodes_day_idx ON episodes(day);
+CREATE INDEX IF NOT EXISTS backup_db.episodes_session_idx ON episodes(session_key, id);
 """
 
 
@@ -409,6 +445,14 @@ def _memory_ids_exist(connection: sqlite3.Connection, ids: set[int]) -> bool:
     return row is not None and _int(cast(object, row[0])) == len(ids)
 
 
+def _existing_memory_id(connection: sqlite3.Connection, text: str) -> int | None:
+    """Return the id of an entry with the same text, if one already exists."""
+    row = connection.execute(
+        "SELECT id FROM memories WHERE content_hash = ?", (_hash(text),)
+    ).fetchone()
+    return _int(cast(object, row[0])) if row is not None else None
+
+
 def _update_memory_text(
     connection: sqlite3.Connection,
     memory_id: int,
@@ -428,19 +472,33 @@ def _update_memory_text(
 
 
 class MemoryDB:
-    """SQLite storage for the backup and long-term tiers.
+    """SQLite storage for the single memory tier and its verbatim backup.
 
     The connection is opened lazily and cached per process. All public methods
     are safe to call from any thread; they serialize on an internal lock.
     """
 
-    def __init__(self, path: Path, *, enabled: bool = True) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        enabled: bool = True,
+        backup_dir: Path | None = None,
+    ) -> None:
         self.path = path
         self.enabled = enabled
+        self.backup_dir = backup_dir or self._default_backup_dir(path)
         self._lock = threading.RLock()
         self._connection: sqlite3.Connection | None = None
         self._connection_pid: int | None = None
         self._fts_enabled = False
+
+    @staticmethod
+    def _default_backup_dir(path: Path) -> Path:
+        """Keep backups outside ``memory/`` but inside the agent workspace."""
+        parent = path.parent
+        base = parent.parent if parent.name == "memory" else parent
+        return base / _BACKUP_DIRNAME / "memory"
 
     # -- connection management ------------------------------------------------
 
@@ -466,6 +524,7 @@ class MemoryDB:
         connection.execute("PRAGMA temp_store = MEMORY")
         connection.execute("PRAGMA cache_size = -8000")
         connection.execute("PRAGMA mmap_size = 67108864")
+        connection.execute(f"PRAGMA journal_size_limit = {_JOURNAL_SIZE_LIMIT_BYTES}")
         if _fetch_int(connection.execute("PRAGMA user_version")) < _SCHEMA_VERSION:
             connection.executescript(_DDL)
             try:
@@ -509,6 +568,15 @@ class MemoryDB:
 
     def _wal_bytes(self) -> int:
         return self._file_bytes(self._sidecar("-wal"))
+
+    def _backup_files(self) -> list[Path]:
+        try:
+            return sorted(self.backup_dir.glob(f"memory-*{_BACKUP_SUFFIX}"))
+        except OSError:
+            return []
+
+    def _backup_bytes(self) -> int:
+        return sum(self._file_bytes(path) for path in self._backup_files())
 
     def _restrict_permissions(self) -> None:
         """Best-effort lock-down of the store and its WAL sidecars."""
@@ -563,46 +631,86 @@ class MemoryDB:
         keep: int = _DEFAULT_SNAPSHOT_KEEP,
         now: datetime | None = None,
     ) -> Path | None:
-        """Write a consistent single-file copy of the database.
+        """Write a compressed, lossless backup of the verbatim journal.
 
-        ``VACUUM INTO`` captures committed WAL frames too, so unlike copying
-        ``memory.db`` by hand the copy is never missing recent writes. Older
-        snapshots beyond *keep* are pruned. Returns the snapshot path, or None
-        when the store is disabled or the copy failed.
+        The export reads committed WAL frames through the live connection, writes a
+        standalone SQLite file containing ``episodes`` only, and gzips it. Structured
+        memories are derived data and are intentionally excluded: they can be rebuilt
+        from the verbatim journal, while the journal itself cannot. Backups older than
+        *keep* are pruned. Returns the ``.db.gz`` path, or None when the store is
+        disabled or the export failed.
         """
         if not self.enabled:
             return None
         moment = now or datetime.now()
-        directory = self.path.parent / _SNAPSHOT_DIR
-        target = dest or directory / f"memory-{moment.strftime('%Y-%m-%d')}.db"
+        directory = self.backup_dir
+        target = dest or directory / f"memory-{moment.strftime('%Y-%m-%d')}{_BACKUP_SUFFIX}"
         target.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock:
-            connection = self._connect()
-            with suppress(OSError):
-                target.unlink()
+        with suppress(OSError):
+            target.parent.chmod(0o700)
+        compressed = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+
+        with tempfile.TemporaryDirectory(prefix="mason-memory-backup-") as raw_dir:
+            raw_path = Path(raw_dir) / "verbatim.db"
+            with self._lock:
+                connection = self._connect()
+                try:
+                    connection.execute("ATTACH DATABASE ? AS backup_db", (str(raw_path),))
+                    try:
+                        connection.executescript(_BACKUP_DDL)
+                        connection.execute(
+                            "INSERT INTO backup_db.episodes"
+                            " (id, day, session_key, ts, role, content, content_hash, created_at)"
+                            " SELECT id, day, session_key, ts, role, content, content_hash,"
+                            " created_at FROM main.episodes ORDER BY id"
+                        )
+                        connection.executemany(
+                            "INSERT INTO backup_db.meta(key, value) VALUES (?, ?)",
+                            (
+                                ("backup_kind", _BACKUP_KIND),
+                                ("schema_version", str(_BACKUP_SCHEMA_VERSION)),
+                                ("created_at", moment.isoformat()),
+                            ),
+                        )
+                    finally:
+                        with suppress(sqlite3.Error):
+                            connection.execute("DETACH DATABASE backup_db")
+                except sqlite3.Error:
+                    logger.exception("Memory backup export failed at {}", target)
+                    return None
+
             try:
-                connection.execute("VACUUM INTO ?", (str(target),))
-            except sqlite3.Error:
-                logger.exception("Memory snapshot failed at {}", target)
+                with raw_path.open("rb") as source, gzip.open(
+                    compressed, "wb", compresslevel=6
+                ) as sink:
+                    shutil.copyfileobj(source, sink)
+                compressed.replace(target)
+            except OSError:
+                logger.exception("Memory backup compression failed at {}", target)
                 return None
-            connection.execute(
-                "INSERT INTO meta(key, value) VALUES (?, ?)"
-                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (_SNAPSHOT_META_KEY, moment.isoformat()),
-            )
+            finally:
+                with suppress(OSError):
+                    compressed.unlink()
+
+        self.set_meta(_SNAPSHOT_META_KEY, moment.isoformat())
         with suppress(OSError):
             target.chmod(0o600)
-        self._prune_snapshots(directory, keep=max(1, int(keep)))
-        logger.info("Memory snapshot written to {}", target)
+        if dest is None:
+            self._prune_snapshots(directory, keep=max(1, int(keep)))
+        logger.info("Memory verbatim backup written to {}", target)
         return target
 
     @staticmethod
     def _prune_snapshots(directory: Path, *, keep: int) -> None:
         try:
-            # Names are ISO dates (``memory-YYYY-MM-DD.db``), so a reverse
+            # Names are ISO dates (``memory-YYYY-MM-DD.db.gz``), so a reverse
             # lexicographic sort is chronological and tie-free.
             candidates = sorted(
-                (path.name for path in directory.glob("memory-*.db") if path.is_file()),
+                (
+                    path.name
+                    for path in directory.glob(f"memory-*{_BACKUP_SUFFIX}")
+                    if path.is_file()
+                ),
                 reverse=True,
             )
         except OSError:
@@ -610,6 +718,25 @@ class MemoryDB:
         for stale in candidates[keep:]:
             with suppress(OSError):
                 (directory / stale).unlink()
+
+    def optimize(self) -> None:
+        """Run SQLite's own maintenance after a write-heavy pass.
+
+        ``PRAGMA optimize`` refreshes statistics only where they will help;
+        FTS5 gets its own merge pass so a growing journal keeps fast lookups.
+        The final checkpoint folds the WAL back into the active file.
+        """
+        if not self.enabled:
+            return
+        with self._lock:
+            connection = self._connect()
+            with suppress(sqlite3.Error):
+                connection.execute("PRAGMA optimize")
+            if self._fts_enabled:
+                for table in ("episodes_fts", "memories_fts"):
+                    with suppress(sqlite3.Error):
+                        connection.execute(f"INSERT INTO {table}({table}) VALUES('optimize')")
+        self.checkpoint("TRUNCATE")
 
     @contextmanager
     def _write(self) -> Generator[sqlite3.Connection]:
@@ -913,10 +1040,15 @@ class MemoryDB:
     def list_memories(
         self,
         *,
-        statuses: Sequence[str] = ("active", "candidate"),
+        statuses: Sequence[str] = ("active", "candidate", "open"),
         limit: int = 200,
     ) -> list[MemoryHit]:
-        """Curated memories for consolidation review, oldest first."""
+        """Memories for consolidation review, highest-signal first.
+
+        Pinned entries, recently used entries, and recent entries come first so
+        a mature store can never starve the newest memories behind its oldest
+        ones.
+        """
         if not self.enabled or not statuses:
             return []
         bounded = max(1, min(int(limit), 1_000))
@@ -925,7 +1057,9 @@ class MemoryDB:
             rows = self._connect().execute(
                 "SELECT id, text, kind, status, confidence, pinned, uses, last_used_at"
                 " FROM memories"
-                f" WHERE status IN ({placeholders}) ORDER BY id ASC LIMIT {bounded}",
+                f" WHERE status IN ({placeholders})"
+                " ORDER BY pinned DESC, COALESCE(last_used_at, '') DESC, id DESC"
+                f" LIMIT {bounded}",
                 tuple(statuses),
             ).fetchall()
         return [_memory_hit(row) for row in rows]
@@ -995,25 +1129,39 @@ class MemoryDB:
         *,
         limit: int = 10,
         include_candidates: bool = True,
+        kind: str | None = None,
     ) -> list[MemoryHit]:
-        """Keyword search over the curated long-term tier."""
+        """Keyword search over structured memory.
+
+        An empty query is only valid with *kind* (for example ``kind="gap"``),
+        which lists that kind instead of degrading into a match-everything scan.
+        """
         if not self.enabled:
             return []
         cleaned = query.strip()
-        if not cleaned:
-            # A blank query must never degrade into a match-everything scan.
+        kind_filter = kind.strip() if kind else None
+        if not cleaned and not kind_filter:
             return []
         bounded = max(1, min(int(limit), 50))
-        statuses = ("active", "candidate") if include_candidates else ("active",)
+        statuses = ("active", "candidate", "open") if include_candidates else ("active", "open")
         placeholders = ", ".join("?" for _ in statuses)
         with self._lock:
             connection = self._connect()
+            if not cleaned:
+                rows = connection.execute(
+                    "SELECT id, text, kind, status, confidence, pinned, uses, last_used_at"
+                    " FROM memories"
+                    f" WHERE kind = ? AND status IN ({placeholders})"
+                    f" ORDER BY id DESC LIMIT {bounded}",
+                    (kind_filter, *statuses),
+                ).fetchall()
+                return [_memory_hit(row) for row in rows]
             rows = self._search_memories_fts(
-                connection, cleaned, statuses, placeholders, bounded,
+                connection, cleaned, statuses, placeholders, bounded, kind_filter,
             )
             if not rows:
                 rows = self._search_memories_like(
-                    connection, cleaned, statuses, placeholders, bounded,
+                    connection, cleaned, statuses, placeholders, bounded, kind_filter,
                 )
         return [_memory_hit(row) for row in rows]
 
@@ -1024,6 +1172,7 @@ class MemoryDB:
         statuses: tuple[str, ...],
         placeholders: str,
         limit: int,
+        kind: str | None = None,
     ) -> list[sqlite3.Row] | None:
         if not self._fts_enabled:
             return None
@@ -1032,14 +1181,18 @@ class MemoryDB:
             " m.uses, m.last_used_at"
             " FROM memories_fts f JOIN memories m ON m.id = f.rowid"
             f" WHERE memories_fts MATCH ? AND m.status IN ({placeholders})"
-            f" ORDER BY bm25(memories_fts), m.id DESC LIMIT {limit}"
         )
+        params: list[object] = [*statuses]
+        if kind:
+            sql += " AND m.kind = ?"
+            params.append(kind)
+        sql += f" ORDER BY bm25(memories_fts), m.id DESC LIMIT {limit}"
         for any_terms in (False, True):
             fts_query = _fts_query(query, any_terms=any_terms)
             if fts_query is None:
                 return None
             try:
-                rows = connection.execute(sql, (fts_query, *statuses)).fetchall()
+                rows = connection.execute(sql, (fts_query, *params)).fetchall()
             except sqlite3.OperationalError:
                 return None
             if rows:
@@ -1053,14 +1206,19 @@ class MemoryDB:
         statuses: tuple[str, ...],
         placeholders: str,
         limit: int,
+        kind: str | None = None,
     ) -> list[sqlite3.Row]:
         sql = (
             "SELECT id, text, kind, status, confidence, pinned, uses, last_used_at"
             " FROM memories"
             f" WHERE text LIKE ? ESCAPE '\\' AND status IN ({placeholders})"
-            f" ORDER BY id DESC LIMIT {limit}"
         )
-        return connection.execute(sql, (_like_pattern(query), *statuses)).fetchall()
+        params: list[object] = [_like_pattern(query), *statuses]
+        if kind:
+            sql += " AND kind = ?"
+            params.append(kind)
+        sql += f" ORDER BY id DESC LIMIT {limit}"
+        return connection.execute(sql, params).fetchall()
 
     def link(
         self,
@@ -1100,7 +1258,18 @@ class MemoryDB:
         Unknown keys, malformed entries, and references to missing rows are
         skipped rather than failing the whole plan.
         """
-        counts = {"promotions": 0, "merges": 0, "rewrites": 0, "links": 0, "drops": 0}
+        counts = {
+            "promotions": 0,
+            "merges": 0,
+            "syntheses": 0,
+            "contradictions": 0,
+            "rewrites": 0,
+            "links": 0,
+            "gaps": 0,
+            "resolved_gaps": 0,
+            "retention": 0,
+            "drops": 0,
+        }
         if not self.enabled:
             return counts
         moment = (now or datetime.now()).isoformat()
@@ -1120,8 +1289,12 @@ class MemoryDB:
                     moment=moment,
                 )
                 if memory_id is None:
+                    # The fact is already known; keep the new provenance anyway.
+                    memory_id = _existing_memory_id(connection, text)
+                else:
+                    counts["promotions"] += 1
+                if memory_id is None:
                     continue
-                counts["promotions"] += 1
                 for source_id in plan_int_list(item, "sources"):
                     _insert_edge(
                         connection,
@@ -1169,6 +1342,58 @@ class MemoryDB:
                     )
                 counts["merges"] += 1
 
+            for item in plan_entries(plan, "syntheses"):
+                text = plan_str(item, "text")
+                if not text:
+                    continue
+                memory_id = _insert_memory_row(
+                    connection,
+                    text,
+                    kind=plan_str(item, "kind") or "summary",
+                    status="active",
+                    confidence=plan_float(item, "confidence", default=0.7),
+                    source="consolidation",
+                    pinned=plan_bool(item, "pinned", default=False),
+                    moment=moment,
+                )
+                if memory_id is None:
+                    memory_id = _existing_memory_id(connection, text)
+                else:
+                    counts["syntheses"] += 1
+                if memory_id is None:
+                    continue
+                for source_id in plan_int_list(item, "sources"):
+                    _insert_edge(
+                        connection,
+                        src_kind="memory",
+                        src_id=memory_id,
+                        dst_kind="episode",
+                        dst_id=source_id,
+                        rel="derived_from",
+                        weight=1.0,
+                        moment=moment,
+                    )
+                archive_sources = plan_bool(item, "archive_sources", default=False)
+                for source_id in plan_int_list(item, "memories"):
+                    if source_id == memory_id or not _memory_ids_exist(connection, {source_id}):
+                        continue
+                    _insert_edge(
+                        connection,
+                        src_kind="memory",
+                        src_id=memory_id,
+                        dst_kind="memory",
+                        dst_id=source_id,
+                        rel="generalizes",
+                        weight=1.0,
+                        moment=moment,
+                    )
+                    if archive_sources:
+                        connection.execute(
+                            "UPDATE memories SET status = 'merged', updated_at = ?"
+                            " WHERE id = ? AND status IN ('active', 'candidate')",
+                            (moment, source_id),
+                        )
+
             for item in plan_entries(plan, "rewrites"):
                 memory_id = plan_int(item, "id")
                 if memory_id is None or not _memory_ids_exist(connection, {memory_id}):
@@ -1209,6 +1434,140 @@ class MemoryDB:
                 )
                 counts["links"] += 1
 
+            for item in plan_entries(plan, "contradictions"):
+                keep_id = plan_int(item, "keep")
+                other_ids = [
+                    value
+                    for value in plan_int_list(item, "contradicts")
+                    if value != keep_id
+                ]
+                if keep_id is None or not other_ids:
+                    continue
+                if not _memory_ids_exist(connection, {keep_id, *other_ids}):
+                    continue
+                text = plan_str(item, "text")
+                if text:
+                    _update_memory_text(connection, keep_id, text, moment)
+                resolution = plan_str(item, "resolution") or "flag"
+                for other_id in other_ids:
+                    _insert_edge(
+                        connection,
+                        src_kind="memory",
+                        src_id=keep_id,
+                        dst_kind="memory",
+                        dst_id=other_id,
+                        rel="contradicts",
+                        weight=1.0,
+                        moment=moment,
+                    )
+                    if resolution == "supersede":
+                        _insert_edge(
+                            connection,
+                            src_kind="memory",
+                            src_id=keep_id,
+                            dst_kind="memory",
+                            dst_id=other_id,
+                            rel="supersedes",
+                            weight=1.0,
+                            moment=moment,
+                        )
+                        connection.execute(
+                            "UPDATE memories SET status = 'archived', updated_at = ? WHERE id = ?",
+                            (moment, other_id),
+                        )
+                    elif resolution == "flag":
+                        connection.execute(
+                            "UPDATE memories SET confidence = MIN(confidence, 0.4),"
+                            " updated_at = ? WHERE id = ?",
+                            (moment, other_id),
+                        )
+                counts["contradictions"] += 1
+
+            for item in plan_entries(plan, "retention"):
+                memory_id = plan_int(item, "id")
+                if memory_id is None:
+                    continue
+                row = connection.execute(
+                    "SELECT status FROM memories WHERE id = ?", (memory_id,)
+                ).fetchone()
+                if row is None:
+                    continue
+                status = _row_text(row, "status")
+                if status not in {"active", "candidate", "open"}:
+                    continue
+                score = plan_optional_float(item, "score")
+                if score is not None:
+                    connection.execute(
+                        "UPDATE memories SET confidence = ?, updated_at = ? WHERE id = ?",
+                        (max(0.0, min(1.0, score)), moment, memory_id),
+                    )
+                action = plan_str(item, "action").lower()
+                if action == "archive":
+                    connection.execute(
+                        "UPDATE memories SET status = 'archived', updated_at = ? WHERE id = ?",
+                        (moment, memory_id),
+                    )
+                elif action == "keep" and status in {"active", "candidate"}:
+                    connection.execute(
+                        "UPDATE memories SET status = 'active', updated_at = ? WHERE id = ?",
+                        (moment, memory_id),
+                    )
+                counts["retention"] += 1
+
+            for item in plan_entries(plan, "gaps"):
+                text = plan_str(item, "text")
+                if not text:
+                    continue
+                priority = plan_str(item, "priority").lower()
+                confidence = {"high": 0.9, "medium": 0.6, "low": 0.3}.get(priority, 0.5)
+                memory_id = _insert_memory_row(
+                    connection,
+                    text,
+                    kind="gap",
+                    status="open",
+                    confidence=confidence,
+                    source="consolidation",
+                    pinned=False,
+                    moment=moment,
+                )
+                if memory_id is None:
+                    memory_id = _existing_memory_id(connection, text)
+                else:
+                    counts["gaps"] += 1
+                if memory_id is None:
+                    continue
+                for source_id in plan_int_list(item, "sources"):
+                    _insert_edge(
+                        connection,
+                        src_kind="memory",
+                        src_id=memory_id,
+                        dst_kind="episode",
+                        dst_id=source_id,
+                        rel="derived_from",
+                        weight=1.0,
+                        moment=moment,
+                    )
+
+            for item in plan_entries(plan, "resolved_gaps"):
+                memory_id = plan_int(item, "id")
+                if memory_id is None:
+                    continue
+                row = connection.execute(
+                    "SELECT kind, status FROM memories WHERE id = ?", (memory_id,)
+                ).fetchone()
+                if row is None or _row_text(row, "kind") != "gap":
+                    continue
+                if _row_text(row, "status") != "open":
+                    continue
+                text = plan_str(item, "text")
+                if text:
+                    _update_memory_text(connection, memory_id, text, moment)
+                connection.execute(
+                    "UPDATE memories SET status = 'resolved', updated_at = ? WHERE id = ?",
+                    (moment, memory_id),
+                )
+                counts["resolved_gaps"] += 1
+
             for item in plan_entries(plan, "drops"):
                 memory_id = plan_int(item, "id")
                 if memory_id is None or not _memory_ids_exist(connection, {memory_id}):
@@ -1220,7 +1579,7 @@ class MemoryDB:
                 counts["drops"] += 1
         return counts
 
-    # -- retention and stats ---------------------------------------------------
+    # -- admin purge and stats -------------------------------------------------
 
     def rollover(
         self,
@@ -1229,13 +1588,13 @@ class MemoryDB:
         up_to_id: int | None = None,
         retain_days: int = 1,
     ) -> int:
-        """Drop backup episodes older than the retention window; returns the rows removed.
+        """Explicitly purge old verbatim episodes; returns the rows removed.
 
-        *retain_days* is the number of trailing days to keep including *today*;
-        ``1`` is the strict day-scoped behavior. When *up_to_id* is given, the
-        delete is also bounded by ``id <= up_to_id``, so the rollover never
-        throws away backup that consolidation has not considered yet. The
-        curated long-term tier is never touched.
+        This is an administrative escape hatch, not part of normal operation:
+        the single memory tier is unbounded, and the daily rollover only writes
+        a compressed backup and clears the working state. Call this only when a
+        user deliberately wants to forget old raw turns. The structured memory
+        graph is never touched.
         """
         if not self.enabled:
             return 0
@@ -1249,7 +1608,7 @@ class MemoryDB:
             cursor = connection.execute(sql, params)
             removed = max(0, cursor.rowcount)
         if removed:
-            logger.info("Memory rollover: dropped {} backup episodes before {}", removed, cutoff)
+            logger.info("Memory admin purge: dropped {} verbatim episodes before {}", removed, cutoff)
         return removed
 
     def stats(self) -> dict[str, object]:
@@ -1263,6 +1622,8 @@ class MemoryDB:
                 "pending_episodes": 0,
                 "memory_uses_total": 0,
                 "memories_never_used": 0,
+                "gaps_open": 0,
+                "contradictions": 0,
                 "consolidation_cursor": 0,
                 "consolidation_last_attempt_at": None,
                 "consolidation_last_ok_at": None,
@@ -1271,6 +1632,9 @@ class MemoryDB:
                 "wal_bytes": 0,
                 "last_checkpoint": None,
                 "last_snapshot": None,
+                "backups": 0,
+                "backup_bytes": 0,
+                "backup_dir": str(self.backup_dir),
             }
         cursor = self.consolidation_cursor()
         with self._lock:
@@ -1292,6 +1656,14 @@ class MemoryDB:
                     "SELECT COUNT(*) FROM memories"
                     " WHERE uses = 0 AND status IN ('active', 'candidate')"
                 ),
+                "gaps_open": scalar(
+                    "SELECT COUNT(*) FROM memories WHERE kind = 'gap' AND status = 'open'"
+                ),
+                "contradictions": scalar(
+                    "SELECT COUNT(*) FROM edges WHERE rel = 'contradicts'"
+                ),
+                "backups": len(self._backup_files()),
+                "backup_bytes": self._backup_bytes(),
             }
         return {
             "enabled": True,
@@ -1306,6 +1678,7 @@ class MemoryDB:
             "wal_bytes": self._wal_bytes(),
             "last_checkpoint": self.get_meta(_WAL_CHECKPOINT_META_KEY),
             "last_snapshot": self.get_meta(_SNAPSHOT_META_KEY),
+            "backup_dir": str(self.backup_dir),
         }
 
     def counts(self) -> dict[str, int]:

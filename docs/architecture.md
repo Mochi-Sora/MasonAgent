@@ -31,7 +31,7 @@ Main files:
 | Provider/tool conversation loop | `mason/agent/runner.py` |
 | Context construction | `mason/agent/context.py` |
 | Session storage and compaction | `mason/session/manager.py`, `mason/agent/memory.py` |
-| Long-term memory, working state, consolidation | `mason/memory/store.py`, `mason/memory/state.py`, `mason/memory/consolidation.py` |
+| Memory, working state, consolidation | `mason/memory/store.py`, `mason/memory/state.py`, `mason/memory/consolidation.py` |
 
 ## Agent Loop vs Agent Runner
 
@@ -169,12 +169,13 @@ Session history is the near-term conversation replay. Memory is the longer-term 
 |---|---|
 | Session JSONL files | `<config-dir>/sessions/<workspace-id>/` |
 | Working state | `<workspace>/memory/state.md` (about 2 KB, injected into the system prompt, cleared at rollover) |
-| Long-term memory | Curated memories and links in `<workspace>/memory/memory.db` (searched with `recall_memory`) |
-| Backup episodes | Today's verbatim turns in the same database (searched with `recall_backup`), discarded at the daily rollover |
+| Structured memory | Curated facts, preferences, decisions, summaries, relationships, and open gaps in `<workspace>/memory/memory.db` (searched with `recall_memory`) |
+| Verbatim journal | Every captured turn in the same database, kept indefinitely (searched with `recall_backup`) |
+| Compressed verbatim backups | `<workspace>/backups/memory/memory-YYYY-MM-DD.db.gz`, written before each rollover |
 | Archived summaries | `<workspace>/memory/history.jsonl`, written by session compaction |
 | Bootstrap identity files | `<workspace>/SOUL.md`, `<workspace>/USER.md`, templates under `mason/templates/` |
 
-Consolidation is implemented in `mason/memory/consolidation.py`; the daily rollover and legacy import live in `mason/memory/maintenance.py` and `mason/memory/migration.py`. Consolidation runs as a cron system job (default every 2 hours) and once more before `memory_rollover` at 00:00, which discards the previous day's backup and clears the working state in place. Only consolidation writes long-term memory, and the model never edits it directly. The SQLite memory subsystem does not support Windows.
+Consolidation is implemented in `mason/memory/consolidation.py`; the daily rollover and legacy import live in `mason/memory/maintenance.py` and `mason/memory/migration.py`. Consolidation runs as a cron system job (default every 2 hours) and once more before `memory_rollover` at 00:00. It derives structured knowledge from the permanent verbatim journal: it promotes durable facts, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and can write small generated skills. The rollover writes a compressed verbatim-only backup, clears the working state in place, and runs SQLite optimisation; it never purges the journal. Only consolidation writes structured memory, and the model never edits it directly. The SQLite memory subsystem does not support Windows.
 
 ## Security Boundaries
 

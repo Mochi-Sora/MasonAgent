@@ -156,8 +156,8 @@ class MemoryClient:
     """Memory helpers exposed through ``bot.memory``.
 
     ``read``/``write`` target the small working state (``memory/state.md``) that
-    the agent keeps in its prompt; curated long-term memory is written by
-    consolidation and read by the agent's ``recall_memory`` tool.
+    the agent keeps in its prompt; structured memory is written by consolidation
+    and read by the agent's ``recall_memory`` tool.
     """
 
     def __init__(self, loop: AgentLoop) -> None:

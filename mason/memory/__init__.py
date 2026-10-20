@@ -1,4 +1,4 @@
-"""SQLite-backed memory: deterministic backup tier plus curated long-term graph."""
+"""SQLite-backed single-tier memory: verbatim journal plus structured knowledge."""
 
 from mason.memory.migration import MigrationReport, import_legacy
 from mason.memory.store import EpisodeHit, MemoryDB, MemoryHit

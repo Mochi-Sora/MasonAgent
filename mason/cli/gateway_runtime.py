@@ -505,8 +505,8 @@ def _run_gateway(
             if not result.ok:
                 logger.warning("Memory consolidation: {}", result.summary())
             else:
-                # Fold the WAL back so it cannot grow across many 2h passes.
-                agent.context.memory_db.checkpoint("TRUNCATE")
+                # Refresh statistics and fold the WAL after a write-heavy pass.
+                agent.context.memory_db.optimize()
         except Exception:
             logger.exception("Memory consolidation failed")
 
@@ -515,12 +515,12 @@ def _run_gateway(
         async def _silent(*_args: Any, **_kwargs: Any) -> None:
             pass
 
-        # Consolidation curates long-term memory from the backup tier.
+        # Consolidation derives structured knowledge from the verbatim journal.
         if job.name == "consolidation":
             await _run_memory_consolidation()
             return None
 
-        # Memory rollover discards yesterday's backup and empties the working
+        # Rollover writes the compressed verbatim backup and empties the working
         # state. Consolidation gets a last chance at the outgoing day first.
         if job.name == "memory_rollover":
             await _run_memory_consolidation()
@@ -529,10 +529,8 @@ def _run_gateway(
                 maybe_rollover(
                     memory_db,
                     agent.context.memory_state,
-                    consolidation_enabled=memory_consolidation_enabled,
                     snapshot_enabled=memory_cfg.snapshot_enabled,
                     snapshot_keep=memory_cfg.snapshot_keep,
-                    retention_days=memory_cfg.backup_retention_days,
                 )
             return None
 

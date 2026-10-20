@@ -1,11 +1,11 @@
-"""Daily rollover for the backup tier and the working state.
+"""Daily maintenance for the single memory tier and the working state.
 
-Backup episodes keep a trailing retention window: when a new day starts, days
-older than that window are discarded and the working state is emptied in place.
-The curated long-term tier is never touched. The consolidation job gets its
-chance at the outgoing day before this runs — see
-``mason/memory/consolidation.py`` — and a gateway that was offline over
-midnight runs the same check on startup.
+The active database is unbounded: verbatim episodes are the source of truth and
+are never discarded automatically. Once a day the gateway writes a compressed,
+verbatim-only backup outside ``memory/``, empties the working state in place, and
+runs SQLite's own optimisation pass. The structured memory graph is left alone.
+
+A gateway that was offline over midnight runs the same check on startup.
 """
 
 from __future__ import annotations
@@ -28,22 +28,16 @@ def maybe_rollover(
     memory_db: MemoryDB,
     memory_state: MemoryState,
     *,
-    consolidation_enabled: bool = True,
     snapshot_enabled: bool = True,
     snapshot_keep: int = 7,
-    retention_days: int = 1,
     now: datetime | None = None,
 ) -> bool:
-    """Run the daily rollover at most once per day; returns True when it ran.
+    """Run the daily maintenance at most once per day; returns True when it ran.
 
-    With consolidation enabled the purge stops at the consolidation cursor, so
-    backup the job has not considered yet survives until it has. With it
-    disabled the backup tier is bounded only by *retention_days*.
-
-    When *snapshot_enabled*, a consistent copy of the database is written
-    *before* the purge, so the outgoing day is never lost even though the
-    backup tier is day-scoped. *retention_days* keeps that many trailing days
-    of verbatim backup (including today) so recall still reaches yesterday.
+    The verbatim journal is not purged. *snapshot_enabled* writes the compressed
+    verbatim backup before the state is cleared; *snapshot_keep* is how many
+    daily backups remain. The working state is emptied in place so its path
+    stays stable across days.
     """
     if not memory_db.enabled:
         return False
@@ -52,16 +46,14 @@ def maybe_rollover(
         return False
     if snapshot_enabled:
         if memory_db.snapshot(keep=snapshot_keep, now=now) is None:
-            logger.warning("Memory snapshot failed; rollover continues without a backup copy")
-    purge_through = memory_db.consolidation_cursor() if consolidation_enabled else None
-    removed = memory_db.rollover(today, up_to_id=purge_through, retain_days=retention_days)
+            logger.warning("Memory backup failed; rollover continues without a backup copy")
     memory_state.clear()
+    memory_db.optimize()
     memory_db.set_meta(ROLLOVER_META_KEY, today)
-    memory_db.checkpoint("TRUNCATE")
     logger.info(
-        "Memory rollover for {}: {} backup episodes discarded (retaining {} day(s))",
+        "Memory rollover for {}: verbatim journal retained, working state cleared, "
+        "backup kept ({})",
         today,
-        removed,
-        max(1, int(retention_days)),
+        f"{max(1, int(snapshot_keep))} daily copy" if snapshot_enabled else "disabled",
     )
     return True

@@ -80,13 +80,13 @@ class MemoryConsolidationConfig(Base):
 
 
 class MemoryConfig(Base):
-    """Long-term memory (SQLite) configuration."""
+    """Single-tier memory (SQLite) configuration."""
 
     enabled: bool = True  # Capture turns and expose the memory tools
     state_max_chars: int = Field(default=2048, ge=256, le=16384)
-    snapshot_enabled: bool = True  # Daily consistent copy of memory.db before rollover
-    snapshot_keep: int = Field(default=7, ge=1, le=365)  # Snapshots retained
-    backup_retention_days: int = Field(default=2, ge=1, le=30)  # Verbatim backup days kept
+    snapshot_enabled: bool = True  # Daily compressed verbatim backup
+    snapshot_keep: int = Field(default=7, ge=1, le=365)  # Daily backups retained
+    backup_dir: str | None = None  # Defaults to <workspace>/backups/memory
     consolidation: MemoryConsolidationConfig = Field(
         default_factory=MemoryConsolidationConfig,
     )

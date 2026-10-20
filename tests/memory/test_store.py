@@ -1,7 +1,8 @@
-"""Tests for the SQLite memory store (backup tier + long-term tier)."""
+"""Tests for the SQLite single-tier memory store."""
 
 from __future__ import annotations
 
+import gzip
 import sqlite3
 import sys
 import time
@@ -178,6 +179,96 @@ def test_list_memories_carries_usage(db: MemoryDB) -> None:
     assert hit.last_used_at == _NOW.isoformat()
 
 
+def test_search_can_list_open_gaps(db: MemoryDB) -> None:
+    gap = db.insert_memory("which timezone does the user deploy from?", kind="gap", status="open")
+    db.insert_memory("user likes tea", now=_NOW)
+    assert gap is not None
+
+    hits = db.search_memories("", kind="gap")
+    assert [hit.id for hit in hits] == [gap]
+    assert hits[0].status == "open"
+    assert db.search_memories("timezone")[0].kind == "gap"
+    # A blank query without a kind must not become a match-everything scan.
+    assert db.search_memories("") == []
+
+
+def test_apply_plan_supports_synthesis_contradiction_gap_and_retention(
+    db: MemoryDB,
+) -> None:
+    potatoes = db.insert_memory("user likes potatoes", now=_NOW)
+    badminton = db.insert_memory("user likes badminton", now=_NOW)
+    berlin = db.insert_memory("user is based in Berlin", now=_NOW)
+    paris = db.insert_memory("user is based in Paris", now=_NOW)
+    stale = db.insert_memory("temporary note", now=_NOW)
+    existing_gap = db.insert_memory(
+        "what is the user's deploy timezone?", kind="gap", status="open", now=_NOW
+    )
+    assert all(isinstance(value, int) for value in (potatoes, badminton, berlin, paris, stale))
+    assert existing_gap is not None
+
+    applied = db.apply_plan(
+        {
+            "syntheses": [
+                {
+                    "text": "user likes potatoes and badminton",
+                    "kind": "summary",
+                    "memories": [potatoes, badminton],
+                    "archive_sources": True,
+                }
+            ],
+            "contradictions": [
+                {
+                    "keep": berlin,
+                    "contradicts": [paris],
+                    "resolution": "supersede",
+                }
+            ],
+            "gaps": [
+                {"text": "does the user play badminton regularly?", "priority": "high"}
+            ],
+            "resolved_gaps": [
+                {"id": existing_gap, "text": "user deploys from Europe/Berlin"}
+            ],
+            "retention": [{"id": stale, "action": "archive", "score": 0.1}],
+        },
+        now=_NOW,
+    )
+
+    assert applied["syntheses"] == 1
+    assert applied["contradictions"] == 1
+    assert applied["gaps"] == 1
+    assert applied["resolved_gaps"] == 1
+    assert applied["retention"] == 1
+    assert [hit.text for hit in db.search_memories("potatoes and badminton")] == [
+        "user likes potatoes and badminton"
+    ]
+    # Archive_sources on a full synthesis and supersede on a contradiction both
+    # remove the now-redundant entries from recall.
+    assert all(
+        hit.text != "user likes potatoes" for hit in db.search_memories("potatoes")
+    )
+    assert all(hit.text != "user is based in Paris" for hit in db.search_memories("Paris"))
+    assert all(hit.text != "temporary note" for hit in db.search_memories("temporary"))
+    assert all(hit.id != existing_gap for hit in db.search_memories("", kind="gap"))
+    open_gaps = db.search_memories("", kind="gap")
+    assert [hit.text for hit in open_gaps] == ["does the user play badminton regularly?"]
+    assert db.stats()["gaps_open"] == 1
+    assert db.stats()["contradictions"] == 1
+
+
+def test_duplicate_promotion_still_records_provenance(db: MemoryDB) -> None:
+    db.capture_messages("cli:1", [_msg("user", "I like tea")], now=_NOW)
+    existing = db.insert_memory("user likes tea", now=_NOW)
+    assert existing is not None
+
+    applied = db.apply_plan(
+        {"promotions": [{"text": "user likes tea", "sources": [1]}]}, now=_NOW
+    )
+
+    assert applied["promotions"] == 0  # no duplicate row was created
+    assert db.counts()["edges"] == 1  # the new turn is linked to the known fact
+
+
 def test_disabled_store_is_inert(tmp_path: Path) -> None:
     path = tmp_path / "memory.db"
     store = MemoryDB(path, enabled=False)
@@ -249,14 +340,16 @@ def test_capture_keeps_conversation_text_only(db: MemoryDB) -> None:
 # -- durability: snapshots, checkpoints, health -------------------------------
 
 
-def test_snapshot_captures_uncheckpointed_wal_and_roundtrips(db: MemoryDB) -> None:
-    """A hand copy of memory.db would miss the WAL; VACUUM INTO must not."""
+def test_snapshot_captures_uncheckpointed_wal_and_roundtrips(db: MemoryDB, tmp_path: Path) -> None:
+    """A hand copy of memory.db would miss the WAL; the backup export must not."""
     db.capture_messages("cli:1", [_msg("user", "wal-only turn")], now=_NOW)
     assert db._wal_bytes() > 0  # committed, not yet folded into memory.db
 
     snapshot = db.snapshot(now=_NOW)
-    assert snapshot is not None and snapshot.exists()
-    copy = sqlite3.connect(snapshot)
+    assert snapshot is not None and snapshot.suffix == ".gz" and snapshot.exists()
+    restored = tmp_path / "restored.db"
+    restored.write_bytes(gzip.decompress(snapshot.read_bytes()))
+    copy = sqlite3.connect(restored)
     try:
         rows = copy.execute("SELECT role, content FROM episodes").fetchall()
     finally:
@@ -265,14 +358,45 @@ def test_snapshot_captures_uncheckpointed_wal_and_roundtrips(db: MemoryDB) -> No
     assert db.get_meta("last_snapshot_at") is not None
 
 
+def test_backup_is_separate_and_contains_verbatim_only(db: MemoryDB, tmp_path: Path) -> None:
+    db.capture_messages("cli:1", [_msg("user", "raw turn")], now=_NOW)
+    db.insert_memory("structured fact", now=_NOW)
+
+    snapshot = db.snapshot(now=_NOW)
+    assert snapshot is not None
+    assert snapshot.parent == db.backup_dir
+    assert snapshot.parent != db.path.parent
+
+    restored = tmp_path / "restored.db"
+    restored.write_bytes(gzip.decompress(snapshot.read_bytes()))
+    copy = sqlite3.connect(restored)
+    try:
+        tables = {
+            row[0]
+            for row in copy.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        indices = {
+            row[0]
+            for row in copy.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+        }
+        rows = copy.execute("SELECT content FROM episodes").fetchall()
+        kind = copy.execute("SELECT value FROM meta WHERE key = 'backup_kind'").fetchone()
+    finally:
+        copy.close()
+    assert "episodes" in tables
+    assert "memories" not in tables
+    assert {"episodes_day_idx", "episodes_session_idx"} <= indices
+    assert rows == [("raw turn",)]
+    assert kind == ("verbatim",)
+
+
 def test_snapshot_prunes_to_newest(db: MemoryDB) -> None:
     for day in range(1, 6):
         assert db.snapshot(keep=3, now=datetime(2026, 1, day)) is not None
-    backups = db.path.parent / "backups"
-    assert sorted(path.name for path in backups.glob("memory-*.db")) == [
-        "memory-2026-01-03.db",
-        "memory-2026-01-04.db",
-        "memory-2026-01-05.db",
+    assert sorted(path.name for path in db.backup_dir.glob("memory-*.db.gz")) == [
+        "memory-2026-01-03.db.gz",
+        "memory-2026-01-04.db.gz",
+        "memory-2026-01-05.db.gz",
     ]
 
 
@@ -320,22 +444,26 @@ def test_snapshot_and_checkpoint_are_inert_when_disabled(tmp_path: Path) -> None
     store = MemoryDB(tmp_path / "memory.db", enabled=False)
     assert store.snapshot() is None
     assert store.checkpoint("TRUNCATE") is False
-    assert store.stats() == {
-        "enabled": False,
-        "episodes": 0,
-        "memories": 0,
-        "edges": 0,
-        "pending_episodes": 0,
-        "memory_uses_total": 0,
-        "memories_never_used": 0,
-        "consolidation_cursor": 0,
-        "consolidation_last_attempt_at": None,
-        "consolidation_last_ok_at": None,
-        "consolidation_last_error": None,
-        "db_bytes": 0,
-        "wal_bytes": 0,
-        "last_checkpoint": None,
-        "last_snapshot": None,
-    }
+    stats = store.stats()
+    assert stats["enabled"] is False
+    assert stats["episodes"] == 0
+    assert stats["memories"] == 0
+    assert stats["edges"] == 0
+    assert stats["pending_episodes"] == 0
+    assert stats["memory_uses_total"] == 0
+    assert stats["memories_never_used"] == 0
+    assert stats["gaps_open"] == 0
+    assert stats["contradictions"] == 0
+    assert stats["consolidation_cursor"] == 0
+    assert stats["consolidation_last_attempt_at"] is None
+    assert stats["consolidation_last_ok_at"] is None
+    assert stats["consolidation_last_error"] is None
+    assert stats["db_bytes"] == 0
+    assert stats["wal_bytes"] == 0
+    assert stats["last_checkpoint"] is None
+    assert stats["last_snapshot"] is None
+    assert stats["backups"] == 0
+    assert stats["backup_bytes"] == 0
+    assert stats["backup_dir"] == str(store.backup_dir)
     assert store.record_uses([1, 2]) == 0
     store.close()

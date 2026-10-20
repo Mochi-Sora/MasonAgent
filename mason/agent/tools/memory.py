@@ -71,17 +71,24 @@ class UpdateStateTool(Tool):
 
 @tool_parameters(
     tool_parameters_schema(
-        query=StringSchema("What to recall, as a few keywords"),
+        query=StringSchema(
+            "What to recall, as a few keywords. Leave empty when using kind."
+        ),
+        kind=StringSchema(
+            "Optional kind filter: fact, preference, decision, project, procedure, event, "
+            "summary, or gap. With no query, lists that kind (for example kind=\"gap\" "
+            "shows open knowledge gaps).",
+        ),
         limit=IntegerSchema(
             description="Maximum number of memories to return (1-20, default 5).",
             minimum=1,
             maximum=20,
         ),
-        required=["query"],
+        required=[],
     )
 )
 class RecallMemoryTool(Tool):
-    """Search the curated long-term memory tier."""
+    """Search structured memory, optionally filtered by kind."""
 
     def __init__(self, db: MemoryDB):
         self._db = db
@@ -104,28 +111,33 @@ class RecallMemoryTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Search curated long-term memory: durable facts, preferences, and decisions "
-            "kept across sessions. Use it before answering questions about the user, past "
-            "decisions, or ongoing work that the working state does not already cover."
+            "Search structured memory: durable facts, preferences, decisions, events, "
+            "summaries, relationships, and open knowledge gaps. Use it before answering "
+            "questions about the user, past decisions, or ongoing work that the working "
+            "state does not already cover. Pass kind=\"gap\" with an empty query to list "
+            "what you know you do not know."
         )
 
-    async def execute(self, query: str, limit: int = 5, **kwargs: Any) -> str:
-        if not query.strip():
+    async def execute(
+        self, query: str = "", kind: str | None = None, limit: int = 5, **kwargs: Any
+    ) -> str:
+        if not query.strip() and not (kind or "").strip():
             return ToolResult.error(
-                "Error: query is required (use recall_backup to list recent turns).",
+                "Error: query or kind is required (use recall_backup to list recent turns).",
             )
-        hits = self._db.search_memories(query, limit=limit)
+        hits = self._db.search_memories(query, limit=limit, kind=kind)
         if not hits:
-            return "No matching long-term memories."
+            return "No matching memories."
         try:
             self._db.record_uses([hit.id for hit in hits])
         except Exception:
             # Usage tracking must never break a recall.
             logger.exception("Could not record memory usage")
-        lines = [f"Long-term memory matches for {query!r} ({len(hits)}):"]
+        lines = [f"Memory matches ({len(hits)}):"]
         for hit in hits:
             flags = ", pinned" if hit.pinned else ""
-            lines.append(f"- [#{hit.id} {hit.kind}{flags}] {hit.text}")
+            status = "" if hit.status == "active" else f", {hit.status}"
+            lines.append(f"- [#{hit.id} {hit.kind}{status}{flags}] {hit.text}")
         return "\n".join(lines)
 
 
@@ -169,10 +181,9 @@ class RecallBackupTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Search your recent backup of conversations: every turn from the last few "
-            "days, captured verbatim. Use it for exact recent wording, details, or "
-            "events that long-term memory has not kept. Older days are discarded over "
-            "time."
+            "Search the full verbatim journal: every captured turn, kept indefinitely. "
+            "Use it for exact wording, details, or events that structured memory has not "
+            "kept. An empty query lists the most recent turns."
         )
 
     async def execute(
@@ -185,13 +196,13 @@ class RecallBackupTool(Tool):
         if query.strip():
             hits = self._db.search_episodes(query, session_key=session, limit=limit)
             if not hits:
-                return "Nothing in the recent backup matches that."
-            header = f"Backup matches for {query!r} ({len(hits)}):"
+                return "Nothing in the verbatim journal matches that."
+            header = f"Verbatim matches for {query!r} ({len(hits)}):"
         else:
             hits = self._db.recent_episodes(session_key=session, limit=limit)
             if not hits:
-                return "The recent backup is empty."
-            header = f"Latest backup turns ({len(hits)}):"
+                return "The verbatim journal is empty."
+            header = f"Latest verbatim turns ({len(hits)}):"
         lines = [header]
         for hit in hits:
             content = truncate_text(hit.content, _HIT_PREVIEW_CHARS)

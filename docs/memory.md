@@ -1,29 +1,30 @@
 # AI Agent Memory in mason
 
 This page explains how mason implements long-term AI agent memory: the working
-state, the curated long-term memory graph, and today's verbatim backup.
+state, the single SQLite memory tier, and the compressed verbatim backup that
+protects it.
 
 Good memory is not a pile of notes. It is a quiet system of attention. It notices
 what is worth keeping, lets go of what no longer needs the spotlight, and turns
 lived experience into something calm, durable, and useful.
 
-## The Three Surfaces
+## One Tier, Two Representations
 
-mason does not treat memory as one giant file. It separates remembering into
-three surfaces with different lifetimes, because different kinds of remembering
-deserve different tools:
+mason keeps memory in one SQLite database, `memory/memory.db`. There is no
+short-term tier that gets thrown away: the same store holds the raw record and the
+knowledge derived from it.
 
-| Surface | Stored in | Lifetime | Written by | Read with |
-|---------|-----------|----------|------------|-----------|
+| Representation | Stored in | Lifetime | Written by | Read with |
+|----------------|-----------|----------|------------|-----------|
 | Working state | `memory/state.md` (~2 KB) | Cleared at each daily rollover | The model | Injected into the system prompt every turn |
-| Long-term memory | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
-| Recent backup | `memory/memory.db` | Rolling window (`memory.backup_retention_days`, default 2 days) | Every turn, verbatim | `recall_backup` |
+| Structured memory | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
+| Verbatim journal | `memory/memory.db` | Durable and unbounded | Every turn, verbatim | `recall_backup` |
 
 Two more surfaces sit alongside them: `memory/DATES.md` holds dated commitments
 (searched on demand with `search_dates`, because a date is the whole point and
 curation favors timeless facts), and `memory/state_history.md` keeps the last 20
-working-state versions so an overwrite can be undone. Daily snapshots of the
-database live in `memory/backups/`.
+working-state versions so an overwrite can be undone. A compressed, verbatim-only
+backup is written daily to `backups/memory/` for disaster recovery.
 
 ### Working state
 
@@ -35,26 +36,27 @@ The model owns this file. It rewrites it in place with the `update_state` tool a
 soon as the picture changes, not just at the end of a turn. The daily rollover
 empties it in place, so treat it as short-lived by design.
 
-### Long-term memory
+### Structured memory
 
-Long-term memory is a curated set of memories in `memory/memory.db`, with links
-between related memories. It holds what should survive the day: durable facts,
-preferences, decisions, corrections, and the connections between them.
+Structured memory is what the agent knows: durable facts, preferences, decisions,
+events, summaries, the relationships between them, and open knowledge gaps.
 
 The model searches it with `recall_memory`. It never writes to it directly:
-everything that lands there is promoted by consolidation (see below), which keeps
-the tier small, deduplicated, and coherent instead of an append-only pile.
+everything that lands there is derived by consolidation (see below), which keeps
+the store deduplicated, coherent, and free of one-off noise. Passing
+`kind="gap"` with an empty query lists the open questions the agent has recorded
+about what it does not yet know.
 
-### Today's backup
+### Verbatim journal
 
 Every turn of every conversation is captured verbatim in `memory/memory.db` as a
 day-stamped episode. This is the raw, complete record — nothing is summarized on
-the way in.
+the way in, and it is never purged automatically.
 
 The model searches it with `recall_backup`; an empty query lists the latest turns.
-It is the place to look for exact recent wording, details, or events that long-term
-memory has not kept. It is discarded at the end of the day, after consolidation has
-had a chance to promote what matters.
+It is the place to look for exact wording, details, or events that structured
+memory has not kept. Because the journal is unbounded, a question about something
+from months ago remains answerable.
 
 Only the newest turns of a long conversation stay in the model's context each turn
 when `agents.defaults.sessionReplay` is `tail` (the token budget,
@@ -73,31 +75,47 @@ Memory only works if the agent knows it has some. The system prompt carries an
 explicit contract, and the memory tools are always available to the model (they are
 never hidden behind capability discovery):
 
-- **Check before assuming.** The model should search long-term memory with
+- **Check before assuming.** The model should search structured memory with
   `recall_memory` before answering questions about the user's past, earlier
   decisions, or ongoing work.
-- **Reach for the backup.** When exact recent wording or detail matters, it should
-  use `recall_backup` rather than guessing.
+- **Reach for the journal.** When exact wording or detail matters, it should use
+  `recall_backup` rather than guessing.
 - **Write the working state in-turn.** When the user asks it to remember something,
   or when a decision or preference appears, it updates `memory/state.md` right away
-  with `update_state`. The backup keeps a verbatim copy regardless, and consolidation
-  promotes what matters into long-term memory.
+  with `update_state`. The journal keeps a verbatim copy regardless, and
+  consolidation promotes what matters into structured memory.
+- **Know its gaps.** Open gaps are stored as structured memories of kind `gap`;
+  `recall_memory(kind="gap")` shows what the agent has explicitly recorded as
+  unknown, so it can ask instead of inventing an answer.
 
 ## Consolidation
 
-Consolidation is the slow, thoughtful layer. It replaced the older Dream process,
-and it is what turns episodes into lasting memory. It runs on a cron system job
-(every two hours by default), immediately before each daily rollover, and its output
-is written back through the same store the model reads from.
+Consolidation is the slow, thoughtful layer — the pass that replaced the older
+Dream process. It turns the permanent journal into durable knowledge. It runs on a
+cron system job (every two hours by default) and immediately before each daily
+rollover, and its output is written back through the same store the model reads
+from.
 
 In one pass it:
 
-- **Promotes** the entries from the backup that are worth keeping as long-term
-  memory.
+- **Promotes** journal entries that are worth keeping: durable facts, preferences,
+  decisions, project context, and recurring procedures.
 - **Deduplicates and merges** memories that say the same thing in different words,
   and rewrites memories whose meaning drifted or was too narrow.
+- **Resolves or flags contradictions.** When two memories cannot both be true, it
+  picks the authoritative one (`supersede`), marks the conflict while keeping both
+  (`flag`), or records that both are valid in different contexts (`coexist`).
+- **Synthesises higher-level memories.** Related facts can become one broader,
+  more useful statement (for example, "likes potatoes" and "likes badminton" can
+  become "likes potatoes and badminton"). Source memories are archived only when
+  the synthesis fully covers them.
 - **Connects** related memories, so recall can follow a thread instead of returning
   isolated facts.
+- **Assesses retention.** Every entry gets a usefulness score and a keep/archive
+  decision; used and pinned memories are protected.
+- **Records knowledge gaps.** Missing context that blocks the user's goals becomes
+  an explicit open question, and later passes mark gaps resolved when the answer
+  arrives.
 - **Writes tiny skills.** When the day's work revealed a reusable procedure,
   consolidation can write a small generated skill into `skills/<name>/SKILL.md`.
   Generated skills are marked in their frontmatter and are never allowed to
@@ -110,17 +128,23 @@ Each pass also drops a readable snapshot of what it decided at
 The consolidation prompt is chosen per call, so it can run with a different (often
 cheaper) model preset than the main conversation. It never raises into the gateway:
 a model error, or output that does not parse, simply means nothing changed and the
-cursor stays where it was, so the same episodes are retried next time.
+cursor stays where it was, so the same journal entries are retried next time.
 
 ## Daily Rollover
 
 Once a day — at `00:00` in the configured timezone, and on gateway startup when a
 day was missed — mason rolls memory over:
 
-- yesterday's backup episodes are discarded (those already promoted by
-  consolidation; unprocessed ones survive until they have had their chance),
-- `memory/state.md` is emptied in place,
-- the file itself stays, so the layout never changes under the user.
+- writes a compressed, verbatim-only backup of the journal to
+  `backups/memory/memory-YYYY-MM-DD.db.gz`,
+- empties `memory/state.md` in place,
+- runs SQLite's `PRAGMA optimize`, an FTS5 merge pass, and a WAL checkpoint,
+- keeps the journal and structured memory exactly as they were.
+
+The backup is lossless and self-describing: it contains the `episodes` table plus
+metadata identifying it as a verbatim backup. Structured memories are deliberately
+excluded because they can be rebuilt from the journal. Backups are retained
+according to `snapshotKeep` (default 7) and written with owner-only permissions.
 
 ## The Files
 
@@ -134,9 +158,12 @@ workspace/
 ├── SOUL.md                  # The bot's long-term voice and communication style
 ├── USER.md                  # Stable knowledge about the user
 ├── skills/                  # User skills and generated skills
+├── backups/
+│   └── memory/              # Compressed verbatim backups (recovery only)
+│       └── memory-YYYY-MM-DD.db.gz
 └── memory/
     ├── state.md             # Working state, rewritten by the model
-    ├── memory.db            # SQLite: episodes (backup) + curated memories + links
+    ├── memory.db            # SQLite: verbatim journal + structured memory + links
     ├── history.jsonl        # Archived conversation summaries (session compaction)
     └── consolidation/
         └── latest.md        # Latest consolidation snapshot, for inspection
@@ -147,7 +174,7 @@ A selected project may provide its own `AGENTS.md`, but project-local `SOUL.md`,
 agent's profile and memory continuous while it works across projects. Use a separate
 configured agent workspace when identity or memory must be isolated.
 
-`memory/history.jsonl` is not part of the memory tiers above. It still exists as the
+`memory/history.jsonl` is not part of the memory tier above. It still exists as the
 append-only log of compressed conversation summaries written when session context is
 compacted, and it is what the compaction pipeline uses to reconstruct archived
 turns. Archived summaries are never re-injected into later prompts: context
@@ -163,6 +190,9 @@ demand.
       "memory": {
         "enabled": true,
         "stateMaxChars": 2048,
+        "snapshotEnabled": true,
+        "snapshotKeep": 7,
+        "backupDir": null,
         "consolidation": {
           "enabled": true,
           "intervalH": 2,
@@ -178,6 +208,9 @@ demand.
 |-------|---------|
 | `enabled` | Capture turns and expose the memory tools. When false, no database or state is used |
 | `stateMaxChars` | Size cap for the working state (256–16384, default 2048) |
+| `snapshotEnabled` | Write a compressed verbatim backup at each daily rollover |
+| `snapshotKeep` | Number of daily compressed backups retained |
+| `backupDir` | Backup directory; unset uses `<workspace>/backups/memory` |
 | `consolidation.enabled` | Register the periodic consolidation job |
 | `consolidation.intervalH` | How often consolidation runs, in hours |
 | `consolidation.cron` | Legacy cron expression override (takes precedence over `intervalH`) |
@@ -192,15 +225,21 @@ main agent's selected runtime.
 Older installs kept durable memory in `memory/MEMORY.md` and compressed history in
 `memory/history.jsonl`. On first start with the new system:
 
-- a customized `memory/MEMORY.md` is imported into long-term memory, chunked into
+- a customized `memory/MEMORY.md` is imported into structured memory, chunked into
   individual memories;
-- existing `memory/history.jsonl` entries are imported into the backup tier;
+- existing `memory/history.jsonl` entries are imported into the verbatim journal;
 - both files are then moved to `memory/legacy/`, and an untouched bundled
   `MEMORY.md` template is skipped instead of imported;
 - old Dream cursors and Dream sessions are cleaned up by the gateway.
 
 The import runs once and is idempotent. After it completes, `memory/MEMORY.md` is no
 longer a memory surface; durable facts about the user belong in `USER.md`.
+
+Upgrading from the earlier two-tier SQLite store needs no migration: the same
+`episodes`, `memories`, and `edges` tables are reused. The difference is lifetime
+policy — episodes are no longer purged — and the compression/optimisation pass.
+Any old snapshots in `memory/backups/*.db` remain readable, but new backups are
+written to `backups/memory/*.db.gz`.
 
 ## Commands
 
@@ -215,30 +254,41 @@ To inspect memory yourself, read `memory/state.md` and
 `memory/consolidation/latest.md`, or query the database directly:
 
 ```bash
-sqlite3 memory/memory.db "select kind, text from memories order by id desc limit 20;"
+sqlite3 memory/memory.db "select kind, status, text from memories order by id desc limit 20;"
 sqlite3 memory/memory.db "select ts, role, substr(content, 1, 80) from episodes order by id desc limit 20;"
+sqlite3 memory/memory.db "select text from memories where kind = 'gap' and status = 'open';"
+```
+
+Restoring a backup is a manual operation:
+
+```bash
+gunzip -c backups/memory/memory-YYYY-MM-DD.db.gz > /tmp/verbatim.db
+sqlite3 /tmp/verbatim.db "select count(*) from episodes;"
 ```
 
 ## Notes and Limits
 
 - **Windows is unsupported** for the memory subsystem. The rest of mason still
   runs there; memory is skipped rather than emulated.
-- **Speed.** Retrieval is served by SQLite with FTS5 indexes over both tiers, so a
+- **Speed.** Retrieval is served by SQLite with FTS5 indexes, so a
   `recall_memory` or `recall_backup` call is a local index lookup, not a scan of a
   growing file. When FTS5 is unavailable in the local SQLite build, the store falls
-  back to bounded `LIKE` matching.
+  back to bounded `LIKE` matching. Consolidation and the daily rollover run
+  `PRAGMA optimize`, merge the FTS indexes, and checkpoint the WAL.
 - **One database, one workspace.** `memory/memory.db` is per agent workspace and is
   written behind a write lock with WAL journaling, so concurrent gateway tasks do not
-  corrupt it.
+  corrupt it. Backups live outside `memory/` and are chmod `0600`.
+- **Backups are not a second tier.** They are recovery artifacts. The model reads
+  the live journal and structured memory, never the compressed copy.
 
 ## In Practice
 
 What this means in daily use is simple:
 
 - conversations can stay fast without carrying infinite context,
-- the backup guarantees nothing recent is lost, while long-term memory stays small
-  and deduplicated,
-- the model can always check what it knows — and knows that it should.
+- the permanent journal guarantees nothing is lost, while structured memory stays
+  deduplicated and coherent,
+- the model can always check what it knows — and knows what it does not.
 
 Memory should not feel like a dump. It should feel like continuity.
 

@@ -120,10 +120,13 @@ class MemoryConsolidator:
             # Record the heartbeat so health shows the job is still ticking.
             self.db.set_meta(CONSOLIDATION_LAST_ATTEMPT_META_KEY, moment.isoformat())
             return ConsolidationResult(ok=True, cursor=cursor)
-        memories = self.db.list_memories(limit=_MAX_MEMORIES)
+        memories = self.db.list_memories(
+            statuses=("active", "candidate"), limit=_MAX_MEMORIES
+        )
+        gaps = self.db.list_memories(statuses=("open",), limit=_MAX_MEMORIES)
         state_text = self.state.read()
         state_versions = self.state.versions(limit=_MAX_STATE_VERSIONS)
-        prompt = self._build_prompt(episodes, memories, state_text, state_versions)
+        prompt = self._build_prompt(episodes, memories, gaps, state_text, state_versions)
         plan, error = await self._request_plan(runtime, prompt)
         if plan is None:
             self._record_failure(error, moment)
@@ -174,17 +177,19 @@ class MemoryConsolidator:
         self,
         episodes: Sequence[EpisodeHit],
         memories: Sequence[MemoryHit],
+        gaps: Sequence[MemoryHit],
         state_text: str = "",
         state_versions: Sequence[StateVersion] = (),
     ) -> str:
-        lines = ["## New backup turns", *self._episode_lines(episodes)]
+        lines = ["## New verbatim turns", *self._episode_lines(episodes)]
         lines += ["", "## Current working state", *self._state_lines(state_text)]
         lines += [
             "",
             "## Recent working states (newest first)",
             *self._state_version_lines(state_versions),
         ]
-        lines += ["", "## Current long-term memory", *self._memory_lines(memories)]
+        lines += ["", "## Structured memory", *self._memory_lines(memories)]
+        lines += ["", "## Open knowledge gaps", *self._memory_lines(gaps)]
         return "\n".join(lines)
 
     def _episode_lines(self, episodes: Sequence[EpisodeHit]) -> list[str]:
@@ -221,13 +226,16 @@ class MemoryConsolidator:
 
     def _memory_lines(self, memories: Sequence[MemoryHit]) -> list[str]:
         if not memories:
-            return ["(empty)"]
+            return ["(none)"]
         allowance = max(120, min(_MEMORY_PREVIEW_CHARS, _MEMORY_BUDGET // len(memories)))
-        return [
-            f"#{memory.id} [{memory.kind}] uses={memory.uses} "
-            f"{truncate_text(memory.text, allowance)}"
-            for memory in memories
-        ]
+        lines: list[str] = []
+        for memory in memories:
+            status = "" if memory.status == "active" else f" {memory.status}"
+            lines.append(
+                f"#{memory.id} [{memory.kind}{status}] uses={memory.uses} "
+                f"{truncate_text(memory.text, allowance)}"
+            )
+        return lines
 
     async def _request_plan(
         self,
@@ -310,7 +318,18 @@ class MemoryConsolidator:
             lines.append(f"- Skills created/updated: {', '.join(created_skills)}")
         if retired_skills:
             lines.append(f"- Skills retired: {', '.join(retired_skills)}")
-        for key in ("promotions", "merges", "rewrites", "links", "drops"):
+        for key in (
+            "promotions",
+            "merges",
+            "syntheses",
+            "contradictions",
+            "rewrites",
+            "links",
+            "gaps",
+            "resolved_gaps",
+            "retention",
+            "drops",
+        ):
             entries = plan_entries(plan, key)
             if not entries:
                 continue

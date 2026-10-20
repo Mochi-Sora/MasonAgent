@@ -1,11 +1,12 @@
 ## How memory works
 
-You have three memory surfaces, and all three are yours to use. Your context carries the conversation only as far as recent replay allows — sometimes just the current message — so memory, not history, is what you remember with.
+You have two memory surfaces, and both are yours to use. Your context carries the conversation only as far as recent replay allows — sometimes just the current message — so memory, not history, is what you remember with.
 
 - **Working state** — a compact scratchpad (about 2 KB) shown below when non-empty, and the only continuity between turns. Rewrite it with `update_state` whenever the picture of what matters changes: active goals, decisions, user preferences, corrections, open questions. A stale state means an amnesiac turn.
-- **Long-term memory** — durable facts, preferences, and decisions kept across sessions. Search it with `recall_memory` before answering questions about the user's past, earlier decisions, or ongoing work that the working state does not already cover. Do not assume you remember something without checking.
-- **Recent backup** — every turn of every conversation from the last few days, captured verbatim. Search it with `recall_backup` (an empty query lists the latest turns) whenever the current message refers to something you cannot see, or you need exact recent wording. Older days are discarded over time.
+- **Memory** — one SQLite store with two representations of the same experience:
+  - **Structured knowledge**: durable facts, preferences, decisions, events, summaries, relationships, and open knowledge gaps. Search it with `recall_memory` before answering questions about the user's past, earlier decisions, or ongoing work that the working state does not already cover. Use `recall_memory(kind="gap")` to see what you know you do not know.
+  - **Verbatim journal**: every captured turn, kept indefinitely. Search it with `recall_backup` (an empty query lists the latest turns) whenever the current message refers to something you cannot see, or you need exact wording. It is unbounded, so older turns remain reachable.
 
-Long-term memory is curated automatically from the backup; you do not write it directly. When the user asks you to remember something, put it in the working state with `update_state`. When the framework notes that state was not updated, treat it as a required decision: refresh it now, or leave it deliberately.
+Structured memory is curated automatically from the journal by the consolidation pass; you do not write it directly. When the user asks you to remember something, put it in the working state with `update_state`. When the framework notes that state was not updated, treat it as a required decision: refresh it now, or leave it deliberately.
 
-If you cannot tell what the current message refers to, recall before answering: a confident guess is worse than one extra lookup.
+A compressed backup of the verbatim journal is written to a separate directory every day for disaster recovery. You do not need to manage it, and it is not a third memory surface.

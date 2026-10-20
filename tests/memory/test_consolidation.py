@@ -118,8 +118,13 @@ async def test_merges_rewrites_links_and_drops(
     assert result.applied == {
         "promotions": 0,
         "merges": 1,
+        "syntheses": 0,
+        "contradictions": 0,
         "rewrites": 1,
         "links": 1,
+        "gaps": 0,
+        "resolved_gaps": 0,
+        "retention": 0,
         "drops": 1,
     }
     # The merged duplicate is excluded from recall; a merged_from edge records why.
@@ -176,8 +181,13 @@ async def test_unknown_and_malformed_entries_are_skipped(
     assert result.applied == {
         "promotions": 0,
         "merges": 0,
+        "syntheses": 0,
+        "contradictions": 0,
         "rewrites": 0,
         "links": 0,
+        "gaps": 0,
+        "resolved_gaps": 0,
+        "retention": 0,
         "drops": 0,
     }
     assert db.consolidation_cursor() == 1
@@ -211,9 +221,55 @@ async def test_prompt_carries_turns_and_current_memories(
     await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
 
     call = mock_provider.chat_stream_with_retry.await_args.kwargs
-    assert "long-term memory" in call["messages"][0]["content"]
+    assert "verbatim journal" in call["messages"][0]["content"]
+    assert "## New verbatim turns" in call["messages"][1]["content"]
     assert "#1" in call["messages"][1]["content"]
     assert "existing durable fact" in call["messages"][1]["content"]
+
+
+async def test_dream_pass_synthesises_resolves_gaps_and_assesses_retention(
+    tmp_path: Path, db: MemoryDB, runtime, mock_provider
+) -> None:
+    gap = db.insert_memory(
+        "which timezone does the user deploy from?", kind="gap", status="open", now=_NOW
+    )
+    potatoes = db.insert_memory("user likes potatoes", now=_NOW)
+    badminton = db.insert_memory("user likes badminton", now=_NOW)
+    stale = db.insert_memory("temporary note", now=_NOW)
+    assert gap and potatoes and badminton and stale
+    _seed_episodes(db)
+    mock_provider.chat_stream_with_retry.return_value = _plan_response({
+        "syntheses": [
+            {
+                "text": "user likes potatoes and badminton",
+                "kind": "summary",
+                "memories": [potatoes, badminton],
+                "archive_sources": True,
+            }
+        ],
+        "gaps": [
+            {"text": "does the user play badminton regularly?", "priority": "high"}
+        ],
+        "resolved_gaps": [{"id": gap, "text": "user deploys from Europe/Berlin"}],
+        "retention": [{"id": stale, "action": "archive", "score": 0.1}],
+    })
+
+    result = await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
+
+    assert result.ok is True
+    assert result.applied is not None
+    assert result.applied["syntheses"] == 1
+    assert result.applied["gaps"] == 1
+    assert result.applied["resolved_gaps"] == 1
+    assert result.applied["retention"] == 1
+    assert "## Open knowledge gaps" in mock_provider.chat_stream_with_retry.await_args.kwargs[
+        "messages"
+    ][1]["content"]
+    assert [hit.text for hit in db.search_memories("potatoes and badminton")] == [
+        "user likes potatoes and badminton"
+    ]
+    assert db.search_memories("", kind="gap")[0].text == "does the user play badminton regularly?"
+    assert db.search_memories("temporary") == []
 
 
 async def test_skills_are_created_then_retired(
@@ -363,7 +419,7 @@ async def test_long_turn_is_judged_on_more_than_its_opening(
     await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
 
     prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
-    section = prompt.split("## New backup turns", 1)[1].split("## Current working state", 1)[0]
+    section = prompt.split("## New verbatim turns", 1)[1].split("## Current working state", 1)[0]
     # The old 500-char preview dropped the conclusion; head+tail must keep both.
     assert "AUDIT_START" in section
     assert "AUDIT_END" in section

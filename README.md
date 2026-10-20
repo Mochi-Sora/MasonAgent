@@ -31,7 +31,7 @@ The result:
 - **The agent stays oriented.** Goals, decisions, preferences and open questions are always
   in front of it, instead of buried 200 messages back.
 - **Nothing is lost when it is not in the state.** Every turn is captured verbatim in a
-  day-scoped backup, and a consolidation pass promotes what deserves to live longer.
+  permanent journal, and a consolidation pass promotes what deserves to live longer.
 
 The state is a cache of what matters now — not the memory of record. That distinction is
 what makes the rest of the architecture coherent: memory is looked up on demand, and the
@@ -74,25 +74,30 @@ flowchart TD
 5. **Egress** — the reply is published back to the originating channel, the session is
    saved, and the turn is captured into memory.
 
-### Memory: three surfaces with different lifetimes
+### Memory: one tier, two representations
 
 | Surface | Where | Lifetime | Written by | Read with |
 |---|---|---|---|---|
 | Working state | `memory/state.md` | Cleared at the daily rollover | The model | Injected into the prompt |
-| Long-term memory | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
-| Today's backup | `memory/memory.db` | Discarded at the rollover | Every turn, verbatim | `recall_backup` |
+| Structured knowledge | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
+| Verbatim journal | `memory/memory.db` | Durable, unbounded | Every turn, verbatim | `recall_backup` |
 
-- **Consolidation** replaces the usual "dream" pass. Every two hours, and once more before the
-  daily rollover, a model pass (the main model, or a cheaper preset you choose) reviews new
-  backup entries and returns a bounded JSON plan: promote durable facts, merge duplicates,
-  rewrite vague entries, link related memories, drop stale ones — and distil tiny reusable
-  skills into `skills/`. It is cursor-gated, so an idle agent costs nothing.
-- **The rollover** discards the day's backup, empties `state.md` in place, and never touches
-  long-term memory. Unprocessed entries survive until consolidation has seen them.
+- **One store.** The database is the single memory tier: a permanent verbatim journal plus
+  structured facts, events, summaries, relationships, and open knowledge gaps derived from it.
+  Nothing is purged on a schedule; the backup is for corruption recovery, not a second tier.
+- **Consolidation is the dream pass.** Every two hours, and once more before the daily
+  rollover, a model pass (the main model, or a cheaper preset you choose) reviews new journal
+  entries and returns a bounded JSON plan: promote durable facts, deduplicate, resolve or flag
+  contradictions, connect related memories, synthesise broader memories, assess retention,
+  record knowledge gaps, and distil tiny reusable skills into `skills/`. It is cursor-gated,
+  so an idle agent costs nothing.
+- **The rollover** writes a compressed, verbatim-only backup to `<workspace>/backups/memory/`,
+  empties `state.md` in place, and runs SQLite optimisation. The journal and structured memory
+  are untouched.
 - **Recall is on demand.** The model is told, in its prompt, that it must search before
   claiming it does not remember something.
-- Long-term retrieval is SQLite FTS5 — millisecond lookups, not file scans. The memory
-  subsystem is currently unsupported on Windows.
+- Retrieval is SQLite FTS5 — millisecond lookups, not file scans. The memory subsystem is
+  currently unsupported on Windows.
 
 ### Capabilities on demand
 
