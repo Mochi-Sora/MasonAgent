@@ -1397,7 +1397,7 @@ The four style fields shape user-facing replies only. They are injected into the
 
 Older configs may still contain `model`, `provider`, or `label` inside a preset. They are accepted when loading but ignored at runtime: move the model into `agents.defaults.model`/`agents.defaults.provider` (or select it with `/model`).
 
-`default` is reserved and always means the implicit settings built from direct `agents.defaults.*` fields; do not define `modelPresets.default`. Use `/presets default` to return to those settings in an existing config.
+`default` is reserved and always means the implicit settings built from direct `agents.defaults.*` fields; do not define `modelPresets.default`. Use `/presets default` to return to those settings in an existing config. When `agents.defaults.modelPreset` names another preset, that preset's generation fields take precedence; the setup wizard labels the Agent Settings generation fields as the `default` preset and points to Generation Presets for the active one.
 
 Set `agents.defaults.modelPreset` to choose the preset followed by sessions that have no saved selection. When `modelPreset` is `null` or omitted, such sessions use the settings from direct `agents.defaults.*` fields. `/presets <name>` saves an override in the current session, so its future turns keep that preset across process restarts while other sessions remain unchanged. The command does not write the selection back to `config.json` and never changes the model.
 

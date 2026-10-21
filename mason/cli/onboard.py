@@ -920,6 +920,7 @@ def _configure_pydantic_model(
     *,
     skip_fields: set[str] | None = None,
     config: Config | None = None,
+    notice: str | None = None,
 ) -> _ModelT | None:
     """Configure a Pydantic model interactively.
 
@@ -950,6 +951,8 @@ def _configure_pydantic_model(
     last_field_name: str | None = None
     while True:
         console.clear()
+        if notice:
+            console.print(f"[yellow]{notice}[/yellow]\n")
         _show_config_panel(display_name, working_model, fields)
         choices = get_choices()
         default_choice = None
@@ -1119,10 +1122,13 @@ def _configure_model_presets(config: Config) -> None:
     def get_preset_choices() -> tuple[list[str], dict[str, str]]:
         choices: list[str] = []
         choice_to_preset: dict[str, str] = {}
+        active = config.agents.defaults.model_preset or "default"
         for name, preset in config.model_presets.items():
-            choice = f"{name} - {_preset_summary(preset)}"
-            choices.append(choice)
-            choice_to_preset[choice] = name
+            label = f"{name} - {_preset_summary(preset)}"
+            if name == active:
+                label = f"* {label} (active)"
+            choices.append(label)
+            choice_to_preset[label] = name
         choices.append("[+] Add new preset")
         choices.append("<- Back")
         return choices, choice_to_preset
@@ -1537,6 +1543,22 @@ _SETTINGS_SETTER: dict[str, Callable[[Config, BaseModel], None]] = {
 }
 
 
+def _agent_settings_notice(config: Config) -> str | None:
+    """Explain that Agent Settings holds the inactive `default` preset."""
+    active = config.agents.defaults.model_preset
+    if not active or active == "default":
+        return None
+    preset = config.model_presets.get(active)
+    if preset is None:
+        return None
+    return (
+        f"Active settings preset: '{active}' ({_preset_summary(preset)}).\n"
+        "The generation fields below belong to the 'default' preset and are "
+        "overridden while this preset is selected.\n"
+        "Edit the preset under Advanced Settings -> Generation Presets."
+    )
+
+
 def _configure_general_settings(config: Config, section: str) -> None:
     """Configure a general settings section (header + model edit + writeback)."""
     meta = _SETTINGS_SECTIONS.get(section)
@@ -1544,7 +1566,13 @@ def _configure_general_settings(config: Config, section: str) -> None:
         return
     display_name, _subtitle, skip = meta
     model = _SETTINGS_GETTER[section](config)
-    updated = _configure_pydantic_model(model, display_name, skip_fields=skip, config=config)
+    updated = _configure_pydantic_model(
+        model,
+        display_name,
+        skip_fields=skip,
+        config=config,
+        notice=_agent_settings_notice(config) if section == "Agent Settings" else None,
+    )
     if updated is not None:
         _SETTINGS_SETTER[section](config, updated)
 

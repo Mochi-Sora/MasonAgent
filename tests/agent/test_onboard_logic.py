@@ -2215,3 +2215,28 @@ class TestModelPresetWizard:
 
         assert _resolve_field_handler(WebSearchConfig(), "provider") is _handle_search_provider_field
         assert _resolve_field_handler(AgentDefaults(), "provider") is _handle_provider_field
+
+
+def test_agent_settings_notice_points_to_active_preset():
+    from mason.cli.onboard import _agent_settings_notice
+
+    config = Config()
+    config.model_presets["fast"] = GenerationPresetConfig(
+        max_tokens=4096,
+        temperature=0.2,
+        base_style="efficient",
+    )
+    config.agents.defaults.model_preset = "fast"
+
+    notice = _agent_settings_notice(config)
+
+    assert notice is not None
+    assert "'fast'" in notice
+    assert "efficient" in notice
+    assert "Advanced Settings -> Generation Presets" in notice
+
+    config.agents.defaults.model_preset = "default"
+    assert _agent_settings_notice(config) is None
+
+    config.agents.defaults.model_preset = None
+    assert _agent_settings_notice(config) is None
