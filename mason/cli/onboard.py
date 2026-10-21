@@ -1101,6 +1101,10 @@ def _preset_summary(preset: GenerationPresetConfig) -> str:
         parts.append(f"reasoning {preset.reasoning_effort}")
     if preset.context_window_tokens:
         parts.append(f"ctx {preset.context_window_tokens}")
+    parts.append(
+        f"style {preset.base_style}/{preset.warmth}/"
+        f"{preset.enthusiasm}/{preset.emojis}"
+    )
     return ", ".join(parts)
 
 

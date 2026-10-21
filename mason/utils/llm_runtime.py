@@ -51,6 +51,7 @@ class LLMRuntime:
                     "reasoning_effort",
                     defaults.reasoning_effort,
                 ),
+                style=getattr(generation, "style", defaults.style),
             ),
             context_window_tokens=context_window_tokens,
             model_preset=model_preset,
@@ -78,6 +79,7 @@ class LLMRuntime:
                     if reasoning_effort is None
                     else reasoning_effort
                 ),
+                style=generation.style,
             ),
         )
 

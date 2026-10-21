@@ -1353,14 +1353,21 @@ Generation presets are named, standalone settings that apply to whichever model 
   "modelPresets": {
     "fast": {
       "maxTokens": 4096,
-      "contextWindowTokens": 128000,
-      "temperature": 0.2,
-      "reasoningEffort": "low"
+      "contextWindowTokens": 65536,
+      "temperature": 0.1,
+      "baseStyle": "efficient",
+      "warmth": "neutral",
+      "enthusiasm": "less",
+      "emojis": "less"
     },
     "deep": {
       "maxTokens": 8192,
       "temperature": 0.1,
-      "reasoningEffort": "high"
+      "reasoningEffort": "high",
+      "baseStyle": "candid",
+      "warmth": "warm",
+      "enthusiasm": "balanced",
+      "emojis": "less"
     }
   },
   "agents": {
@@ -1381,6 +1388,12 @@ Generation presets are named, standalone settings that apply to whichever model 
 | `contextWindowTokens` | Optional context-window override. Omit or set `null` to keep the selected model's own window. |
 | `temperature` | Sampling temperature. |
 | `reasoningEffort` | Optional reasoning/thinking setting. Provider support varies. |
+| `baseStyle` | How replies read: `professional`, `friendly`, `candid`, `seductive`, `efficient`, or `cynical`. Default `friendly`. |
+| `warmth` | Emotional distance: `very_cold`, `cold`, `neutral`, `warm`, or `very_warm`. Default `neutral`. |
+| `enthusiasm` | Energy level: `more`, `balanced`, or `less`. Default `balanced`. |
+| `emojis` | Emoji frequency: `more`, `balanced`, or `less`. Default `balanced`. |
+
+The four style fields shape user-facing replies only. They are injected into the system prompt as a tone overlay, take precedence over conflicting tone guidance in `SOUL.md`, and never change facts, safety rules, or tool policy. Internal prompts such as compaction do not receive the overlay.
 
 Older configs may still contain `model`, `provider`, or `label` inside a preset. They are accepted when loading but ignored at runtime: move the model into `agents.defaults.model`/`agents.defaults.provider` (or select it with `/model`).
 

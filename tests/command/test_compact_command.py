@@ -133,7 +133,10 @@ async def test_compacted_session_waits_for_new_input_without_continuation(
     # Archived summaries are compaction artifacts, never prompt material.
     assert sent[0] == {
         "role": "system",
-        "content": loop.context.build_system_prompt(channel="cli"),
+        "content": loop.context.build_system_prompt(
+            channel="cli",
+            style=loop.llm_runtime().generation.style,
+        ),
     }
     assert [message["role"] for message in sent] == ["system", "user"]
     assert sent[1]["content"] == "hi"

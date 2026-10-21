@@ -223,6 +223,10 @@ def _snapshot_model_presets(
             "context_window_tokens": preset.context_window_tokens,
             "temperature": preset.temperature,
             "reasoning_effort": preset.reasoning_effort,
+            "base_style": preset.base_style,
+            "warmth": preset.warmth,
+            "enthusiasm": preset.enthusiasm,
+            "emojis": preset.emojis,
         }
         for name, preset in presets.items()
     }

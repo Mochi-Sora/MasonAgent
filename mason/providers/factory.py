@@ -373,6 +373,10 @@ def provider_signature(
         resolved.temperature,
         resolved.reasoning_effort,
         resolved.context_window_tokens,
+        resolved.base_style,
+        resolved.warmth,
+        resolved.enthusiasm,
+        resolved.emojis,
         getattr(p, "proxy", None) if p else None,
         p.thinking_style if p else None,
         tuple(

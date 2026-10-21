@@ -27,6 +27,7 @@ from mason.events import (
     RetryStatusEvent,
     RetryWaitEvent,
 )
+from mason.style import StyleSettings
 from mason.utils.helpers import sanitize_surrogates_deep
 
 if TYPE_CHECKING:
@@ -628,6 +629,7 @@ class GenerationSettings:
     temperature: float = 0.7
     max_tokens: int = 4096
     reasoning_effort: str | None = None
+    style: StyleSettings = field(default_factory=StyleSettings)
 
 
 _SYNTHETIC_USER_CONTENT = "(conversation continued)"

@@ -422,3 +422,36 @@ def test_transcription_only_provider_is_not_chat_fallback() -> None:
     })
 
     assert config.get_provider_name() is None
+
+
+def test_generation_preset_style_settings_flow_to_runtime_settings() -> None:
+    config = Config.model_validate({
+        "modelPresets": {
+            "brief": {
+                "baseStyle": "efficient",
+                "warmth": "cold",
+                "enthusiasm": "less",
+                "emojis": "less",
+            }
+        },
+        "agents": {"defaults": {"modelPreset": "brief"}},
+    })
+
+    generation = config.resolve_generation_preset("brief")
+    assert generation.base_style == "efficient"
+    assert generation.warmth == "cold"
+    assert generation.enthusiasm == "less"
+    assert generation.emojis == "less"
+
+    settings = config.resolve_preset("brief").to_generation_settings()
+    assert settings.style.base_style == "efficient"
+    assert settings.style.warmth == "cold"
+    assert settings.style.enthusiasm == "less"
+    assert settings.style.emojis == "less"
+
+
+def test_generation_preset_rejects_unknown_style_value() -> None:
+    with pytest.raises(ValueError):
+        Config.model_validate({
+            "modelPresets": {"bad": {"baseStyle": "shouty"}},
+        })

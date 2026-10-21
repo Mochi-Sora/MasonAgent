@@ -272,6 +272,8 @@ async def test_presets_command_lists_settings_without_models(tmp_path) -> None:
     assert "Active: `default`" in out.content
     assert "Model stays: `base-model`" in out.content
     assert "`fast`: max_tokens=4,096" in out.content
+    assert "style=friendly" in out.content
+    assert "warmth=neutral" in out.content
     assert "model is never changed" in out.content
 
 
@@ -284,6 +286,7 @@ async def test_presets_command_applies_settings_to_current_model(tmp_path) -> No
 
     assert "Applied settings preset `fast`." in out.content
     assert "Model unchanged: `gpt-4.1`" in out.content
+    assert "Style: friendly" in out.content
     assert _saved_model_preset(loop) == "fast"
     assert _saved_model(loop) == "gpt-4.1"
     session = loop.sessions.get_or_create("cli:direct")

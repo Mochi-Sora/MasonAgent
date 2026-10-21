@@ -66,7 +66,7 @@ Generation settings live in standalone presets. A preset never selects a model:
 /presets default
 ```
 
-`/presets` lists each preset's `maxTokens`, `temperature`, `reasoningEffort`, and context-window override. `/presets <name>` applies those settings to the current session's model and persists the choice; `/presets default` returns to the settings from `agents.defaults.*`.
+`/presets` lists each preset's `maxTokens`, `temperature`, `reasoningEffort`, context-window override, base style, warmth, enthusiasm, and emoji level. `/presets <name>` applies those settings to the current session's model and persists the choice; `/presets default` returns to the settings from `agents.defaults.*`.
 
 Preset names come from the top-level `modelPresets` config. See [Configuration: Generation presets](./configuration.md#model-presets) for setup details.
 

@@ -6,6 +6,7 @@ import pytest
 
 from mason.agent.context import ContextBuilder, TranscriptInput
 from mason.runtime_context import RuntimeContextBlock
+from mason.style import StyleSettings
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -386,6 +387,24 @@ class TestBuildSystemPrompt:
         result = builder.build_system_prompt()
         assert "## AGENTS.md" not in result
         assert "[Archived Context Summary]" not in result
+
+    def test_style_overlay_is_included_when_requested(self, tmp_path):
+        builder = _builder(tmp_path)
+
+        result = builder.build_system_prompt(style=StyleSettings(
+            base_style="efficient",
+            warmth="cold",
+            enthusiasm="less",
+            emojis="less",
+        ))
+
+        assert "# Response Style" in result
+        assert "**Efficient**" in result
+        assert "**Cold**" in result
+        assert "**Less**" in result
+
+    def test_style_overlay_is_omitted_by_default(self, tmp_path):
+        assert "# Response Style" not in _builder(tmp_path).build_system_prompt()
 
 
 # ---------------------------------------------------------------------------

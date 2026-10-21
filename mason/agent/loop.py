@@ -1337,6 +1337,7 @@ class AgentLoop:
             channel=request_ctx.channel,
             workspace=effective_scope.project_path,
             include_memory=session.policy.persist if session is not None else True,
+            style=runtime.generation.style,
         )
         if request_context is None:
             request_ctx = dataclasses.replace(

@@ -35,6 +35,7 @@ from mason.session import attachments as attachment_records
 from mason.session.keys import last_channel_from_metadata
 from mason.session.manager import Session
 from mason.session.summary import SessionSummary
+from mason.style import StyleSettings
 from mason.utils.helpers import detect_image_mime, load_bundled_template
 from mason.utils.prompt_templates import render_template
 
@@ -157,6 +158,7 @@ class ContextBuilder:
         session_summary: SessionSummary | None = None,
         workspace: Path | None = None,
         include_memory: bool = True,
+        style: StyleSettings | None = None,
     ) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
         root = workspace or self.workspace
@@ -165,6 +167,12 @@ class ContextBuilder:
         bootstrap = self._load_bootstrap_files(root)
         if bootstrap:
             parts.append(bootstrap)
+
+        if style is not None:
+            parts.append(render_template(
+                "agent/style.md",
+                **cast(dict[str, Any], style.prompt_vars()),
+            ))
 
         parts.append(render_template("agent/tool_contract.md"))
 
@@ -298,6 +306,7 @@ class ContextBuilder:
         runtime_context_blocks: Sequence[RuntimeContextBlock] | None = None,
         workspace: Path | None = None,
         include_memory: bool = True,
+        style: StyleSettings | None = None,
     ) -> list[dict[str, Any]]:
         """Compatibility wrapper for callers that need merged adjacent roles."""
         messages = self.build_transcript(
@@ -312,6 +321,7 @@ class ContextBuilder:
             channel=channel,
             workspace=workspace,
             include_memory=include_memory,
+            style=style,
         )
         if current_message is None:
             return messages
@@ -338,6 +348,7 @@ class ContextBuilder:
         channel: str | None = None,
         workspace: Path | None = None,
         include_memory: bool = True,
+        style: StyleSettings | None = None,
     ) -> list[dict[str, Any]]:
         """Build a model transcript while preserving the fresh-turn boundary."""
         root = workspace or self.workspace
@@ -349,6 +360,7 @@ class ContextBuilder:
                     session_summary=transcript.session_summary,
                     workspace=root,
                     include_memory=include_memory,
+                    style=style,
                 ),
             },
             *transcript.history,

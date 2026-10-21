@@ -10,6 +10,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from mason.config.timezone import detect_system_timezone
 from mason.config_base import Base
 from mason.cron.types import CronSchedule
+from mason.style import (
+    DEFAULT_BASE_STYLE,
+    DEFAULT_INTENSITY,
+    DEFAULT_WARMTH,
+    BaseStyle,
+    IntensityLevel,
+    StyleSettings,
+    WarmthLevel,
+)
 
 if TYPE_CHECKING:
     from mason.agent.tools.cli_apps import CliAppsToolConfig
@@ -141,6 +150,10 @@ class ModelPresetConfig(Base):
     context_window_tokens: int = 200_000
     temperature: float = 0.1
     reasoning_effort: str | None = None
+    base_style: BaseStyle = DEFAULT_BASE_STYLE
+    warmth: WarmthLevel = DEFAULT_WARMTH
+    enthusiasm: IntensityLevel = DEFAULT_INTENSITY
+    emojis: IntensityLevel = DEFAULT_INTENSITY
 
     def to_generation_settings(self) -> Any:
         from mason.providers.base import GenerationSettings
@@ -148,6 +161,12 @@ class ModelPresetConfig(Base):
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             reasoning_effort=self.reasoning_effort,
+            style=StyleSettings(
+                base_style=self.base_style,
+                warmth=self.warmth,
+                enthusiasm=self.enthusiasm,
+                emojis=self.emojis,
+            ),
         )
 
 
@@ -163,6 +182,10 @@ class GenerationPresetConfig(Base):
     context_window_tokens: int | None = None  # None keeps the model's window
     temperature: float = 0.1
     reasoning_effort: str | None = None
+    base_style: BaseStyle = DEFAULT_BASE_STYLE
+    warmth: WarmthLevel = DEFAULT_WARMTH
+    enthusiasm: IntensityLevel = DEFAULT_INTENSITY
+    emojis: IntensityLevel = DEFAULT_INTENSITY
 
     # Deprecated: legacy model binding. Used only to migrate old fallback values.
     model: str | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -174,6 +197,12 @@ class GenerationPresetConfig(Base):
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             reasoning_effort=self.reasoning_effort,
+            style=StyleSettings(
+                base_style=self.base_style,
+                warmth=self.warmth,
+                enthusiasm=self.enthusiasm,
+                emojis=self.emojis,
+            ),
         )
 
     def to_model_preset(
@@ -189,6 +218,10 @@ class GenerationPresetConfig(Base):
             context_window_tokens=context_window_tokens,
             temperature=self.temperature,
             reasoning_effort=self.reasoning_effort,
+            base_style=self.base_style,
+            warmth=self.warmth,
+            enthusiasm=self.enthusiasm,
+            emojis=self.emojis,
         )
 
 
@@ -220,6 +253,10 @@ class AgentDefaults(Base):
         serialization_alias="toolHintMaxLength",
     )  # Max characters for tool hint display (e.g. "$ cd …/project && npm test")
     reasoning_effort: str | None = None  # low / medium / high / xhigh / max / adaptive / none — LLM thinking effort; None preserves the provider default
+    base_style: BaseStyle = DEFAULT_BASE_STYLE
+    warmth: WarmthLevel = DEFAULT_WARMTH
+    enthusiasm: IntensityLevel = DEFAULT_INTENSITY
+    emojis: IntensityLevel = DEFAULT_INTENSITY
     timezone: str = "UTC"  # Effective IANA timezone, e.g. "Asia/Shanghai"
     timezone_mode: Literal["auto", "manual"] = "auto"
     bot_name: str = "mason"  # Display name shown in CLI prompts (e.g. "{name} is thinking...")
@@ -577,6 +614,8 @@ class Config(BaseSettings):
             model=model, provider=provider, max_tokens=d.max_tokens,
             context_window_tokens=d.context_window_tokens,
             temperature=d.temperature, reasoning_effort=d.reasoning_effort,
+            base_style=d.base_style, warmth=d.warmth,
+            enthusiasm=d.enthusiasm, emojis=d.emojis,
         )
 
     def resolve_generation_preset(self, name: str | None = None) -> GenerationPresetConfig:
@@ -589,6 +628,10 @@ class Config(BaseSettings):
                 context_window_tokens=None,
                 temperature=d.temperature,
                 reasoning_effort=d.reasoning_effort,
+                base_style=d.base_style,
+                warmth=d.warmth,
+                enthusiasm=d.enthusiasm,
+                emojis=d.emojis,
             )
         if name not in self.model_presets:
             raise KeyError(f"model_preset {name!r} not found in model_presets")

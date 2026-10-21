@@ -538,7 +538,9 @@ def _preset_command_status(loop: AgentLoop, session: Session) -> str:
         lines.append(
             f"- `{name}`: max_tokens={preset.max_tokens:,}, "
             f"temperature={preset.temperature:g}, reasoning={effort}, "
-            f"context_window={window}"
+            f"context_window={window}, style={preset.base_style}, "
+            f"warmth={preset.warmth}, enthusiasm={preset.enthusiasm}, "
+            f"emojis={preset.emojis}"
         )
     lines += ["", "Apply with `/presets <name>`; the model is never changed."]
     return "\n".join(lines)
@@ -577,6 +579,10 @@ async def cmd_presets(ctx: CommandContext) -> OutboundMessage:
         f"- Max output tokens: {runtime.generation.max_tokens:,}",
         f"- Temperature: {runtime.generation.temperature:g}",
         f"- Context window: {runtime.context_window_tokens:,} tokens",
+        f"- Style: {runtime.generation.style.base_style}, "
+        f"warmth {runtime.generation.style.warmth}, "
+        f"enthusiasm {runtime.generation.style.enthusiasm}, "
+        f"emojis {runtime.generation.style.emojis}",
     ]))
 
 
