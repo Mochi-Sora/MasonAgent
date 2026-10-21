@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from mason.agent.loop import AgentLoop
+from mason.agent.model_runtime import ModelRuntimeResolver
 from mason.bus.queue import MessageBus
 from mason.bus.runtime_events import RuntimeModelChanged
 from mason.config.errors import ConfigLoadError
@@ -17,6 +18,8 @@ from mason.session.model_selection import (
     SESSION_MODEL_PRESET_METADATA_KEY,
     model_preset_from_metadata,
 )
+from mason.style import StyleSettings
+from mason.utils.llm_runtime import LLMRuntime
 
 
 def _provider(default_model: str, max_tokens: int = 123) -> MagicMock:
@@ -24,6 +27,40 @@ def _provider(default_model: str, max_tokens: int = 123) -> MagicMock:
     provider.get_default_model.return_value = default_model
     provider.generation = SimpleNamespace(max_tokens=max_tokens)
     return provider
+
+
+def test_refresh_adopts_generation_change_without_signature_change() -> None:
+    """A style-only change must not be discarded when the signature is unchanged."""
+    provider = _provider("model")
+    initial = LLMRuntime(
+        provider=provider,
+        model="model",
+        generation=GenerationSettings(style=StyleSettings()),
+        context_window_tokens=1000,
+        model_preset="primary",
+        snapshot_signature=("model", "provider"),
+    )
+    resolver = ModelRuntimeResolver(
+        initial,
+        model_presets={
+            "primary": GenerationPresetConfig(base_style="seductive"),
+        },
+        configured_default_preset="primary",
+        provider_snapshot_loader=lambda: ProviderSnapshot(
+            provider=provider,
+            model="model",
+            context_window_tokens=1000,
+            signature=("model", "provider"),
+            generation=initial.generation,
+            model_preset="primary",
+        ),
+    )
+
+    resolver.invalidate()
+    runtime = resolver.admit()
+
+    assert runtime.generation.style.base_style == "seductive"
+    assert runtime.model_preset == "primary"
 
 
 def test_provider_refresh_updates_runtime_resolver(tmp_path: Path) -> None:

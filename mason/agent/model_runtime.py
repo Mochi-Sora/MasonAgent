@@ -315,6 +315,8 @@ class ModelRuntimeResolver:
         unchanged = (
             runtime.snapshot_signature == self._runtime.snapshot_signature
             and runtime.model_preset == self._runtime.model_preset
+            and runtime.generation == self._runtime.generation
+            and runtime.context_window_tokens == self._runtime.context_window_tokens
         )
         self._refresh_required = False
         if unchanged:
