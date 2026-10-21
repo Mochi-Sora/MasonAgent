@@ -520,7 +520,8 @@ class TelegramChannel(BaseChannel):
         BotCommand("goal", "Start a sustained objective (long-running task)"),
         BotCommand("trigger", "Create a named local trigger"),
         BotCommand("pairing", "Manage DM pairing (approve/deny/list)"),
-        BotCommand("model", "Switch runtime model preset"),
+        BotCommand("model", "Show or switch the active model"),
+        BotCommand("presets", "Show or apply generation settings"),
         BotCommand("skill", "List enabled skills"),
         BotCommand("evaluator_prompt", "Customize the heartbeat evaluator prompt"),
         BotCommand("help", "Show available commands"),
@@ -530,7 +531,7 @@ class TelegramChannel(BaseChannel):
     # Telegram-safe aliases are normalized before reaching the core router.
     # Canonical hyphenated commands stay on a separate handler (below).
     TELEGRAM_BUS_SLASH_COMMAND_RE = re.compile(
-        r"^/(?:new|compact|stop|restart|status|history|goal|trigger|pairing|model|skill"
+        r"^/(?:new|compact|stop|restart|status|history|goal|trigger|pairing|model|presets|preset|skill"
         r"|evaluator_prompt|evaluator-prompt)(?:@\w+)?(?:\s+.*)?$"
     )
 

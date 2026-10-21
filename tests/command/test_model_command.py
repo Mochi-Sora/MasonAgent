@@ -319,6 +319,22 @@ async def test_presets_command_unknown_lists_available(tmp_path) -> None:
     assert _saved_model_preset(loop) is None
 
 
+@pytest.mark.asyncio
+async def test_preset_singular_alias_routes_to_presets(tmp_path) -> None:
+    loop = _make_loop(tmp_path)
+    router = CommandRouter()
+    register_builtin_commands(router)
+    msg = InboundMessage(channel="cli", sender_id="user", chat_id="direct", content="/preset")
+    ctx = CommandContext(
+        msg=msg, session=None, key=msg.session_key, raw="/preset", loop=loop,
+    )
+
+    out = await router.dispatch(ctx)
+
+    assert out is not None
+    assert "## Presets" in out.content
+
+
 def test_model_and_presets_commands_in_help_and_palette() -> None:
     palette = builtin_command_palette()
 

@@ -1227,7 +1227,7 @@ async def test_slash_commands_forward_via_handle_message(slash_name: str) -> Non
 
 
 @pytest.mark.asyncio
-async def test_slash_model_forwards_optional_preset() -> None:
+async def test_slash_model_forwards_provider_and_model() -> None:
     channel = DiscordChannel(DiscordConfig(enabled=True, allow_from=["*"]), MessageBus())
     handled: list[dict] = []
 
@@ -1241,13 +1241,38 @@ async def test_slash_model_forwards_optional_preset() -> None:
 
     model_cmd = client.tree.get_command("model")
     assert model_cmd is not None
-    await model_cmd.callback(interaction, preset="fast")
+    await model_cmd.callback(interaction, provider="openai", model="gpt-4.1")
 
     assert interaction.response.messages == [
-        {"content": "Processing /model fast...", "ephemeral": True}
+        {"content": "Processing /model openai gpt-4.1...", "ephemeral": True}
     ]
     assert len(handled) == 1
-    assert handled[0]["content"] == "/model fast"
+    assert handled[0]["content"] == "/model openai gpt-4.1"
+    assert handled[0]["metadata"]["is_slash_command"] is True
+
+
+@pytest.mark.asyncio
+async def test_slash_presets_forwards_optional_name() -> None:
+    channel = DiscordChannel(DiscordConfig(enabled=True, allow_from=["*"]), MessageBus())
+    handled: list[dict] = []
+
+    async def capture_handle(**kwargs) -> None:
+        handled.append(kwargs)
+
+    channel._handle_message = capture_handle  # type: ignore[method-assign]
+    client = DiscordBotClient(channel, intents=discord.Intents.none())
+    interaction = _make_interaction()
+    interaction.command.qualified_name = "presets"
+
+    presets_cmd = client.tree.get_command("presets")
+    assert presets_cmd is not None
+    await presets_cmd.callback(interaction, name="fast")
+
+    assert interaction.response.messages == [
+        {"content": "Processing /presets fast...", "ephemeral": True}
+    ]
+    assert len(handled) == 1
+    assert handled[0]["content"] == "/presets fast"
     assert handled[0]["metadata"]["is_slash_command"] is True
 
 

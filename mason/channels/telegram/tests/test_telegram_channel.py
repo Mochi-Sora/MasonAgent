@@ -2482,6 +2482,10 @@ def test_telegram_bus_slash_command_regex_matches_agent_loop_commands() -> None:
     assert pat.fullmatch("/trigger PR review")
     assert pat.fullmatch("/pairing list")
     assert pat.fullmatch("/model fast")
+    assert pat.fullmatch("/presets")
+    assert pat.fullmatch("/presets fast")
+    assert pat.fullmatch("/preset")
+    assert pat.fullmatch("/preset@mason_bot fast")
     assert pat.fullmatch("/skill")
     assert pat.fullmatch("/skill@mason_bot")
     assert pat.fullmatch("/new@mason_bot")
@@ -2493,6 +2497,11 @@ def test_telegram_bus_slash_command_regex_matches_agent_loop_commands() -> None:
     assert pat.fullmatch("/compact")
     assert pat.fullmatch("/evaluator-prompt")
     assert pat.fullmatch("/evaluator-prompt init")
+
+
+def test_telegram_bot_commands_include_presets() -> None:
+    names = {command.command for command in TelegramChannel.BOT_COMMANDS}
+    assert {"model", "presets"} <= names
 
 
 @pytest.mark.asyncio

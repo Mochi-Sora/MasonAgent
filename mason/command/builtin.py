@@ -877,6 +877,9 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.prefix("/model ", cmd_model)
     router.exact("/presets", cmd_presets)
     router.prefix("/presets ", cmd_presets)
+    # Common singular spelling; keep it as an alias so a typo is not dropped.
+    router.exact("/preset", cmd_presets)
+    router.prefix("/preset ", cmd_presets)
     router.exact("/history", cmd_history)
     router.prefix("/history ", cmd_history)
     router.exact("/goal", cmd_goal)
