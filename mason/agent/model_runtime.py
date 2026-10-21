@@ -9,6 +9,7 @@ from typing import cast
 
 from mason.agent import model_presets as preset_helpers
 from mason.config.schema import Config, GenerationPresetConfig
+from mason.providers.base import LLMProvider
 from mason.providers.factory import ProviderSnapshot, build_provider_snapshot
 from mason.utils.llm_runtime import LLMRuntime, runtime_from_provider_snapshot
 
@@ -31,6 +32,7 @@ class ModelRuntimeResolver:
         provider_snapshot_loader: Callable[[], ProviderSnapshot] | None = None,
         preset_snapshot_loader: preset_helpers.PresetSnapshotLoader | None = None,
         selection_snapshot_loader: preset_helpers.SelectionSnapshotLoader | None = None,
+        provider_observer: Callable[[LLMProvider], None] | None = None,
     ) -> None:
         self._runtime = initial_runtime
         self._base_context_window = initial_runtime.context_window_tokens
@@ -40,6 +42,7 @@ class ModelRuntimeResolver:
         self._provider_snapshot_loader = provider_snapshot_loader
         self._preset_snapshot_loader = preset_snapshot_loader
         self._selection_snapshot_loader = selection_snapshot_loader
+        self._provider_observer = provider_observer
         self._refresh_required = False
         self._resolved_presets: dict[str, LLMRuntime] = {}
         self._tracks_provider_generation = initial_runtime.model_preset is None
@@ -116,6 +119,8 @@ class ModelRuntimeResolver:
         snapshot: ProviderSnapshot,
     ) -> LLMRuntime:
         """Resolve a factory snapshot without changing the selected default."""
+        if self._provider_observer is not None:
+            self._provider_observer(snapshot.provider)
         return runtime_from_provider_snapshot(snapshot)
 
     def adopt_snapshot(

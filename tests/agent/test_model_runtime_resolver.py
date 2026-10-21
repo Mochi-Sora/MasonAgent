@@ -377,3 +377,22 @@ def test_resolver_preserves_canonical_preset_name_for_case_insensitive_input() -
 
     assert selected.model == "base-model"
     assert selected.model_preset == "Deep Research"
+
+
+def test_resolver_observes_every_resolved_provider_snapshot() -> None:
+    provider = _provider()
+    observed = []
+    resolver = ModelRuntimeResolver(
+        _runtime(),
+        provider_observer=observed.append,
+    )
+    snapshot = ProviderSnapshot(
+        provider=provider,
+        model="observed-model",
+        context_window_tokens=1_000,
+        signature=("observed-model", "auto"),
+    )
+
+    resolver.resolve_snapshot(snapshot)
+
+    assert observed == [provider]

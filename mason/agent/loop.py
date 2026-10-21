@@ -314,6 +314,7 @@ class AgentLoop:
         model_preset: str | None = None,
         preset_snapshot_loader: preset_helpers.PresetSnapshotLoader | None = None,
         selection_snapshot_loader: preset_helpers.SelectionSnapshotLoader | None = None,
+        provider_observer: Callable[[LLMProvider], None] | None = None,
         model_catalog: Callable[[str], Sequence[ModelInfo]] | None = None,
         provider_choices: Callable[[], Sequence[ProviderChoice]] | None = None,
         turn_delivery_factory: TurnDeliveryFactory | None = None,
@@ -369,6 +370,7 @@ class AgentLoop:
             provider_snapshot_loader=provider_snapshot_loader,
             preset_snapshot_loader=preset_snapshot_loader,
             selection_snapshot_loader=selection_snapshot_loader,
+            provider_observer=provider_observer,
         )
         self.consolidation_model = consolidation_model_preset
         self._default_model_preset = model_preset or "default"

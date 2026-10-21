@@ -259,3 +259,43 @@ async def test_sdk_invalid_internal_model_preset_metadata_fails_explicitly(
         await bot.run("hello", session_key="sdk:invalid-internal-metadata")
 
     assert base.calls == []
+
+
+def test_provider_observer_reaches_session_selection(tmp_path) -> None:
+    base = RecordingProvider("base-model")
+    selected = RecordingProvider("selected-model")
+    observed: list[LLMProvider] = []
+
+    def observe(provider: LLMProvider) -> None:
+        observed.append(provider)
+        provider.set_llm_call_observer(lambda call: None)
+
+    def load_selection(
+        model: str,
+        provider: str | None,
+        preset: str | None,
+    ) -> ProviderSnapshot:
+        return ProviderSnapshot(
+            provider=selected,
+            model=model,
+            context_window_tokens=1_000,
+            signature=(model, preset),
+            model_preset=preset,
+        )
+
+    loop = AgentLoop(
+        bus=MessageBus(),
+        provider=base,
+        workspace=tmp_path,
+        model="base-model",
+        context_window_tokens=1_000,
+        selection_snapshot_loader=load_selection,
+        provider_observer=observe,
+    )
+
+    loop.set_session_model("sdk:selected", "selected-model")
+    runtime = loop.runtime_for_session(loop.sessions.get_or_create("sdk:selected"))
+
+    assert runtime.provider is selected
+    assert selected in observed
+    assert selected._llm_call_observer is not None

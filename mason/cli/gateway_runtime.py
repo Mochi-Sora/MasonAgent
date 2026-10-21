@@ -370,8 +370,11 @@ def _run_gateway(
     sync_workspace_templates(config.workspace_path)
     bus = MessageBus()
 
+    def _attach_usage_observer(provider: Any) -> None:
+        provider.set_llm_call_observer(record_llm_call)
+
     def _observe_provider(snapshot: ProviderSnapshot) -> ProviderSnapshot:
-        snapshot.provider.set_llm_call_observer(record_llm_call)
+        _attach_usage_observer(snapshot.provider)
         return snapshot
 
     def _load_gateway_provider_snapshot(
@@ -432,6 +435,7 @@ def _run_gateway(
         provider_snapshot_loader=_load_gateway_provider_snapshot,
         preset_catalog_loader=load_model_preset_catalog,
         provider_signature=provider_snapshot.signature,
+        provider_observer=_attach_usage_observer,
         local_trigger_store=trigger_store,
         hooks=[_MCPReadinessHook(mcp_provider)],
         hook_factories=[create_file_edit_activity_hook],
