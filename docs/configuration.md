@@ -1388,7 +1388,7 @@ Generation presets are named, standalone settings that apply to whichever model 
 | `contextWindowTokens` | Optional context-window override. Omit or set `null` to keep the selected model's own window. |
 | `temperature` | Sampling temperature. |
 | `reasoningEffort` | Optional reasoning/thinking setting. Provider support varies. |
-| `baseStyle` | How replies read: `professional`, `friendly`, `candid`, `seductive`, `efficient`, or `cynical`. Default `friendly`. |
+| `baseStyle` | How replies read: `professional`, `friendly`, `candid`, `charming`, `seductive`, `efficient`, or `cynical`. Default `friendly`. |
 | `warmth` | Emotional distance: `very_cold`, `cold`, `neutral`, `warm`, or `very_warm`. Default `neutral`. |
 | `enthusiasm` | Energy level: `more`, `balanced`, or `less`. Default `balanced`. |
 | `emojis` | Emoji frequency: `more`, `balanced`, or `less`. Default `balanced`. |

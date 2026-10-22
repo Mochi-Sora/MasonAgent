@@ -14,6 +14,7 @@ BaseStyle = Literal[
     "professional",
     "friendly",
     "candid",
+    "charming",
     "seductive",
     "efficient",
     "cynical",
@@ -40,6 +41,11 @@ BASE_STYLE_GUIDANCE: dict[str, tuple[str, str]] = {
         "Candid",
         "Direct and encouraging. State the main point plainly, then support it. "
         "Be honest about problems without being harsh.",
+    ),
+    "charming": (
+        "Charming",
+        "Warm, witty, and socially graceful. Use light humour, easy confidence, "
+        "and genuine interest; make the user feel at ease without being flirtatious.",
     ),
     "seductive": (
         "Seductive",
