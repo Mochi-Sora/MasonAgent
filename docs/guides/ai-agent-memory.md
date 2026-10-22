@@ -52,7 +52,7 @@ Memory lives in the active workspace, usually under `~/.mason/workspace/`.
 
 - Use one workspace per project or personal context.
 - Structured memory is curated automatically in `memory/memory.db`; set
-  `agents.defaults.memory.consolidation.modelOverride` to a cheaper model preset
+  `agents.defaults.memory.consolidation.modelOverride` to a cheaper model ID
   if consolidation should not use the main model.
 - Back up the workspace's `memory/` directory and the compressed backups in
   `backups/memory/`.

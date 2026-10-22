@@ -117,8 +117,10 @@ restores the classic always-loaded behaviour.
 ### Sessions, providers, interface
 
 - **Sessions** are persisted per conversation (`<config-dir>/sessions/<workspace-id>/`), with
-  TTL-based idle auto-compaction and `/compact`. Compaction writes an archived summary that
-  the next turns replay in place of the compacted history.
+  TTL-based idle auto-compaction and `/compact`. Compaction is a safety valve for oversized
+  turns; when it runs, the archived summary it writes is injected into the system prompt on
+  later turns. Transcript replay is separate and happens only when `sessionReplay` is `tail`
+  or `full`, not in the default `none` mode.
 - **Providers** are pluggable (`anthropic`, OpenAI-compatible and Responses APIs, Azure,
   Bedrock, GitHub Copilot, OpenAI Codex, xAI and more), selected per provider and model;
   consolidation can run on a different model than the conversation.
@@ -167,7 +169,7 @@ Bug reports and design discussion are welcome.
 Mason stands on the work of **[nanobot](https://github.com/HKUDS/nanobot)**, created by
 **Xubin Ren** and the nanobot contributors at **HKUDS**, and released under the MIT License.
 The agent loop, session model, provider layer, channel integrations and the original memory
-design are theirs; the state-first context architecture, the SQLite memory tiers,
+design are theirs; the state-first context architecture, the single-tier SQLite memory store,
 consolidation, and the on-demand capability layer are what Mason builds on top.
 
 Thank you to everyone who wrote, tested and documented the foundation.

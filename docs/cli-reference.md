@@ -79,9 +79,7 @@ Default paths:
 | `mason status --config <path>` | Check a specific config file |
 | `mason status --workspace <path>` | Show status with a workspace override |
 
-Status does not send a model request. On success, run the printed
-`mason agent -m "Hello!"` command to verify network access and credentials. On failure,
-follow the printed `mason onboard --wizard` route.
+It shows the config path, workspace path, active model, and provider summary without calling a model. On success, run the printed `mason agent -m "Hello!"` command to verify network access and credentials. On failure, follow the printed `mason onboard --wizard` route.
 
 ## Agent CLI
 
@@ -224,20 +222,6 @@ http://127.0.0.1:8900
 Public binds (`0.0.0.0` or `::`) require `api.apiKey`; send it as a Bearer token on API routes.
 
 See [`openai-api.md`](./openai-api.md) for request examples.
-
-## Status
-
-```bash
-mason status
-```
-
-Shows the config path, workspace path, active model, and provider summary without calling a model.
-
-| Command | Description |
-|---|---|
-| `mason status` | Inspect the default instance |
-| `mason status --config <path>` | Inspect a specific config |
-| `mason status --config <path> --workspace <path>` | Inspect a specific config with a workspace override |
 
 ## Channels
 

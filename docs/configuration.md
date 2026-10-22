@@ -2342,7 +2342,7 @@ Consolidation is the periodic LLM pass that curates structured memory: it promot
         "consolidation": {
           "enabled": true,
           "intervalH": 2,
-          "modelOverride": "fast"
+          "modelOverride": "gpt-4.1-mini"
         }
       }
     }
