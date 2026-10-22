@@ -2,7 +2,7 @@
 
 The user message is persisted before the run (``_persist_user_message_early``)
 and skipped by the save boundary, so the backup tier must include it explicitly;
-otherwise ``recall_backup`` only ever sees assistant replies.
+otherwise ``recall_journal`` only ever sees assistant replies.
 """
 
 from __future__ import annotations

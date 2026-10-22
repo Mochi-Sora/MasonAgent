@@ -351,7 +351,7 @@ def test_bundled_skills_use_agent_owned_paths(tmp_path: Path) -> None:
 
     assert memory is not None
     assert "recall_memory" in memory
-    assert "recall_backup" in memory
+    assert "recall_journal" in memory
     assert "history.jsonl" not in memory
     assert update_setup is not None
     assert "<agent-workspace>/skills/update/SKILL.md" in update_setup

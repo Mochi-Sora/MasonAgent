@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from mason.agent.tools.context import ToolContext
-from mason.agent.tools.memory import RecallBackupTool, RecallMemoryTool, UpdateStateTool
+from mason.agent.tools.memory import RecallJournalTool, RecallMemoryTool, UpdateStateTool
 from mason.config.schema import ToolsConfig
 from mason.memory.state import MemoryState
 from mason.memory.store import MemoryDB
@@ -18,7 +18,7 @@ _NOW = datetime(2026, 1, 2, 12, 0, 0)
 _TOOL_NAMES = {
     UpdateStateTool: "update_state",
     RecallMemoryTool: "recall_memory",
-    RecallBackupTool: "recall_backup",
+    RecallJournalTool: "recall_journal",
 }
 
 
@@ -195,29 +195,29 @@ async def test_recall_memory_is_fast_on_large_graph(db: MemoryDB) -> None:
     assert elapsed < 0.25, f"recall_memory took {elapsed:.3f}s"
 
 
-# -- recall_backup ------------------------------------------------------------
+# -- recall_journal ------------------------------------------------------------
 
 
-async def test_recall_backup_lists_latest_turns(db: MemoryDB) -> None:
+async def test_recall_journal_lists_latest_turns(db: MemoryDB) -> None:
     db.capture_messages("cli:1", [_msg("user", "first question", _iso("2026-01-02", 9))])
     db.capture_messages("cli:2", [_msg("assistant", "latest answer", _iso("2026-01-02", 11))])
-    result = await RecallBackupTool(db).execute()
+    result = await RecallJournalTool(db).execute()
     assert "latest answer" in result
     assert "first question" in result
     assert "cli:2" in result
     assert result.index("latest answer") < result.index("first question")
 
 
-async def test_recall_backup_searches_and_filters_session(db: MemoryDB) -> None:
+async def test_recall_journal_searches_and_filters_session(db: MemoryDB) -> None:
     db.capture_messages("cli:1", [_msg("user", "sourdough ratio", _iso("2026-01-02", 9))])
     db.capture_messages("cli:2", [_msg("user", "sourdough schedule", _iso("2026-01-02", 10))])
-    tool = RecallBackupTool(db)
+    tool = RecallJournalTool(db)
     assert "sourdough ratio" in await tool.execute(query="sourdough", session="cli:1")
     assert "sourdough schedule" not in await tool.execute(query="sourdough", session="cli:1")
 
 
-async def test_recall_backup_distinguishes_no_match_from_empty(db: MemoryDB) -> None:
-    tool = RecallBackupTool(db)
+async def test_recall_journal_distinguishes_no_match_from_empty(db: MemoryDB) -> None:
+    tool = RecallJournalTool(db)
     assert await tool.execute() == "The verbatim journal is empty."
     db.capture_messages("cli:1", [_msg("user", "something", _iso("2026-01-02"))])
     assert await tool.execute(query="zzz_absent") == (
@@ -225,7 +225,7 @@ async def test_recall_backup_distinguishes_no_match_from_empty(db: MemoryDB) -> 
     )
 
 
-async def test_recall_backup_skips_tool_payloads(db: MemoryDB) -> None:
+async def test_recall_journal_skips_tool_payloads(db: MemoryDB) -> None:
     db.capture_messages(
         "cli:1",
         [
@@ -233,20 +233,20 @@ async def test_recall_backup_skips_tool_payloads(db: MemoryDB) -> None:
             {"role": "tool", "content": "SECRET_PAYLOAD", "timestamp": _iso("2026-01-02")},
         ],
     )
-    assert "SECRET_PAYLOAD" not in await RecallBackupTool(db).execute()
+    assert "SECRET_PAYLOAD" not in await RecallJournalTool(db).execute()
 
 
-async def test_recall_backup_truncates_long_turns(db: MemoryDB) -> None:
+async def test_recall_journal_truncates_long_turns(db: MemoryDB) -> None:
     db.capture_messages("cli:1", [_msg("user", "start " + "x" * 5_000, _iso("2026-01-02"))])
-    result = await RecallBackupTool(db).execute(query="start")
+    result = await RecallJournalTool(db).execute(query="start")
     assert "(truncated)" in result
     assert len(result) < 3_000
 
 
-async def test_recall_backup_respects_limit(db: MemoryDB) -> None:
+async def test_recall_journal_respects_limit(db: MemoryDB) -> None:
     for index in range(5):
         db.capture_messages(
             "cli:1", [_msg("user", f"turn {index}", _iso("2026-01-02", 9 + index))],
         )
-    result = await RecallBackupTool(db).execute(limit=2)
+    result = await RecallJournalTool(db).execute(limit=2)
     assert result.count("- [") == 2

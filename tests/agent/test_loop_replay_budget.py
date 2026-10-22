@@ -1,7 +1,7 @@
 """Session replay budget: a long conversation must not grow the prompt without bound.
 
 The full session stays on disk and in the backup tier; only the most recent
-turns are replayed, and the rest is recallable with ``recall_backup``.
+turns are replayed, and the rest is recallable with ``recall_journal``.
 """
 
 from __future__ import annotations

@@ -2236,7 +2236,7 @@ class AgentLoop:
         window so small windows keep room for the system prompt, the tool
         schemas, and the response. Turns that fall outside the budget leave the
         prompt but stay in the session file and in the memory backup, where
-        ``recall_backup`` can retrieve them verbatim.
+        ``recall_journal`` can retrieve them verbatim.
         """
         configured = self._session_replay_max_tokens
         if configured <= 0:

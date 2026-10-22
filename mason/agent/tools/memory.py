@@ -123,7 +123,7 @@ class RecallMemoryTool(Tool):
     ) -> str:
         if not query.strip() and not (kind or "").strip():
             return ToolResult.error(
-                "Error: query or kind is required (use recall_backup to list recent turns).",
+                "Error: query or kind is required (use recall_journal to list recent turns).",
             )
         hits = self._db.search_memories(query, limit=limit, kind=kind)
         if not hits:
@@ -157,8 +157,8 @@ class RecallMemoryTool(Tool):
         required=[],
     )
 )
-class RecallBackupTool(Tool):
-    """Search the recent verbatim turn-by-turn backup."""
+class RecallJournalTool(Tool):
+    """Search the permanent verbatim journal."""
 
     def __init__(self, db: MemoryDB):
         self._db = db
@@ -171,12 +171,12 @@ class RecallBackupTool(Tool):
     def create(cls, ctx: ToolContext) -> Tool:
         db = ctx.memory_db
         if db is None:
-            raise RuntimeError("RecallBackupTool requires an initialized memory store")
+            raise RuntimeError("RecallJournalTool requires an initialized memory store")
         return cls(db)
 
     @property
     def name(self) -> str:
-        return "recall_backup"
+        return "recall_journal"
 
     @property
     def description(self) -> str:

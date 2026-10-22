@@ -28,7 +28,7 @@ DEFAULT_ALWAYS_VISIBLE: frozenset[str] = frozenset({
     FIND_CAPABILITIES_TOOL_NAME,
     "update_state",
     "recall_memory",
-    "recall_backup",
+    "recall_journal",
 })
 
 _CATALOG_MAX_ENTRIES = 60

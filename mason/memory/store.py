@@ -5,7 +5,7 @@ It holds two representations of the same memory, not two lifetimes:
 
 * ``episodes`` — the verbatim journal. Every persisted turn is captured as-is
   (minus tool payloads), indexed with FTS5, and kept indefinitely. It is the
-  source of truth that consolidation reads and that ``recall_backup`` searches.
+  source of truth that consolidation reads and that ``recall_journal`` searches.
 * ``memories`` + ``edges`` — structured knowledge derived from the journal:
   facts, preferences, decisions, events, summaries, open knowledge gaps, and
   the relationships between them. Only the consolidation pass writes it.
