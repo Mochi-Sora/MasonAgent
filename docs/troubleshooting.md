@@ -298,7 +298,7 @@ See [`chat-apps.md`](./chat-apps.md) for channel-specific setup.
 | Symptom | Check |
 |---|---|
 | Conversation context seems wrong | Confirm the active workspace and session. CLI sessions and chat app threads may use different sessions. |
-| Memory does not update immediately | Consolidation is periodic; recent turns remain searchable through `recall_backup` and session history until consolidation promotes them. |
+| Memory does not update immediately | Consolidation is periodic; recent turns remain searchable through `recall_journal` and session history until consolidation promotes them. |
 | Sessions disappear after changing `--config` | Sessions follow the config directory at `<config-dir>/sessions/<workspace-id>/`; use the original config path or copy that `sessions/` directory into the new config directory while mason is stopped. |
 | Sessions disappear after moving a workspace | Keep the workspace's `.mason/workspace-id` file with the move or backup. If it was lost, restore that marker from backup before starting mason. |
 | You want one shared session across devices | Set `agents.defaults.unifiedSession` intentionally; otherwise keep separate sessions. |

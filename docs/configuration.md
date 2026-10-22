@@ -1154,7 +1154,7 @@ ollama run llama3.2
 }
 ```
 
-> `provider: "auto"` also works when `providers.ollama.apiBase` is configured, but pinning `"provider": "ollama"` inside the preset is the clearest option.
+> `provider: "auto"` also works when `providers.ollama.apiBase` is configured, but setting `agents.defaults.provider: "ollama"` is the clearest option.
 
 </details>
 
@@ -1187,7 +1187,7 @@ ollama run llama3.2
 }
 ```
 
-> **Note:** Set `apiKey` to `null` for LM Studio since it runs locally and doesn't require authentication. The model name should match what's shown in the LM Studio UI. `provider: "auto"` also works when `providers.lm_studio.apiBase` is configured, but pinning `"provider": "lm_studio"` inside the preset is the clearest option.
+> **Note:** Set `apiKey` to `null` for LM Studio since it runs locally and doesn't require authentication. The model name should match what's shown in the LM Studio UI. `provider: "auto"` also works when `providers.lm_studio.apiBase` is configured, but setting `agents.defaults.provider: "lm_studio"` is the clearest option.
 
 </details>
 
@@ -1224,7 +1224,7 @@ ollama run llama3.2
 
 > **Note:** Replace `qwen3-32b` with the model ID from Atomic Chat. Set `apiKey` to `null` if your Atomic Chat server does not require a key. If it does, set `apiKey` (or the `ATOMIC_CHAT_API_KEY` environment variable) to the value Atomic Chat expects.
 
-> `provider: "auto"` also works when `providers.atomic_chat.apiBase` is configured, but pinning `"provider": "atomic_chat"` inside the preset is the clearest option.
+> `provider: "auto"` also works when `providers.atomic_chat.apiBase` is configured, but setting `agents.defaults.provider: "atomic_chat"` is the clearest option.
 
 </details>
 
@@ -2262,7 +2262,7 @@ The deprecated `agents.defaults.failOnToolError` field is silently ignored when 
 
 ## Session Replay Budget
 
-By default a turn carries no conversation history at all: the prompt is identity, the working state, and the current message. Earlier turns stay in the session file and in the permanent verbatim journal, where `recall_backup` retrieves them, so the model remembers through state and memory rather than through a growing transcript. `tail` and `full` are available when you want history replayed.
+By default a turn carries no conversation history at all: the prompt is identity, the working state, and the current message. Earlier turns stay in the session file and in the permanent verbatim journal, where `recall_journal` retrieves them, so the model remembers through state and memory rather than through a growing transcript. `tail` and `full` are available when you want history replayed.
 
 ```json
 {
@@ -2311,7 +2311,7 @@ Idle compaction is a backup, not a routine. A session that has been idle for lon
 How it works:
 1. **Idle detection**: On each idle tick (~1 s), checks whether an idle-session scan is due. By default, the full scan runs at most once per minute.
 2. **Size gate**: A session is compacted only when its next prompt would fill at least half of the model's context window.
-3. **Session preservation**: The complete session history remains stored for later inspection and reuse. Archived turns stop being replayed and can be recalled verbatim with `recall_backup`.
+3. **Session preservation**: The complete session history remains stored for later inspection and reuse. Archived turns stop being replayed and can be recalled verbatim with `recall_journal`.
 
 > [!NOTE]
 > Auto compact shortens the context sent to the model without deleting the session's structured message history.
@@ -2325,7 +2325,7 @@ mason keeps memory in one SQLite database under `<workspace>/memory/memory.db`. 
 | Representation | Behavior |
 |---------|----------|
 | Structured memory | Durable facts, preferences, decisions, events, summaries, relationships, and open knowledge gaps. Only consolidation writes it; the agent searches it with `recall_memory` (including `kind="gap"`). |
-| Verbatim journal | Every turn of every conversation captured verbatim and kept indefinitely. The agent searches it with `recall_backup`; an empty query lists the latest turns. |
+| Verbatim journal | Every turn of every conversation captured verbatim and kept indefinitely. The agent searches it with `recall_journal`; an empty query lists the latest turns. |
 | Working state | A compact scratchpad in `memory/state.md` (about 2 KB) injected into the system prompt. The agent rewrites it with `update_state`; the daily rollover empties it in place. |
 
 Consolidation is the periodic LLM pass that curates structured memory: it promotes worthwhile journal entries, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and writes small generated skills under `skills/<name>/SKILL.md`. It runs on a cron system job. The daily rollover runs only a narrow dedupe/contradiction pass, then writes a compressed, lossless full copy of the database to `memory.backupDir` (default `<workspace>/backups/memory/`), empties the working state, and runs SQLite optimisation. It never purges the journal.
@@ -2458,7 +2458,7 @@ CLI Apps use the same skills-only package layout while their installer manages e
 
 ## Tool and Skill Discovery
 
-By default, mason sends only the core tools to the model: `find_capabilities`, `update_state`, `recall_memory`, and `recall_backup`. Every other tool — files, shell, web, scheduling, sessions, image generation, MCP tools — stays registered but hidden until the model calls `find_capabilities(need="...")` (optionally with `kind="tool"` or `kind="skill"`), which loads the matching tools for the rest of that run and returns the best-matching skill's instructions.
+By default, mason sends only the core tools to the model: `find_capabilities`, `update_state`, `recall_memory`, and `recall_journal`. Every other tool — files, shell, web, scheduling, sessions, image generation, MCP tools — stays registered but hidden until the model calls `find_capabilities(need="...")` (optionally with `kind="tool"` or `kind="skill"`), which loads the matching tools for the rest of that run and returns the best-matching skill's instructions.
 
 ```json
 {

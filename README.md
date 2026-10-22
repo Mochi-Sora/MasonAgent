@@ -80,17 +80,16 @@ flowchart TD
 |---|---|---|---|---|
 | Working state | `memory/state.md` | Cleared at the daily rollover | The model | Injected into the prompt |
 | Structured knowledge | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
-| Verbatim journal | `memory/memory.db` | Durable, unbounded | Every turn, verbatim | `recall_backup` |
+| Verbatim journal | `memory/memory.db` | Durable, unbounded | Every turn, verbatim | `recall_journal` |
 
 - **One store.** The database is the single memory tier: a permanent verbatim journal plus
   structured facts, events, summaries, relationships, and open knowledge gaps derived from it.
   Nothing is purged on a schedule; the backup is for corruption recovery, not a second tier.
-- **Consolidation is the dream pass.** Every two hours, and once more before the daily
-  rollover, a model pass (the main model, or a cheaper model you choose) reviews new journal
-  entries and returns a bounded JSON plan: promote durable facts, deduplicate, resolve or flag
-  contradictions, connect related memories, synthesise broader memories, assess retention,
-  record knowledge gaps, and distil tiny reusable skills into `skills/`. It is cursor-gated,
-  so an idle agent costs nothing.
+- **Consolidation is the memory pass.** Every two hours, a model pass (the main model, or a
+  cheaper model you choose) reviews new journal entries and returns a bounded JSON plan:
+  promote durable facts, deduplicate, resolve or flag contradictions, connect related
+  memories, synthesise broader memories, assess retention, record knowledge gaps, and distil
+  tiny reusable skills into `skills/`. It is cursor-gated, so an idle agent costs nothing.
 - **The rollover** first runs a narrow nightly pass — deduplicate structured memories and flag
   contradictions, nothing else — then writes a compressed, lossless full copy of the database to
   `<workspace>/backups/memory/`, empties `state.md` in place, and runs SQLite optimisation. The
@@ -103,7 +102,7 @@ flowchart TD
 ### Capabilities on demand
 
 Only a handful of tools are always in the prompt (`find_capabilities`, `update_state`,
-`recall_memory`, `recall_backup`). Everything else — files, shell, web, schedules, sessions,
+`recall_memory`, `recall_journal`). Everything else — files, shell, web, schedules, sessions,
 image generation, MCP tools — is registered but hidden until the model asks for it:
 
 ```text

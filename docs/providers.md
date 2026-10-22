@@ -10,7 +10,7 @@ For every setup, answer three questions:
 2. What model name does that provider expect?
 3. Does the provider need `apiKey`, `apiBase`, OAuth login, cloud credentials, or only a local server URL?
 
-Prefer a named `modelPresets` entry for the model/provider pair, then select it with `agents.defaults.modelPreset`. Direct `agents.defaults.provider` and `agents.defaults.model` still work for existing configs, but presets make runtime `/model` switching and fallback chains clearer. Pin `provider` inside the preset while setting up; you can switch back to `"auto"` later.
+Select the model with `agents.defaults.model` and `agents.defaults.provider` (or `/model` in chat). Generation settings are separate: point `agents.defaults.modelPreset` at a top-level `modelPresets` entry, or apply one in chat with `/presets <name>`. Presets are settings-only and never bind a model or provider, so switching models never changes your temperature, style, or token limits.
 
 ## Choose a Provider Without Guessing
 
@@ -18,11 +18,11 @@ The docs show concrete provider names so the JSON is copyable, not because mason
 
 | If you have... | Configure... |
 |---|---|
-| An API key from a hosted provider or gateway | That provider's `providers.<name>.apiKey`, then a preset with that provider name and a model ID from that service. |
-| An OpenCode Zen or Go key | `providers.opencodeZen.apiKey` or `providers.opencodeGo.apiKey`, then a preset with `provider: "opencode_zen"` or `provider: "opencode_go"`. |
+| An API key from a hosted provider or gateway | That provider's `providers.<name>.apiKey`, then `agents.defaults.provider` plus a model ID from that service. |
+| An OpenCode Zen or Go key | `providers.opencodeZen.apiKey` or `providers.opencodeGo.apiKey`, then `agents.defaults.provider: "opencode_zen"` or `"opencode_go"`. |
 | A company proxy or regional endpoint | The matching provider block plus `apiBase` if the proxy gives you a URL. |
 | A local OpenAI-compatible server | A local provider block such as `ollama`, `vllm`, `lmStudio`, or `custom`, usually with `apiBase`. |
-| An OAuth-based account | Run the matching `mason provider login ...` command, then select that provider explicitly in a preset. |
+| An OAuth-based account | Run the matching `mason provider login ...` command, then set `agents.defaults.provider` (or select it once with `/model <provider> <model>`). |
 | No provider yet | Pick one outside mason based on account access, pricing, regional availability, privacy requirements, and the model IDs you need. Then come back with its key and model ID. |
 
 ## Minimal Shape
@@ -59,8 +59,8 @@ These fields answer different questions:
 
 | Field | Where it lives | Meaning |
 |---|---|---|
-| `provider` | `modelPresets.<name>.provider` | Which mason provider adapter should send the request. |
-| `model` | `modelPresets.<name>.model` | The model ID expected by that provider or gateway. |
+| `provider` | `agents.defaults.provider` | Which mason provider adapter should send the request. `/model <provider> <model>` overrides it per session. |
+| `model` | `agents.defaults.model` | The model ID expected by that provider or gateway. |
 | `apiKey` | `providers.<provider>.apiKey` | Credential for that provider. Use `${ENV_VAR}` for secrets. |
 | `apiBase` | `providers.<provider>.apiBase` | HTTP base URL of the provider endpoint. |
 | `proxy` | `providers.<provider>.proxy` | Optional HTTP proxy for this provider only. Supported for OpenAI-compatible providers, OpenAI Codex, and xAI OAuth. |

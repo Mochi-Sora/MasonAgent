@@ -45,7 +45,7 @@ What do I prefer for release notes?
 ```
 
 The agent searches structured memory with `recall_memory` (and can fall back to
-`recall_backup` for exact wording from the unbounded journal) before answering.
+`recall_journal` for exact wording from the unbounded journal) before answering.
 Memory lives in the active workspace, usually under `~/.mason/workspace/`.
 
 ## Production notes
@@ -57,7 +57,7 @@ Memory lives in the active workspace, usually under `~/.mason/workspace/`.
 - Back up the workspace's `memory/` directory and the compressed backups in
   `backups/memory/`.
 - The verbatim journal is unbounded: old turns stay searchable with
-  `recall_backup`. Daily `.db.gz` backups are for disaster recovery and are
+  `recall_journal`. Daily `.db.gz` backups are for disaster recovery and are
   retained according to `memory.snapshotKeep` (default 7).
 - The memory subsystem is SQLite-based and does not support Windows.
 
@@ -71,7 +71,7 @@ Memory lives in the active workspace, usually under `~/.mason/workspace/`.
 ## Troubleshooting
 
 - If memory feels stale, remember consolidation is periodic; the agent can still
-  search the full journal with `recall_backup`.
+  search the full journal with `recall_journal`.
 - If a fact must survive, ask the agent to remember it; consolidation decides
   what becomes structured memory from the journal.
 - If a new session lacks context, confirm it uses the same workspace.

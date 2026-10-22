@@ -18,7 +18,7 @@ knowledge derived from it.
 |----------------|-----------|----------|------------|-----------|
 | Working state | `memory/state.md` (~2 KB) | Cleared at each daily rollover | The model | Injected into the system prompt every turn |
 | Structured memory | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
-| Verbatim journal | `memory/memory.db` | Durable and unbounded | Every turn, verbatim | `recall_backup` |
+| Verbatim journal | `memory/memory.db` | Durable and unbounded | Every turn, verbatim | `recall_journal` |
 
 Two more surfaces sit alongside them: `memory/DATES.md` holds dated commitments
 (searched on demand with `search_dates`, because a date is the whole point and
@@ -54,7 +54,7 @@ Every turn of every conversation is captured verbatim in `memory/memory.db` as a
 day-stamped episode. This is the raw, complete record — nothing is summarized on
 the way in, and it is never purged automatically.
 
-The model searches it with `recall_backup`; an empty query lists the latest turns.
+The model searches it with `recall_journal`; an empty query lists the latest turns.
 It is the place to look for exact wording, details, or events that structured
 memory has not kept. Because the journal is unbounded, a question about something
 from months ago remains answerable.
@@ -63,7 +63,7 @@ Only the newest turns of a long conversation stay in the model's context each tu
 when `agents.defaults.sessionReplay` is `tail` (the token budget,
 `sessionReplayMaxTokens`, defaults to 32,000 tokens). The default is `none`: no
 conversation history at all, so state and memory are the only continuity and
-`recall_backup` is how earlier turns come back.
+`recall_journal` is how earlier turns come back.
 
 Because the working state carries the continuity, the framework keeps the model
 honest about it: after any turn that ends without an `update_state` call, the next
@@ -80,7 +80,7 @@ never hidden behind capability discovery):
   `recall_memory` before answering questions about the user's past, earlier
   decisions, or ongoing work.
 - **Reach for the journal.** When exact wording or detail matters, it should use
-  `recall_backup` rather than guessing.
+  `recall_journal` rather than guessing.
 - **Write the working state in-turn.** When the user asks it to remember something,
   or when a decision or preference appears, it updates `memory/state.md` right away
   with `update_state`. The journal keeps a verbatim copy regardless, and
@@ -91,11 +91,11 @@ never hidden behind capability discovery):
 
 ## Consolidation
 
-Consolidation is the slow, thoughtful layer — the pass that replaced the older
-Dream process. It turns the permanent journal into durable knowledge. It runs on a
-cron system job (every two hours by default), and its output is written back
-through the same store the model reads from. The daily rollover runs a narrower
-dedupe/contradiction pass before the backup.
+Consolidation is the slow, thoughtful layer. It turns the permanent journal
+into durable knowledge. It runs on a cron system job (every two hours by
+default), and its output is written back through the same store the model reads
+from. The daily rollover runs a narrower dedupe/contradiction pass before the
+backup.
 
 In one pass it:
 
@@ -290,7 +290,7 @@ sqlite3 /tmp/verbatim.db "select count(*) from episodes;"
 - **Windows is unsupported** for the memory subsystem. The rest of mason still
   runs there; memory is skipped rather than emulated.
 - **Speed.** Retrieval is served by SQLite with FTS5 indexes, so a
-  `recall_memory` or `recall_backup` call is a local index lookup, not a scan of a
+  `recall_memory` or `recall_journal` call is a local index lookup, not a scan of a
   growing file. When FTS5 is unavailable in the local SQLite build, the store falls
   back to bounded `LIKE` matching. Consolidation and the daily rollover run
   `PRAGMA optimize`, merge the FTS indexes, and checkpoint the WAL.

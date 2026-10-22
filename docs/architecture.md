@@ -124,7 +124,7 @@ Important files:
 
 Tool behavior is part of the model contract. Keep user-visible tool names, schemas, and error messages stable unless a change is intentional.
 
-With `tools.lazyCapabilities.enabled` (the default), only `find_capabilities`, `update_state`, `recall_memory`, and `recall_backup` are sent on every request. The capability gate hides the remaining tools and skills until the model finds them through `find_capabilities`, and the names-only catalog lives in that tool's description rather than the system prompt.
+With `tools.lazyCapabilities.enabled` (the default), only `find_capabilities`, `update_state`, `recall_memory`, and `recall_journal` are sent on every request. The capability gate hides the remaining tools and skills until the model finds them through `find_capabilities`, and the names-only catalog lives in that tool's description rather than the system prompt.
 
 ## Config and Paths
 
@@ -170,7 +170,7 @@ Session history is the near-term conversation replay. Memory is the longer-term 
 | Session JSONL files | `<config-dir>/sessions/<workspace-id>/` |
 | Working state | `<workspace>/memory/state.md` (about 2 KB, injected into the system prompt, cleared at rollover) |
 | Structured memory | Curated facts, preferences, decisions, summaries, relationships, and open gaps in `<workspace>/memory/memory.db` (searched with `recall_memory`) |
-| Verbatim journal | Every captured turn in the same database, kept indefinitely (searched with `recall_backup`) |
+| Verbatim journal | Every captured turn in the same database, kept indefinitely (searched with `recall_journal`) |
 | Compressed full backups | `<workspace>/backups/memory/memory-YYYY-MM-DD.db.gz`, written before each rollover |
 | Archived summaries | `<workspace>/memory/history.jsonl`, written by session compaction |
 | Bootstrap identity files | `<workspace>/SOUL.md`, `<workspace>/USER.md`, templates under `mason/templates/` |

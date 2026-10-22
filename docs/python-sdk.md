@@ -635,7 +635,7 @@ Do not expose exported snapshots directly to chat users.
 
 File-level helpers for the workspace `memory/` directory. Long-term memory
 itself is curated in `memory/memory.db` by consolidation and read by the agent
-through the `recall_memory` and `recall_backup` tools.
+through the `recall_memory` and `recall_journal` tools.
 
 | Method | Description |
 |--------|-------------|
