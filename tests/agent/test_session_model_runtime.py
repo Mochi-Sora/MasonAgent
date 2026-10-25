@@ -78,8 +78,10 @@ async def test_sessions_run_concurrently_with_isolated_models(tmp_path) -> None:
 
     assert fast_reply is not None and fast_reply.content == "reply from fast-model"
     assert deep_reply is not None and deep_reply.content == "reply from deep-model"
-    assert fast.calls == ["fast-model"]
-    assert deep.calls == ["deep-model"]
+    # The framework's state writer makes one additional call per turn, but it
+    # must use the same session-scoped runtime as the reply.
+    assert fast.calls and set(fast.calls) == {"fast-model"}
+    assert deep.calls and set(deep.calls) == {"deep-model"}
     assert base.calls == []
     assert loop.provider is base
     assert loop.model == "base-model"
@@ -104,8 +106,8 @@ async def test_sessions_run_concurrently_with_isolated_models(tmp_path) -> None:
 
     assert override_reply is not None
     assert override_reply.content == "reply from override-model"
-    assert override.calls == ["override-model"]
-    assert fast.calls == ["fast-model"]
+    assert override.calls and set(override.calls) == {"override-model"}
+    assert fast.calls and set(fast.calls) == {"fast-model"}
 
 
 @pytest.mark.asyncio

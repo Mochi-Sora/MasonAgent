@@ -59,6 +59,7 @@ from mason.config.schema import AgentDefaults, GenerationPresetConfig
 from mason.events import NO_EVENTS, AgentEvent, EventSink
 from mason.llm_usage.context import source_from_request
 from mason.memory.state import DEFAULT_STATE_MAX_CHARS
+from mason.memory.state_writer import StateWriter
 from mason.providers.base import LLMProvider, LLMUsage, ProviderConversationState
 from mason.providers.factory import ProviderSnapshot
 from mason.providers.model_catalog import (
@@ -75,7 +76,6 @@ from mason.runtime_context import (
     append_runtime_context,
     resolve_runtime_context,
     runtime_context_blocks_from_metadata,
-    wrap_runtime_context_lines,
 )
 from mason.security.workspace_access import (
     WorkspaceScopeResolver,
@@ -86,7 +86,7 @@ from mason.session import turn_continuation
 from mason.session.automation_turns import automation_history_overrides
 from mason.session.goal_state import goal_state_runtime_lines, sustained_goal_active
 from mason.session.history_visibility import HIDDEN_HISTORY_META
-from mason.session.keys import UNIFIED_SESSION_KEY, remember_last_channel
+from mason.session.keys import UNIFIED_SESSION_KEY, is_internal_session, remember_last_channel
 from mason.session.manager import SESSION_CACHE_MAX_SIZE, Session, SessionManager
 from mason.session.model_selection import (
     SESSION_MODEL_METADATA_KEY,
@@ -133,10 +133,6 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 _SUBAGENT_PROVIDER_TASK_META = "subagent_provider_task_id"
 _SUBAGENT_TERMINAL_WAIT_SECONDS = 300.0
-# Consecutive user turns that ended without an update_state call. While this
-# is non-zero the next turn carries a short state-check note, so the model's
-# state decision is requested every turn even though the update stays optional.
-_STATE_STALE_TURNS_KEY = "_state_stale_turns"
 
 
 class TurnKind(Enum):
@@ -164,6 +160,7 @@ class TurnContext:
 
     final_content: str | None = None
     all_messages: list[dict[str, Any]] = field(default_factory=list)
+    tool_events: list[dict[str, str]] = field(default_factory=list)
     stop_reason: str = ""
     failure_error_kind: str | None = None
     streamed_content: bool = False
@@ -461,6 +458,8 @@ class AgentLoop:
         self._runtime_context_providers: list[RuntimeContextProvider] = []
         self._active_tasks: dict[str, set[asyncio.Task[Any]]] = {}
         self._discarding_sessions: set[str] = set()
+        self._state_update_tasks: dict[str, asyncio.Task[None]] = {}
+        self.state_writer = StateWriter()
         self._background_tasks: set[asyncio.Task[Any]] = set()
         self._close_lock = asyncio.Lock()
         self._session_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
@@ -800,6 +799,7 @@ class AgentLoop:
             runtime_control=AgentRuntimeControl(self),
             memory_db=self.context.memory_db,
             memory_state=self.context.memory_state,
+            memory_state_store=self.context.memory_state_store,
             skills_loader=self.context.skills,
         )
         loader = ToolLoader()
@@ -1340,6 +1340,7 @@ class AgentLoop:
             workspace=effective_scope.project_path,
             include_memory=session.policy.persist if session is not None else True,
             style=runtime.generation.style,
+            session_key=active_session_key,
         )
         if request_context is None:
             request_ctx = dataclasses.replace(
@@ -1868,6 +1869,7 @@ class AgentLoop:
             errors.append(exc)
         finally:
             self._background_tasks.clear()
+            getattr(self, "_state_update_tasks", {}).clear()
 
         cleanup_steps = (
             self.subagents.close,
@@ -2270,25 +2272,9 @@ class AgentLoop:
             max_tokens=self._replay_budget(runtime),
         )
 
-    def _state_check_block(self, session: Session) -> RuntimeContextBlock | None:
-        """Ask for the state decision when the previous turn skipped it."""
-        if not self.context.memory_db.enabled:
-            return None
-        try:
-            stale = int(session.metadata.get(_STATE_STALE_TURNS_KEY) or 0)
-        except (TypeError, ValueError):
-            stale = 0
-        if stale <= 0:
-            return None
-        content = wrap_runtime_context_lines([
-            "State check: the previous turn did not update memory/state.md. If it produced "
-            "anything durable (a decision, preference, correction, or open question), call "
-            "update_state before you finish this turn.",
-        ])
-        return RuntimeContextBlock(source="memory", content=content)
-
     async def _build_turn(self, ctx: TurnContext) -> None:
         session = ctx.require_session()
+        await self.join_state_update(ctx.session_key)
         runtime = ctx.runtime
         if runtime is None:
             runtime = self.runtime_for_session(session)
@@ -2330,9 +2316,6 @@ class AgentLoop:
         ctx.request_context = self._request_context_for_turn(ctx)
         if ctx.kind is TurnKind.USER:
             ctx.runtime_context_blocks = await self._resolve_runtime_context_for_turn(ctx)
-            state_check = self._state_check_block(session)
-            if state_check is not None:
-                ctx.runtime_context_blocks.append(state_check)
         staged_provider_state = False
         if (
             # Provider continuation replays the provider's own accumulated items,
@@ -2425,6 +2408,7 @@ class AgentLoop:
             )
         ctx.final_content = result.final_content
         ctx.all_messages = result.messages
+        ctx.tool_events = list(result.tool_events)
         ctx.summary_checkpoint = result.summary_checkpoint
         ctx.provider_compaction_applied = result.provider_compaction_applied
         ctx.stop_reason = result.stop_reason
@@ -2469,7 +2453,6 @@ class AgentLoop:
             summary_checkpoint=None if ctx.ephemeral else ctx.summary_checkpoint,
             input_persisted_early=ctx.input_persisted_early,
             capture_start=ctx.capture_start,
-            count_state_discipline=ctx.kind is TurnKind.USER and not ctx.ephemeral,
         )
         if (
             not ctx.ephemeral
@@ -2483,6 +2466,7 @@ class AgentLoop:
         self._clear_pending_user_turn(session)
         self._clear_runtime_checkpoint(session)
         self.sessions.save(session)
+        self._schedule_state_update(ctx)
         if not ctx.ephemeral:
             await self.runtime_event_publisher.session_turn_persisted(
                 ctx.msg,
@@ -2577,7 +2561,6 @@ class AgentLoop:
         summary_checkpoint: SessionSummaryCheckpoint | None = None,
         input_persisted_early: bool = False,
         capture_start: int | None = None,
-        count_state_discipline: bool = False,
     ) -> None:
         """Commit new-turn messages and an optional summary boundary."""
         declared_tool_call_ids = {
@@ -2596,7 +2579,6 @@ class AgentLoop:
         }
         last_assistant_idx: int | None = None
         saved_followup_ids: set[str] = set()
-        state_updated = False
         checkpoint_boundary = self._validated_checkpoint_boundary(
             summary_checkpoint,
             skip=skip,
@@ -2697,11 +2679,6 @@ class AgentLoop:
                     tc = cast(dict[str, Any], tc_value)
                     if tc.get("id"):
                         declared_tool_call_ids.add(str(tc["id"]))
-                    function = cast(object, tc.get("function"))
-                    if isinstance(function, dict):
-                        function_map = cast(dict[str, Any], function)
-                        if function_map.get("name") == "update_state":
-                            state_updated = True
         if summary_checkpoint is not None and checkpoint_boundary == len(messages):
             session.commit_summary_checkpoint(summary_checkpoint.summary)
         if turn_latency_ms is not None and last_assistant_idx is not None:
@@ -2709,25 +2686,11 @@ class AgentLoop:
         if saved_followup_ids:
             acknowledge_pending_followups(session, saved_followup_ids)
         session.updated_at = datetime.now()
-        if count_state_discipline:
-            self._record_state_discipline(session, updated=state_updated)
         # Messages persisted before this save (the early user message, a
         # subagent follow-up) were never captured; start there so the backup
         # keeps the user's own words, not just the assistant replies.
         start = capture_from if capture_start is None else capture_start
         self._capture_episodes(session, max(0, min(start, len(session.messages))))
-
-    @staticmethod
-    def _record_state_discipline(session: Session, *, updated: bool) -> None:
-        """Track consecutive user turns that ended without a state update."""
-        if updated:
-            session.metadata[_STATE_STALE_TURNS_KEY] = 0
-            return
-        try:
-            stale = int(session.metadata.get(_STATE_STALE_TURNS_KEY) or 0)
-        except (TypeError, ValueError):
-            stale = 0
-        session.metadata[_STATE_STALE_TURNS_KEY] = stale + 1
 
     def _capture_episodes(self, session: Session, start: int) -> None:
         """Best-effort capture of this turn's messages into the memory backup tier."""
@@ -2744,6 +2707,115 @@ class AgentLoop:
         except Exception:
             # The backup tier must never break a live turn; failures are logged only.
             logger.exception("Memory backup capture failed for session {}", session.key)
+
+    # -- framework-maintained session state ---------------------------------
+
+    def _should_schedule_state_update(self, ctx: TurnContext) -> bool:
+        """Return whether this turn should refresh its session state."""
+        session = ctx.session
+        if session is None or ctx.ephemeral or not session.policy.persist:
+            return False
+        if not self.context.memory_db.enabled:
+            return False
+        if is_internal_session(session.key):
+            return False
+        if ctx.stop_reason not in {"completed", "max_iterations"}:
+            return False
+        # An explicit model correction wins for this turn; the framework will
+        # refresh normally on the next turn.
+        if any(
+            event.get("name") == "update_state" and event.get("status") == "ok"
+            for event in ctx.tool_events
+        ):
+            return False
+        content = (ctx.final_content or "").strip()
+        return bool(content) and content != EMPTY_FINAL_RESPONSE_MESSAGE
+
+    @staticmethod
+    def _state_tool_lines(ctx: TurnContext) -> list[str]:
+        lines: list[str] = []
+        for event in ctx.tool_events[-20:]:
+            name = event.get("name") or "tool"
+            status = event.get("status") or "unknown"
+            detail = " ".join((event.get("detail") or "").split())[:220]
+            lines.append(f"- {name}: {status}{f' — {detail}' if detail else ''}")
+        return lines
+
+    def _schedule_state_update(self, ctx: TurnContext) -> None:
+        """Start a background state refresh that the next turn will join."""
+        if not self._should_schedule_state_update(ctx):
+            return
+        runtime = ctx.runtime
+        session = ctx.session
+        if runtime is None or session is None:
+            return
+        session_key = ctx.session_key
+        user_message = (ctx.original_user_text or ctx.msg.content or "").strip()
+        assistant_response = (ctx.final_content or "").strip()
+        tool_lines = self._state_tool_lines(ctx)
+        goal_context = "\n".join(
+            goal_state_runtime_lines(ctx.session.metadata if ctx.session else None)
+        )
+        state = self.context.memory_state_store.for_session(session_key)
+        previous_task = self._state_update_tasks.get(session_key)
+
+        async def _run() -> None:
+            if previous_task is not None and not previous_task.done():
+                try:
+                    await asyncio.shield(previous_task)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    pass
+            result = await self.state_writer.update(
+                state,
+                runtime,
+                session_key=session_key,
+                user_message=user_message,
+                assistant_response=assistant_response,
+                tool_lines=tool_lines,
+                goal_context=goal_context,
+            )
+            if not result.ok:
+                logger.warning(
+                    "State update failed for {}: {}",
+                    session_key,
+                    result.error or "unknown error",
+                )
+
+        task = asyncio.create_task(_run(), name=f"state-update:{session_key}")
+        self._state_update_tasks[session_key] = task
+        self._background_tasks.add(task)
+
+        def _done(done: asyncio.Task[None]) -> None:
+            self._background_tasks.discard(done)
+            if self._state_update_tasks.get(session_key) is done:
+                self._state_update_tasks.pop(session_key, None)
+            if done.cancelled():
+                return
+            exc = done.exception()
+            if exc is not None:
+                logger.opt(exception=exc).error(
+                    "Background state update failed for {}",
+                    session_key,
+                )
+
+        task.add_done_callback(_done)
+
+    async def join_state_update(self, session_key: str) -> None:
+        """Join the pending state refresh for one session, if any."""
+        task = self._state_update_tasks.pop(session_key, None)
+        if task is None:
+            return
+        try:
+            await task
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.opt(exception=True).warning(
+                "State update failed before turn build for {}",
+                session_key,
+            )
 
     def _persist_subagent_followup(self, session: Session, msg: InboundMessage) -> bool:
         """Persist subagent follow-ups before prompt assembly so history stays durable.

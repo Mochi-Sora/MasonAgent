@@ -17,6 +17,10 @@ These commands work inside chat channels and interactive agent sessions:
 | `/presets <name>` | Apply a settings preset to the current session without changing the model |
 | `/skill` | List enabled skills and their descriptions |
 | `/goal <goal>` | Treat the request as a long-running goal |
+| `/state` | Show this session's framework-maintained state |
+| `/state <session>` | Show another session's state by key |
+| `/state list` | List sessions with stored state |
+| `/state clear [session]` | Explicitly clear this or another session's state |
 | `/evaluator-prompt [init]` | Customize the heartbeat notification-gate prompt for this workspace |
 | `/trigger` | Show local trigger usage |
 | `/trigger <name>` | Create a named local trigger for the current chat/session |

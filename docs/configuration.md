@@ -2262,7 +2262,7 @@ The deprecated `agents.defaults.failOnToolError` field is silently ignored when 
 
 ## Session Replay Budget
 
-By default a turn carries no conversation history at all: the prompt is identity, the working state, and the current message. Earlier turns stay in the session file and in the permanent verbatim journal, where `recall_journal` retrieves them, so the model remembers through state and memory rather than through a growing transcript. `tail` and `full` are available when you want history replayed.
+By default a turn carries no conversation history at all: the prompt is identity, the session state, and the current message. Earlier turns stay in the session file and in the permanent verbatim journal, where `recall_journal` retrieves them, so the model remembers through state and memory rather than through a growing transcript. `tail` and `full` are available when you want history replayed.
 
 ```json
 {
@@ -2280,15 +2280,15 @@ By default a turn carries no conversation history at all: the prompt is identity
 | `agents.defaults.sessionReplay` | `none` | How much of the conversation is replayed each turn. `none` replays nothing, `tail` replays the newest turns within the token budget, `full` replays everything since the archive boundary. |
 | `agents.defaults.sessionReplayMaxTokens` | `32000` | Token cap for `tail` mode, clamped to a quarter of the model's context window when that is smaller. `0` removes the cap. Unused when `sessionReplay` is `none` or `full`. |
 
-The budget covers the conversation only: the system prompt, tool schemas, and the working state are accounted for separately. Trimming never deletes anything — messages stay in the session and in the verbatim journal.
+The budget covers the conversation only: the system prompt, tool schemas, and the session state are accounted for separately. Trimming never deletes anything — messages stay in the session and in the verbatim journal.
 
 Provider continuation (Responses-style state) is resumed only in `full` mode: its accumulated items replay the provider's whole thread, which no local budget can bound. In `none` and `tail` mode a stale continuation is dropped, so the request carries exactly what the replay mode allows.
 
-Because memory carries the continuity, the framework watches the model's state discipline: after a turn that ends without an `update_state` call, the next turn carries a short runtime note asking for that decision again. The update itself stays optional — only the decision is enforced. The trim in `tail` mode walks newest-first and stops at the first message that does not fit, so an oversized tool result can make the effective window smaller than the configured number.
+Because memory carries the continuity, the framework refreshes each session's state after every eligible turn. The model does not decide whether an update is needed; it can still correct the state through the capability-gated `update_state` tool. The trim in `tail` mode walks newest-first and stops at the first message that does not fit, so an oversized tool result can make the effective window smaller than the configured number.
 
 ## Auto Compact
 
-Idle compaction is a backup, not a routine. A session that has been idle for longer than the configured threshold is summarized only when its next prompt would otherwise consume at least half of the model's context window, so it stays dormant unless a session is genuinely heavy. The original conversation remains in your saved chat history, but the messages covered by the summary are no longer replayed to the model, and the summary itself is never re-injected into later prompts: the system prompt remains identity plus the working state, while older context is recalled on demand with the memory tools.
+Idle compaction is a backup, not a routine. A session that has been idle for longer than the configured threshold is summarized only when its next prompt would otherwise consume at least half of the model's context window, so it stays dormant unless a session is genuinely heavy. The original conversation remains in your saved chat history, but the messages covered by the summary are no longer replayed to the model, and the summary itself is never re-injected into later prompts: the system prompt remains identity plus the session state, while older context is recalled on demand with the memory tools.
 
 ```json
 {
@@ -2326,9 +2326,9 @@ mason keeps memory in one SQLite database under `<workspace>/memory/memory.db`. 
 |---------|----------|
 | Structured memory | Durable facts, preferences, decisions, events, summaries, relationships, and open knowledge gaps. Only consolidation writes it; the agent searches it with `recall_memory` (including `kind="gap"`). |
 | Verbatim journal | Every turn of every conversation captured verbatim and kept indefinitely. The agent searches it with `recall_journal`; an empty query lists the latest turns. |
-| Working state | A compact scratchpad in `memory/state.md` (about 2 KB) injected into the system prompt. The agent rewrites it with `update_state`; the daily rollover empties it in place. |
+| Session state | A framework-maintained four-section summary in `memory/state/<session>.md` (4 KB default) injected into the system prompt. The framework refreshes it after every turn; it persists until an explicit `/state clear`. |
 
-Consolidation is the periodic LLM pass that curates structured memory: it promotes worthwhile journal entries, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and writes small generated skills under `skills/<name>/SKILL.md`. It runs on a cron system job. The daily rollover runs only a narrow dedupe/contradiction pass, then writes a compressed, lossless full copy of the database to `memory.backupDir` (default `<workspace>/backups/memory/`), empties the working state, and runs SQLite optimisation. It never purges the journal.
+Consolidation is the periodic LLM pass that curates structured memory: it promotes worthwhile journal entries, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and writes small generated skills under `skills/<name>/SKILL.md`. It runs on a cron system job. The daily rollover runs only a narrow dedupe/contradiction pass, then writes a compressed, lossless full copy of the database to `memory.backupDir` (default `<workspace>/backups/memory/`), and runs SQLite optimisation. It never purges the journal or clears session state.
 
 ```json
 {
@@ -2336,7 +2336,7 @@ Consolidation is the periodic LLM pass that curates structured memory: it promot
     "defaults": {
       "memory": {
         "enabled": true,
-        "stateMaxChars": 2048,
+        "stateMaxChars": 4096,
         "snapshotEnabled": true,
         "snapshotKeep": 7,
         "consolidation": {
@@ -2353,7 +2353,7 @@ Consolidation is the periodic LLM pass that curates structured memory: it promot
 | Option | Default | Description |
 |--------|---------|-------------|
 | `agents.defaults.memory.enabled` | `true` | Capture turns into the journal and expose the memory tools. Set to `false` to disable the memory subsystem. |
-| `agents.defaults.memory.stateMaxChars` | `2048` | Maximum characters kept in the working state. Range: 256–16384. |
+| `agents.defaults.memory.stateMaxChars` | `4096` | Maximum characters kept in a session's state. Range: 256–16384. |
 | `agents.defaults.memory.snapshotEnabled` | `true` | Write a compressed, lossless full copy of the database at each daily rollover. |
 | `agents.defaults.memory.snapshotKeep` | `7` | Number of daily compressed backups retained. |
 | `agents.defaults.memory.backupDir` | unset | Backup directory. Unset uses `<workspace>/backups/memory`. |
@@ -2362,9 +2362,9 @@ Consolidation is the periodic LLM pass that curates structured memory: it promot
 | `agents.defaults.memory.consolidation.modelOverride` | unset | Model ID used for consolidation runs. Unset uses the main model. |
 | `agents.defaults.memory.consolidation.cron` | unset | Legacy cron expression. When set, it overrides `intervalH`. |
 
-The daily rollover is a protected cron system job (`memory_rollover`, daily at 00:00 in `agents.defaults.timezone`) plus a startup check. Before writing the compressed full backup, it runs a narrow maintenance pass that only deduplicates memories and flags contradictions; full promotion, synthesis, retention, and gap handling stay on the two-hour consolidation schedule. The rollover then writes the backup, clears the working state in place, and runs `PRAGMA optimize` and an FTS5 merge pass; the verbatim journal and structured memory are untouched.
+The daily rollover is a protected cron system job (`memory_rollover`, daily at 00:00 in `agents.defaults.timezone`) plus a startup check. Before writing the compressed full backup, it runs a narrow maintenance pass that only deduplicates memories and flags contradictions; full promotion, synthesis, retention, and gap handling stay on the two-hour consolidation schedule. The rollover then writes the backup and runs `PRAGMA optimize` and an FTS5 merge pass; the verbatim journal, structured memory, and session states are untouched.
 
-On upgrade, a customized `memory/MEMORY.md` is imported into structured memory once and moved to `memory/legacy/`; `memory/history.jsonl` is imported as verbatim episodes and also moved there. An untouched bundled `MEMORY.md` template is skipped. `MEMORY.md` is no longer a file you edit for durable knowledge: durable user facts belong in `USER.md`, and the agent's own memory is automatic — ask it to remember something, and it lands in the working state and, eventually, structured memory. `memory/history.jsonl` remains only as the archive of conversation summaries written by session compaction.
+On upgrade, a customized `memory/MEMORY.md` is imported into structured memory once and moved to `memory/legacy/`; `memory/history.jsonl` is imported as verbatim episodes and also moved there. An untouched bundled `MEMORY.md` template is skipped. `MEMORY.md` is no longer a file you edit for durable knowledge: durable user facts belong in `USER.md`, and the agent's own memory is automatic — ask it to remember something, and it lands in the session state and, eventually, structured memory. `memory/history.jsonl` remains only as the archive of conversation summaries written by session compaction.
 
 > [!NOTE]
 > The memory subsystem uses SQLite and is not supported on Windows.
@@ -2458,7 +2458,7 @@ CLI Apps use the same skills-only package layout while their installer manages e
 
 ## Tool and Skill Discovery
 
-By default, mason sends only the core tools to the model: `find_capabilities`, `update_state`, `recall_memory`, and `recall_journal`. Every other tool — files, shell, web, scheduling, sessions, image generation, MCP tools — stays registered but hidden until the model calls `find_capabilities(need="...")` (optionally with `kind="tool"` or `kind="skill"`), which loads the matching tools for the rest of that run and returns the best-matching skill's instructions.
+By default, mason sends only the core tools to the model: `find_capabilities`, `recall_memory`, and `recall_journal`. Every other tool — files, shell, web, scheduling, sessions, image generation, state editing, MCP tools — stays registered but hidden until the model calls `find_capabilities(need="...")` (optionally with `kind="tool"` or `kind="skill"`), which loads the matching tools for the rest of that run and returns the best-matching skill's instructions.
 
 ```json
 {

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from mason.bus.queue import MessageBus
     from mason.config.schema import ProviderConfig, ToolsConfig
     from mason.cron.service import CronService
-    from mason.memory.state import MemoryState
+    from mason.memory.state import MemoryState, MemoryStateStore
     from mason.memory.store import MemoryDB
     from mason.providers.factory import ProviderSnapshot
     from mason.security.workspace_access import WorkspaceSandboxStatus
@@ -102,4 +102,5 @@ class ToolContext:
     runtime_control: RuntimeControl | None = None
     memory_db: MemoryDB | None = None
     memory_state: MemoryState | None = None
+    memory_state_store: MemoryStateStore | None = None
     skills_loader: SkillsLoader | None = None

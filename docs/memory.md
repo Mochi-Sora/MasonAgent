@@ -1,6 +1,6 @@
 # AI Agent Memory in mason
 
-This page explains how mason implements long-term AI agent memory: the working
+This page explains how mason implements long-term AI agent memory: the session
 state, the single SQLite memory tier, and the compressed full backup that
 protects it.
 
@@ -16,26 +16,37 @@ knowledge derived from it.
 
 | Representation | Stored in | Lifetime | Written by | Read with |
 |----------------|-----------|----------|------------|-----------|
-| Working state | `memory/state.md` (~2 KB) | Cleared at each daily rollover | The model | Injected into the system prompt every turn |
+| Session state | `memory/state/<session>.md` (4 KB default) | Persists until `/state clear` | The framework (model-correctable) | Injected into the system prompt every turn |
 | Structured memory | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
 | Verbatim journal | `memory/memory.db` | Durable and unbounded | Every turn, verbatim | `recall_journal` |
 
 Two more surfaces sit alongside them: `memory/DATES.md` holds dated commitments
 (searched on demand with `search_dates`, because a date is the whole point and
-curation favors timeless facts), and `memory/state_history.md` keeps the last 20
-working-state versions so an overwrite can be undone. A compressed, lossless
-full copy of the database is written daily to `backups/memory/` for disaster
-recovery.
+curation favors timeless facts), and each session keeps a JSONL history of its
+last 20 states so an overwrite can be inspected. A compressed, lossless full copy
+of the database is written daily to `backups/memory/` for disaster recovery.
 
-### Working state
+### Session state
 
-`memory/state.md` is a compact scratchpad — about 2 KB by default — that stays in
-the model's context every turn. It holds whatever currently matters: active goals,
-decisions, user preferences, corrections, and open questions.
+`memory/state/<session>.md` is a compact summary — 4 KB by default — that stays in
+the model's context every turn. It has four fixed sections:
 
-The model owns this file. It rewrites it in place with the `update_state` tool as
-soon as the picture changes, not just at the end of a turn. The daily rollover
-empties it in place, so treat it as short-lived by design.
+- **Current goal** — what this session is trying to accomplish.
+- **What has been done** — durable work completed so far.
+- **What's next** — the next concrete step, when there is one.
+- **Session state** — what the conversation is about right now.
+
+The framework owns the routine update: after every eligible turn it asks a model
+for those four sections and writes the result. The model can still correct a
+session's state through `update_state`, which is hidden behind capability
+discovery and can target another session by key. The state is never cleared by
+the daily rollover or session maintenance; only an explicit `/state clear`
+removes it.
+
+Upgraded workspaces may still contain the old workspace-global
+`memory/state.md`. New sessions use their own file under `memory/state/`; the
+legacy file is kept for inspection and is no longer injected into session
+prompts.
 
 ### Structured memory
 
@@ -62,29 +73,28 @@ from months ago remains answerable.
 Only the newest turns of a long conversation stay in the model's context each turn
 when `agents.defaults.sessionReplay` is `tail` (the token budget,
 `sessionReplayMaxTokens`, defaults to 32,000 tokens). The default is `none`: no
-conversation history at all, so state and memory are the only continuity and
-`recall_journal` is how earlier turns come back.
+conversation history at all, so the session state and memory are the only
+continuity and `recall_journal` is how earlier turns come back.
 
-Because the working state carries the continuity, the framework keeps the model
-honest about it: after any turn that ends without an `update_state` call, the next
-turn carries a short runtime note asking for that decision again. The model can still
-decide nothing needs to change; it just has to decide.
+Because the framework writes the session state, there is no state-discipline
+nagging and no decision for the model to make. The model may still correct the
+state when the user asks.
 
 ## What the Model Is Told
 
 Memory only works if the agent knows it has some. The system prompt carries an
-explicit contract, and the memory tools are always available to the model (they are
-never hidden behind capability discovery):
+explicit contract. The recall tools are always available; the state editor is
+loaded on demand:
 
 - **Check before assuming.** The model should search structured memory with
   `recall_memory` before answering questions about the user's past, earlier
   decisions, or ongoing work.
 - **Reach for the journal.** When exact wording or detail matters, it should use
   `recall_journal` rather than guessing.
-- **Write the working state in-turn.** When the user asks it to remember something,
-  or when a decision or preference appears, it updates `memory/state.md` right away
-  with `update_state`. The journal keeps a verbatim copy regardless, and
-  consolidation promotes what matters into structured memory.
+- **Correct the session state only when needed.** The framework refreshes the four
+  sections automatically. When the user asks to remember something, or a decision
+  or preference appears, the framework's next update sees it; the model can load
+  `update_state` through `find_capabilities` for an immediate correction.
 - **Know its gaps.** Open gaps are stored as structured memories of kind `gap`;
   `recall_memory(kind="gap")` shows what the agent has explicitly recorded as
   unknown, so it can ask instead of inventing an answer.
@@ -94,8 +104,9 @@ never hidden behind capability discovery):
 Consolidation is the slow, thoughtful layer. It turns the permanent journal
 into durable knowledge. It runs on a cron system job (every two hours by
 default), and its output is written back through the same store the model reads
-from. The daily rollover runs a narrower dedupe/contradiction pass before the
-backup.
+from. Session state is deliberately not an input: it is a per-session continuity
+aid, and feeding those summaries into consolidation can bias what gets promoted.
+The daily rollover runs a narrower dedupe/contradiction pass before the backup.
 
 In one pass it:
 
@@ -155,9 +166,8 @@ day was missed — mason rolls memory over:
   skills),
 - writes a compressed, lossless full copy of the database to
   `backups/memory/memory-YYYY-MM-DD.db.gz`,
-- empties `memory/state.md` in place,
 - runs SQLite's `PRAGMA optimize`, an FTS5 merge pass, and a WAL checkpoint,
-- keeps the journal and structured memory exactly as they were.
+- keeps the journal, structured memory, and every session state exactly as they were.
 
 The backup is lossless and self-describing: it is a complete SQLite copy of the
 active database — verbatim journal, structured memories, edges, and indexes — with
@@ -180,7 +190,9 @@ workspace/
 │   └── memory/              # Compressed full backups (recovery only)
 │       └── memory-YYYY-MM-DD.db.gz
 └── memory/
-    ├── state.md             # Working state, rewritten by the model
+    ├── state/               # Per-session four-section state files
+    │   ├── <session>.md
+    │   └── <session>.history.jsonl
     ├── memory.db            # SQLite: verbatim journal + structured memory + links
     ├── history.jsonl        # Archived conversation summaries (session compaction)
     └── consolidation/
@@ -207,7 +219,7 @@ demand.
     "defaults": {
       "memory": {
         "enabled": true,
-        "stateMaxChars": 2048,
+        "stateMaxChars": 4096,
         "snapshotEnabled": true,
         "snapshotKeep": 7,
         "backupDir": null,
@@ -225,7 +237,7 @@ demand.
 | Field | Meaning |
 |-------|---------|
 | `enabled` | Capture turns and expose the memory tools. When false, no database or state is used |
-| `stateMaxChars` | Size cap for the working state (256–16384, default 2048) |
+| `stateMaxChars` | Size cap for a session's state (256–16384, default 4096) |
 | `snapshotEnabled` | Write a compressed, lossless full copy of the database at each daily rollover |
 | `snapshotKeep` | Number of daily compressed backups retained |
 | `backupDir` | Backup directory; unset uses `<workspace>/backups/memory` |
@@ -268,8 +280,12 @@ Memory is not hidden behind the curtain. Users can inspect and guide it.
 |---------|--------------|
 | `/compact` | Summarize the current conversation context while keeping saved chat history |
 | `/new` | Start a fresh session |
+| `/state` | Show this session's state |
+| `/state <session>` | Show another session's state by key |
+| `/state list` | List sessions with stored state |
+| `/state clear [session]` | Explicitly clear this or another session's state |
 
-To inspect memory yourself, read `memory/state.md` and
+To inspect memory yourself, read `memory/state/<session>.md` and
 `memory/consolidation/latest.md`, or query the database directly:
 
 ```bash

@@ -23,7 +23,7 @@ from mason.bus.events import (
 )
 from mason.memory.maintenance import maybe_rollover
 from mason.memory.migration import import_legacy
-from mason.memory.state import DEFAULT_STATE_MAX_CHARS, MemoryState
+from mason.memory.state import DEFAULT_STATE_MAX_CHARS, MemoryStateStore
 from mason.memory.store import MemoryDB
 from mason.runtime_context import (
     RUNTIME_CONTEXT_MESSAGE_META,
@@ -121,7 +121,12 @@ class ContextBuilder:
             enabled=memory_enabled,
             backup_dir=self._resolve_backup_dir(workspace, memory_backup_dir),
         )
-        self.memory_state = MemoryState(workspace, max_chars=memory_state_max_chars)
+        self.memory_state_store = MemoryStateStore(
+            workspace,
+            max_chars=memory_state_max_chars,
+        )
+        # Legacy workspace-global view retained for SDK and migration callers.
+        self.memory_state = self.memory_state_store.for_session(None)
         self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
         self._snapshot_enabled = memory_snapshot_enabled
         self._snapshot_keep = memory_snapshot_keep
@@ -159,6 +164,7 @@ class ContextBuilder:
         workspace: Path | None = None,
         include_memory: bool = True,
         style: StyleSettings | None = None,
+        session_key: str | None = None,
     ) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
         root = workspace or self.workspace
@@ -187,11 +193,19 @@ class ContextBuilder:
                 "Use it as the default root for project files and relative tool paths."
             )
 
+        state_text = (
+            self.memory_state_store.for_session(session_key).read()
+            if include_memory
+            else ""
+        )
+
         if include_memory:
-            parts.append(render_template("agent/memory.md"))
-            state = self.memory_state.read()
-            if state:
-                parts.append(f"# State\n\n{state}")
+            parts.append(
+                render_template(
+                    "agent/memory.md",
+                    lazy_capabilities=self._lazy_capabilities,
+                )
+            )
 
         active_skills = self.skills.get_always_skills()
         if active_skills:
@@ -213,6 +227,11 @@ class ContextBuilder:
                 f"Previous conversation summary (last active {session_summary['last_active']}):\n"
                 f"{session_summary['text']}"
             )
+
+        # Keep the volatile state block at the end: it changes after every turn,
+        # and everything before it can remain a stable prompt-cache prefix.
+        if state_text:
+            parts.append(f"# Session State\n\n{state_text}")
 
         return "\n\n---\n\n".join(parts)
 
@@ -307,6 +326,7 @@ class ContextBuilder:
         workspace: Path | None = None,
         include_memory: bool = True,
         style: StyleSettings | None = None,
+        session_key: str | None = None,
     ) -> list[dict[str, Any]]:
         """Compatibility wrapper for callers that need merged adjacent roles."""
         messages = self.build_transcript(
@@ -322,6 +342,7 @@ class ContextBuilder:
             workspace=workspace,
             include_memory=include_memory,
             style=style,
+            session_key=session_key,
         )
         if current_message is None:
             return messages
@@ -349,6 +370,7 @@ class ContextBuilder:
         workspace: Path | None = None,
         include_memory: bool = True,
         style: StyleSettings | None = None,
+        session_key: str | None = None,
     ) -> list[dict[str, Any]]:
         """Build a model transcript while preserving the fresh-turn boundary."""
         root = workspace or self.workspace
@@ -361,6 +383,7 @@ class ContextBuilder:
                     workspace=root,
                     include_memory=include_memory,
                     style=style,
+                    session_key=session_key,
                 ),
             },
             *transcript.history,

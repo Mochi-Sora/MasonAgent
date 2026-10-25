@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Literal
 
-LLMUsageSource = Literal["user", "api", "cron", "dream", "consolidation", "system"]
+LLMUsageSource = Literal["user", "api", "cron", "dream", "consolidation", "state", "system"]
 
 _CURRENT_SOURCE: ContextVar[LLMUsageSource] = ContextVar(
     "mason_llm_usage_source",

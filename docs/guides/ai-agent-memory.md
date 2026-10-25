@@ -1,13 +1,14 @@
 # How AI Agent Memory Works in mason
 
 This guide explains how to use mason's long-term AI agent memory: session
-history, compacted conversation summaries, the working state, the single-tier
-SQLite memory, and the verbatim journal that consolidation promotes from.
+history, compacted conversation summaries, the framework-maintained session state,
+the single-tier SQLite memory, and the verbatim journal that consolidation
+promotes from.
 
 ## What you will build
 
 - a workspace with persistent session history
-- a working state the agent keeps current with `update_state`
+- a session state the framework keeps current after every turn
 - structured memory that survives across sessions
 - a searchable, permanent verbatim journal of every turn
 - a compressed daily backup for recovery
@@ -34,9 +35,10 @@ Ask the agent to remember a stable fact in a normal session:
 Remember that I prefer concise release notes.
 ```
 
-The agent records it in the working state with `update_state`, and the turn is
-captured verbatim in the permanent journal. A consolidation pass runs every two
-hours by default and derives structured memories from the journal.
+The framework records the turn in the session state and in the permanent
+journal after every turn. A consolidation pass runs every two hours by default
+and derives structured memories from the journal. The model can still correct the
+state through the capability-gated `update_state` tool when a fact must be exact.
 
 In a later session, ask about it:
 
@@ -56,6 +58,8 @@ Memory lives in the active workspace, usually under `~/.mason/workspace/`.
   if consolidation should not use the main model.
 - Back up the workspace's `memory/` directory and the compressed backups in
   `backups/memory/`.
+- Session state is stored per session under `memory/state/` and is cleared only by
+  an explicit `/state clear`.
 - The verbatim journal is unbounded: old turns stay searchable with
   `recall_journal`. Daily `.db.gz` backups are for disaster recovery and are
   retained according to `memory.snapshotKeep` (default 7).
@@ -65,7 +69,7 @@ Memory lives in the active workspace, usually under `~/.mason/workspace/`.
 
 - Memory may contain sensitive user or project facts.
 - Avoid sharing workspaces without reviewing `SOUL.md`, `USER.md`,
-  `memory/state.md`, and `memory/memory.db`.
+  `memory/state/`, and `memory/memory.db`.
 - Use separate workspaces for personal and team contexts.
 
 ## Troubleshooting

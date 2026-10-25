@@ -826,6 +826,7 @@ class MemoryArchiver:
             channel=channel,
             session_summary=session_summary,
             workspace=workspace,
+            session_key=session.key,
         )
         tools = self._get_tool_definitions()
         return await self.archive(
@@ -961,6 +962,7 @@ class Consolidator:
             history=history,
             current_message="[token-probe]",
             channel=channel,
+            session_key=session.key,
         )
         return estimate_prompt_tokens_chain(
             runtime.provider,

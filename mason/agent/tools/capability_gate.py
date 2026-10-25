@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 FIND_CAPABILITIES_TOOL_NAME = "find_capabilities"
 
 #: Tools that are always sent, even before discovery. The memory tools stay
-#: unconditional because the prompt contract depends on them being callable, and
-#: the search tool itself has to remain reachable.
+#: unconditional because the prompt contract depends on them being callable. The
+#: state editor is deliberately discoverable: the framework keeps the state
+#: current, so the model should only load it when a correction is needed.
 DEFAULT_ALWAYS_VISIBLE: frozenset[str] = frozenset({
     FIND_CAPABILITIES_TOOL_NAME,
-    "update_state",
     "recall_memory",
     "recall_journal",
 })

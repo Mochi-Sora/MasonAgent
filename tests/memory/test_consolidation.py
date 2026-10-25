@@ -11,7 +11,6 @@ import pytest
 
 from mason.agent.skills import SkillsLoader
 from mason.memory.consolidation import MemoryConsolidator
-from mason.memory.state import MemoryState
 from mason.memory.store import MemoryDB
 from mason.providers.base import GenerationSettings, LLMResponse
 from mason.utils.llm_runtime import LLMRuntime
@@ -423,27 +422,10 @@ async def test_failure_records_error_and_keeps_cursor(
     assert stats["consolidation_cursor"] == 0
 
 
-async def test_prompt_includes_working_state_and_recent_versions(
+async def test_prompt_uses_only_journal_and_structured_memory(
     tmp_path: Path, db: MemoryDB, runtime, mock_provider
 ) -> None:
-    state = MemoryState(tmp_path)
-    state.write("goal A: audit the store")
-    state.write("goal B: ship the rework")  # archives goal A
-    _seed_episodes(db)
-    mock_provider.chat_stream_with_retry.return_value = _plan_response({})
-
-    await MemoryConsolidator(tmp_path, db, state=state).run(runtime, now=_NOW)
-
-    prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
-    assert "## Current working state" in prompt
-    assert "goal B: ship the rework" in prompt
-    assert "## Recent working states" in prompt
-    assert "goal A: audit the store" in prompt
-
-
-async def test_prompt_reads_workspace_state_by_default(
-    tmp_path: Path, db: MemoryDB, runtime, mock_provider
-) -> None:
+    """Session states are not fed into consolidation; they can skew its output."""
     (tmp_path / "memory").mkdir(parents=True, exist_ok=True)
     (tmp_path / "memory" / "state.md").write_text("workspace state marker", encoding="utf-8")
     _seed_episodes(db)
@@ -452,7 +434,8 @@ async def test_prompt_reads_workspace_state_by_default(
     await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
 
     prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
-    assert "workspace state marker" in prompt
+    assert "workspace state marker" not in prompt
+    assert "session state" not in prompt.casefold()
 
 
 def test_preview_keeps_head_and_tail() -> None:
@@ -482,7 +465,7 @@ async def test_long_turn_is_judged_on_more_than_its_opening(
     await MemoryConsolidator(tmp_path, db).run(runtime, now=_NOW)
 
     prompt = mock_provider.chat_stream_with_retry.await_args.kwargs["messages"][1]["content"]
-    section = prompt.split("## New verbatim turns", 1)[1].split("## Current working state", 1)[0]
+    section = prompt.split("## New verbatim turns", 1)[1].split("## Structured memory", 1)[0]
     # The old 500-char preview dropped the conclusion; head+tail must keep both.
     assert "AUDIT_START" in section
     assert "AUDIT_END" in section

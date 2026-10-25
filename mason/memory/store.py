@@ -1622,8 +1622,8 @@ class MemoryDB:
 
         This is an administrative escape hatch, not part of normal operation:
         the single memory tier is unbounded, and the daily rollover only writes
-        a compressed backup and clears the working state. Call this only when a
-        user deliberately wants to forget old raw turns. The structured memory
+        a compressed backup. Session state is retained until explicitly cleared;
+        call this only when a user deliberately wants to forget old raw turns. The structured memory
         graph is never touched.
         """
         if not self.enabled:

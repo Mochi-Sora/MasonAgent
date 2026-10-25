@@ -502,7 +502,6 @@ def _run_gateway(
         consolidator = MemoryConsolidator(
             agent.context.workspace,
             agent.context.memory_db,
-            state=agent.context.memory_state,
         )
         try:
             result = await consolidator.run(runtime)
@@ -524,7 +523,6 @@ def _run_gateway(
         consolidator = MemoryConsolidator(
             agent.context.workspace,
             agent.context.memory_db,
-            state=agent.context.memory_state,
         )
         try:
             result = await consolidator.run_maintenance(runtime)
@@ -543,7 +541,7 @@ def _run_gateway(
             await _run_memory_consolidation()
             return None
 
-        # Rollover writes a compressed full backup and empties the working state.
+        # Rollover writes a compressed full backup; session state is retained.
         # A narrow nightly pass (dedupe + contradiction flags) runs first so the
         # backup reflects the cleaned graph; full consolidation stays on its own
         # two-hour schedule.

@@ -155,21 +155,22 @@ class SessionClient:
 class MemoryClient:
     """Memory helpers exposed through ``bot.memory``.
 
-    ``read``/``write`` target the small working state (``memory/state.md``) that
-    the agent keeps in its prompt; structured memory is written by consolidation
-    and read by the agent's ``recall_memory`` tool.
+    ``read``/``write`` target one session's framework-maintained state
+    (``memory/state/<session>.md``) that the agent keeps in its prompt; structured
+    memory is written by consolidation and read by the agent's ``recall_memory``
+    tool.
     """
 
     def __init__(self, loop: AgentLoop) -> None:
         self._loop = loop
 
-    def read(self) -> str:
-        """Read the working state (``memory/state.md``)."""
-        return self._loop.context.memory_state.read()
+    def read(self, session_key: str | None = None) -> str:
+        """Read a session's working state (``memory/state/<session>.md``)."""
+        return self._loop.context.memory_state_store.for_session(session_key).read()
 
-    def write(self, text: str) -> None:
-        """Replace the working state (``memory/state.md``)."""
-        self._loop.context.memory_state.write(text)
+    def write(self, text: str, *, session_key: str | None = None) -> None:
+        """Replace a session's working state with raw text."""
+        self._loop.context.memory_state_store.for_session(session_key).write(text)
 
     def append_history(self, text: str, *, session_key: str | None = None) -> int:
         """Append one entry to ``memory/history.jsonl`` and return its cursor."""

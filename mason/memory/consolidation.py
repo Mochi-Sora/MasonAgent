@@ -28,7 +28,6 @@ import json_repair
 from loguru import logger
 
 from mason.llm_usage.context import llm_usage_source
-from mason.memory.state import MemoryState, StateVersion
 from mason.memory.store import (
     CONSOLIDATION_LAST_ATTEMPT_META_KEY,
     CONSOLIDATION_LAST_ERROR_META_KEY,
@@ -60,16 +59,12 @@ _MAX_MEMORIES = 150
 # large-context model, not a per-turn cost.
 _EPISODE_BUDGET = 44_000
 _MEMORY_BUDGET = 44_000
-_STATE_BUDGET = 12_000
 # One turn's share of the episode budget. A small batch shows up to 6 KB, so a
 # multi-KB report is judged on its body rather than its first few hundred
 # characters; a busy batch shrinks the share fairly so every turn is still shown.
 _EPISODE_PREVIEW_CHARS = 6_000
 _EPISODE_MIN_PREVIEW_CHARS = 800
 _MEMORY_PREVIEW_CHARS = 240
-_STATE_PREVIEW_CHARS = 2_500
-_STATE_VERSION_PREVIEW_CHARS = 1_000
-_MAX_STATE_VERSIONS = 5
 # When a turn must be shortened, keep both ends so a report's conclusion survives.
 _PREVIEW_ELISION = "\n…\n"
 _PREVIEW_HEAD_RATIO = 0.6
@@ -109,20 +104,19 @@ class ConsolidationResult:
 
 
 class MemoryConsolidator:
-    """Runs one consolidation pass; independent of AgentLoop for testability."""
+    """Runs one consolidation pass; independent of AgentLoop for testability.
+
+    Session state is intentionally not an input: it is a per-session continuity
+    aid, and feeding those summaries into consolidation biases promotions.
+    """
 
     def __init__(
         self,
         workspace: Path,
         db: MemoryDB,
-        *,
-        state: MemoryState | None = None,
     ) -> None:
         self.workspace = workspace
         self.db = db
-        # The working state is the model's own distillation of what mattered;
-        # consolidation mines it alongside the raw turns.
-        self.state = state or MemoryState(workspace)
 
     async def run(self, runtime: LLMRuntime, *, now: datetime | None = None) -> ConsolidationResult:
         moment = now or datetime.now()
@@ -136,9 +130,7 @@ class MemoryConsolidator:
             statuses=("active", "candidate"), limit=_MAX_MEMORIES
         )
         gaps = self.db.list_memories(statuses=("open",), limit=_MAX_MEMORIES)
-        state_text = self.state.read()
-        state_versions = self.state.versions(limit=_MAX_STATE_VERSIONS)
-        prompt = self._build_prompt(episodes, memories, gaps, state_text, state_versions)
+        prompt = self._build_prompt(episodes, memories, gaps)
         plan, error = await self._request_plan(runtime, prompt)
         if plan is None:
             self._record_failure(error, moment)
@@ -236,16 +228,8 @@ class MemoryConsolidator:
         episodes: Sequence[EpisodeHit],
         memories: Sequence[MemoryHit],
         gaps: Sequence[MemoryHit],
-        state_text: str = "",
-        state_versions: Sequence[StateVersion] = (),
     ) -> str:
         lines = ["## New verbatim turns", *self._episode_lines(episodes)]
-        lines += ["", "## Current working state", *self._state_lines(state_text)]
-        lines += [
-            "",
-            "## Recent working states (newest first)",
-            *self._state_version_lines(state_versions),
-        ]
         lines += ["", "## Structured memory", *self._memory_lines(memories)]
         lines += ["", "## Open knowledge gaps", *self._memory_lines(gaps)]
         return "\n".join(lines)
@@ -262,25 +246,6 @@ class MemoryConsolidator:
             f"{_preview(episode.content, allowance)}"
             for episode in episodes
         ]
-
-    def _state_lines(self, state_text: str) -> list[str]:
-        if not state_text:
-            return ["(empty)"]
-        return [truncate_text(state_text, _STATE_PREVIEW_CHARS)]
-
-    def _state_version_lines(self, state_versions: Sequence[StateVersion]) -> list[str]:
-        if not state_versions:
-            return ["(none)"]
-        budget = _STATE_BUDGET
-        lines: list[str] = []
-        for version in state_versions:
-            content = truncate_text(version.content, _STATE_VERSION_PREVIEW_CHARS)
-            entry = f"- [{version.recorded_at}] {content}"
-            if len(entry) > budget:
-                break
-            budget -= len(entry)
-            lines.append(entry)
-        return lines or ["(none)"]
 
     def _memory_lines(self, memories: Sequence[MemoryHit]) -> list[str]:
         if not memories:

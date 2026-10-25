@@ -14,7 +14,7 @@ mason has one small core loop and several ways to enter it:
 | Providers | LLM backends such as OpenRouter, Anthropic, OpenAI, Bedrock, Ollama, vLLM, and other OpenAI-compatible APIs |
 | Channels | User-facing transports such as CLI, Telegram, Discord, Slack, Feishu, WeChat, Email, Mattermost, and others |
 | Tools | Capabilities the model may call, including files, shell, web search/fetch, MCP, cron, image generation, and subagents |
-| Memory | Working state, SQLite structured memory, the permanent verbatim journal, and the dated-events file |
+| Memory | Session state, SQLite structured memory, the permanent verbatim journal, and the dated-events file |
 | Gateway | Long-running process that connects enabled channels and serves the health endpoint |
 
 The simplest path is `mason agent -m "Hello!"`: one inbound message goes through the agent loop and prints the reply in your terminal. The long-running path is `mason gateway`: channels receive messages from chat apps, publish them to the same agent loop, and send replies back to the originating channel.
@@ -67,7 +67,7 @@ Most examples are partial snippets. Merge them into the existing file created by
 A normal turn follows this flow:
 
 1. A channel receives a user message and publishes it to the message bus.
-2. The agent loop chooses a session key and builds context from the system prompt (identity files and the working state), agent-owned skills and memory, channel metadata, and runtime settings. Stored conversation history is only replayed to the model when `sessionReplay` enables it.
+2. The agent loop chooses a session key and builds context from the system prompt (identity files and the session state), agent-owned skills and memory, channel metadata, and runtime settings. Stored conversation history is only replayed to the model when `sessionReplay` enables it.
 3. The provider receives the model request.
 4. If the model asks for tools, the runner executes them and feeds results back to the model.
 5. The final reply is saved to the session and sent back through the channel.
@@ -121,12 +121,12 @@ mason separates short-term replay from longer-lived memory:
 | Store | Location | Purpose |
 |---|---|---|
 | Sessions | `<config-dir>/sessions/<workspace-id>/*.jsonl` | Conversation transcripts; replayed to the model only when `sessionReplay` is `tail` or `full` |
-| Working state | `<workspace>/memory/state.md` | Compact scratchpad (about 2 KB) kept in the system prompt and rewritten with `update_state` |
+| Session state | `<workspace>/memory/state/<session>.md` | Framework-maintained four-section summary (4 KB default) kept in the system prompt; persists until `/state clear` |
 | Structured memory | `<workspace>/memory/memory.db` | Facts, preferences, decisions, summaries, relationships, and open gaps, searched with `recall_memory` |
 | Verbatim journal | `<workspace>/memory/memory.db` | Every captured turn, kept indefinitely, searched with `recall_journal` |
 | Recovery backup | `<workspace>/backups/memory/*.db.gz` | Compressed full copies of the database written daily; not a memory surface the model reads |
 
-Consolidation is a periodic LLM pass that derives structured memory from the permanent verbatim journal. It promotes worthwhile entries, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and writes small generated skills under `skills/`. The model never writes structured memory directly; it keeps the working state current with `update_state` and checks `recall_memory`/`recall_journal` before claiming it does not remember something. Consolidation runs every two hours by default. The daily rollover first runs a narrower maintenance pass that only deduplicates and flags contradictions, then writes a compressed full backup, runs SQLite optimisation, and clears `state.md` in place. The journal is never purged automatically.
+Consolidation is a periodic LLM pass that derives structured memory from the permanent verbatim journal. It promotes worthwhile entries, deduplicates, resolves or flags contradictions, links related memories, synthesises broader memories, assesses retention, records knowledge gaps, and writes small generated skills under `skills/`. The model never writes structured memory directly; it checks `recall_memory`/`recall_journal` before claiming it does not remember something. The framework refreshes each session's state after every turn, and the daily rollover writes a compressed full backup and runs SQLite optimisation without clearing session state. The journal is never purged automatically.
 
 Memory is SQLite-backed (`memory/memory.db`) and does not support Windows. When upgrading a file-based workspace, a customized `memory/MEMORY.md` and the existing `memory/history.jsonl` are imported once and moved to `memory/legacy/`. From then on, `memory/history.jsonl` holds the archived conversation summaries written by session compaction.
 
@@ -168,7 +168,7 @@ Tools are discovered automatically from built-in modules and plugin entry points
 - image generation;
 - subagents and runtime self-inspection.
 
-Tool schemas are loaded lazily by default. Only `find_capabilities`, `update_state`, `recall_memory`, and `recall_journal` are visible up front; the model loads every other tool or skill on demand by calling `find_capabilities` with a plain-language need. The names-only capability catalog lives in that tool's description instead of the system prompt.
+Tool schemas are loaded lazily by default. Only `find_capabilities`, `recall_memory`, and `recall_journal` are visible up front; the model loads every other tool or skill on demand by calling `find_capabilities` with a plain-language need. That includes `update_state` and `read_state`. The names-only capability catalog lives in that tool's description instead of the system prompt.
 
 Security-sensitive controls live in [`configuration.md#security`](./configuration.md#security). For production or shared chat apps, also configure channel access controls such as `allowFrom` or pairing.
 

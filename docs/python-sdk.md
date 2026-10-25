@@ -118,7 +118,7 @@ Mason is state-first by default: the session stores every turn, but the raw
 transcript is not replayed to the model unless you enable it. Set
 `agents.defaults.sessionReplay` to `"tail"` or `"full"` in the config the SDK
 loads when the embedded agent should literally re-read recent turns; with the
-default `"none"`, continuity comes from the working state and memory instead.
+default `"none"`, continuity comes from the session state and memory instead.
 
 ### Stream A Long Answer
 
@@ -218,7 +218,7 @@ stable `session_key`, stream events, keep the final `RunResult`, and let
 | `session_key` | The conversation history key. Reuse it to continue a thread; change it to isolate a thread. |
 | Workspace | The local directory where file tools and shell tools operate. |
 | Tools | Capabilities the agent may call, such as file access, shell, web, or custom tools from your config. |
-| Memory | Working state and the SQLite-backed memory tier managed by mason. |
+| Memory | Session state and the SQLite-backed memory tier managed by mason. |
 | Stream event | A typed event such as `text.delta`, `tool.started`, or `run.completed`. |
 | Model override | A temporary model and/or generation-settings preset used for one SDK instance or one run. |
 
@@ -639,8 +639,8 @@ through the `recall_memory` and `recall_journal` tools.
 
 | Method | Description |
 |--------|-------------|
-| `read()` | Read the agent's working state (`memory/state.md`). |
-| `write(text)` | Replace the working state (`memory/state.md`). |
+| `read(session_key=None)` | Read a session's framework-maintained state (`memory/state/<session>.md`). |
+| `write(text, session_key=None)` | Replace a session's state with raw text. |
 | `append_history(text, session_key=None)` | Append one archived-history entry to `memory/history.jsonl` and return its cursor. |
 | `read_history(session_key=None)` | Read archived-history entries, optionally filtered by session key. |
 

@@ -1,10 +1,11 @@
-"""Daily maintenance for the single memory tier and the working state.
+"""Daily maintenance for the single memory tier.
 
 The active database is unbounded: verbatim episodes are the source of truth and
 are never discarded automatically. Once a day the gateway writes a compressed,
-lossless copy of the whole database outside ``memory/``, empties the working state
-in place, and runs SQLite's own optimisation pass. The structured memory graph is
-left alone.
+lossless copy of the whole database outside ``memory/``, and runs SQLite's own
+optimisation pass. The structured memory graph and every session's working state
+are deliberately left untouched; state is cleared only by an explicit
+``/state clear`` command.
 
 A gateway that was offline over midnight runs the same check on startup.
 """
@@ -27,19 +28,20 @@ def current_day(now: datetime | None = None) -> str:
 
 def maybe_rollover(
     memory_db: MemoryDB,
-    memory_state: MemoryState,
+    memory_state: MemoryState | None = None,
     *,
     snapshot_enabled: bool = True,
     snapshot_keep: int = 7,
     now: datetime | None = None,
 ) -> bool:
-    """Run the daily maintenance at most once per day; returns True when it ran.
+    """Run the daily backup at most once per day; returns True when it ran.
 
-    The verbatim journal is not purged. *snapshot_enabled* writes the compressed
-    full backup before the state is cleared; *snapshot_keep* is how many daily
-    backups remain. The working state is emptied in place so its path stays
-    stable across days.
+    The verbatim journal and every session state are retained. *snapshot_enabled*
+    writes the compressed full backup; *snapshot_keep* is how many daily backups
+    remain. ``memory_state`` is accepted for backward compatibility and is never
+    modified.
     """
+    del memory_state  # State is intentionally retained across rollover.
     if not memory_db.enabled:
         return False
     today = current_day(now)
@@ -48,11 +50,10 @@ def maybe_rollover(
     if snapshot_enabled:
         if memory_db.snapshot(keep=snapshot_keep, now=now) is None:
             logger.warning("Memory backup failed; rollover continues without a backup copy")
-    memory_state.clear()
     memory_db.optimize()
     memory_db.set_meta(ROLLOVER_META_KEY, today)
     logger.info(
-        "Memory rollover for {}: verbatim journal retained, working state cleared, "
+        "Memory rollover for {}: verbatim journal and session states retained, "
         "backup kept ({})",
         today,
         f"{max(1, int(snapshot_keep))} daily copy" if snapshot_enabled else "disabled",

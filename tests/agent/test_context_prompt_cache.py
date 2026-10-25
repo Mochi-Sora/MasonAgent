@@ -83,7 +83,7 @@ def test_system_prompt_reflects_current_memory_contract(tmp_path, selected_proje
     prompt = builder.build_system_prompt(workspace=project)
 
     assert "memory/memory.db" in prompt
-    assert "update_state" in prompt
+    assert "session state" in prompt.lower()
     assert "recall_memory" in prompt
     assert "Use the memory tools to read and update memory; do not edit" in prompt
 
@@ -263,7 +263,7 @@ def test_template_memory_md_is_not_injected_or_imported(tmp_path) -> None:
 
     assert "# Memory\n\n## Long-term Memory" not in prompt
     assert "This file is automatically updated by mason" not in prompt
-    assert "# State" not in prompt
+    assert "# Session State" not in prompt
     assert builder.memory_db.counts()["memories"] == 0
     assert not (workspace / "memory" / "MEMORY.md").exists()
 
@@ -275,7 +275,7 @@ def test_state_is_injected_when_present(tmp_path) -> None:
 
     prompt = builder.build_system_prompt()
 
-    assert "# State" in prompt
+    assert "# Session State" in prompt
     assert "active goal: ship the memory rewrite" in prompt
 
 

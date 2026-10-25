@@ -1,4 +1,4 @@
-"""Full test suite for the memory tools: state, curated recall, and backup recall."""
+"""Full test suite for the memory tools: session state, curated recall, and backup recall."""
 
 from __future__ import annotations
 
@@ -9,14 +9,20 @@ from pathlib import Path
 import pytest
 
 from mason.agent.tools.context import ToolContext
-from mason.agent.tools.memory import RecallJournalTool, RecallMemoryTool, UpdateStateTool
+from mason.agent.tools.memory import (
+    ReadStateTool,
+    RecallJournalTool,
+    RecallMemoryTool,
+    UpdateStateTool,
+)
 from mason.config.schema import ToolsConfig
-from mason.memory.state import MemoryState
+from mason.memory.state import MemoryStateStore, SessionState
 from mason.memory.store import MemoryDB
 
 _NOW = datetime(2026, 1, 2, 12, 0, 0)
 _TOOL_NAMES = {
     UpdateStateTool: "update_state",
+    ReadStateTool: "read_state",
     RecallMemoryTool: "recall_memory",
     RecallJournalTool: "recall_journal",
 }
@@ -27,6 +33,11 @@ def db(tmp_path: Path):
     store = MemoryDB(tmp_path / "memory" / "memory.db")
     yield store
     store.close()
+
+
+@pytest.fixture
+def states(tmp_path: Path) -> MemoryStateStore:
+    return MemoryStateStore(tmp_path)
 
 
 def _iso(day: str, hour: int = 10) -> str:
@@ -48,12 +59,15 @@ def test_tools_require_memory_context(tmp_path: Path) -> None:
             tool_cls.create(ctx)
 
 
-def test_tools_are_enabled_with_memory_context(tmp_path: Path, db: MemoryDB) -> None:
+def test_tools_are_enabled_with_memory_context(
+    tmp_path: Path, db: MemoryDB, states: MemoryStateStore
+) -> None:
     ctx = ToolContext(
         config=ToolsConfig(),
         workspace=str(tmp_path),
         memory_db=db,
-        memory_state=MemoryState(tmp_path),
+        memory_state=states.for_session(None),
+        memory_state_store=states,
     )
     for tool_cls, expected_name in _TOOL_NAMES.items():
         assert tool_cls.enabled(ctx) is True
@@ -63,47 +77,101 @@ def test_tools_are_enabled_with_memory_context(tmp_path: Path, db: MemoryDB) -> 
 # -- update_state -------------------------------------------------------------
 
 
-async def test_update_state_round_trip_and_clear(tmp_path: Path) -> None:
-    state = MemoryState(tmp_path)
-    tool = UpdateStateTool(state)
-    result = await tool.execute(content="goal: ship phase 3")
+async def test_update_state_round_trip(states: MemoryStateStore) -> None:
+    tool = UpdateStateTool(store=states)
+
+    result = await tool.execute(
+        current_goal="ship phase 3",
+        done="wrote the state store",
+        next_steps="add tests",
+        session_summary="state rewrite",
+        target_session="cli:1",
+    )
+
     assert "updated" in result
-    assert state.read() == "goal: ship phase 3"
-    cleared = await tool.execute(content="")
-    assert "cleared" in cleared
-    assert state.read() == ""
+    state = states.for_session("cli:1").read_sections()
+    assert state == SessionState(
+        current_goal="ship phase 3",
+        done="wrote the state store",
+        next_steps="add tests",
+        session_summary="state rewrite",
+    )
 
 
-async def test_update_state_keeps_multiline_content(tmp_path: Path) -> None:
-    state = MemoryState(tmp_path)
-    tool = UpdateStateTool(state)
-    content = "## Goals\n- ship memory tools\n\n## Notes\n- user prefers dark mode"
-    assert "chars" in await tool.execute(content=content)
-    assert state.read() == content
+async def test_update_state_preserves_omitted_sections(states: MemoryStateStore) -> None:
+    states.for_session("cli:1").write_sections(
+        SessionState(current_goal="old goal", done="old work")
+    )
+    tool = UpdateStateTool(store=states)
+
+    await tool.execute(next_steps="new step", target_session="cli:1")
+
+    state = states.for_session("cli:1").read_sections()
+    assert state.current_goal == "old goal"
+    assert state.done == "old work"
+    assert state.next_steps == "new step"
 
 
-async def test_update_state_treats_whitespace_only_as_clear(tmp_path: Path) -> None:
-    state = MemoryState(tmp_path)
-    state.write("existing")
-    tool = UpdateStateTool(state)
-    assert "cleared" in await tool.execute(content="   \n\t ")
-    assert state.read() == ""
+async def test_update_state_can_edit_another_session(states: MemoryStateStore) -> None:
+    states.for_session("telegram:42").write_sections(
+        SessionState(current_goal="telegram goal")
+    )
+    tool = UpdateStateTool(store=states)
+
+    await tool.execute(current_goal="corrected goal", target_session="telegram:42")
+
+    assert (
+        states.for_session("telegram:42").read_sections().current_goal
+        == "corrected goal"
+    )
+    assert states.for_session("cli:1").read() == ""
 
 
-async def test_update_state_truncates_at_cap(tmp_path: Path) -> None:
-    state = MemoryState(tmp_path, max_chars=256)
-    tool = UpdateStateTool(state)
-    result = await tool.execute(content="x" * 1_000)
-    assert "truncated" in result
-    assert len(state.read()) == 256
+async def test_update_state_requires_a_section(states: MemoryStateStore) -> None:
+    tool = UpdateStateTool(store=states)
+
+    result = await tool.execute(target_session="cli:1")
+
+    assert getattr(result, "is_error", False) is True
+    assert "at least one" in result
 
 
-async def test_update_state_leaves_no_temp_files(tmp_path: Path) -> None:
-    state = MemoryState(tmp_path)
-    tool = UpdateStateTool(state)
-    await tool.execute(content="hello")
-    leftovers = [p.name for p in state.path.parent.iterdir() if p.name.endswith(".tmp")]
+async def test_update_state_explicitly_clears_a_section(states: MemoryStateStore) -> None:
+    states.for_session("cli:1").write_sections(
+        SessionState(current_goal="goal", done="done")
+    )
+    tool = UpdateStateTool(store=states)
+
+    await tool.execute(current_goal="", target_session="cli:1")
+
+    state = states.for_session("cli:1").read_sections()
+    assert state.current_goal == ""
+    assert state.done == "done"
+
+
+async def test_update_state_leaves_no_temp_files(
+    tmp_path: Path, states: MemoryStateStore
+) -> None:
+    tool = UpdateStateTool(store=states)
+    await tool.execute(current_goal="hello", target_session="cli:1")
+
+    leftovers = [
+        p.name
+        for p in (tmp_path / "memory" / "state").iterdir()
+        if p.name.endswith(".tmp")
+    ]
     assert leftovers == []
+
+
+async def test_read_state_reads_another_session(states: MemoryStateStore) -> None:
+    states.for_session("telegram:42").write_sections(
+        SessionState(current_goal="telegram goal")
+    )
+    tool = ReadStateTool(store=states)
+
+    result = await tool.execute(target_session="telegram:42")
+
+    assert "telegram goal" in result
 
 
 # -- recall_memory ------------------------------------------------------------

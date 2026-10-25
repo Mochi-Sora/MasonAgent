@@ -42,7 +42,9 @@ def test_loop_gate_hides_tools_and_keeps_memory_tools_visible(tmp_path: Path) ->
     assert gate is not None
     visible = set(gate.visible_names())
     assert "find_capabilities" in visible
-    assert {"update_state", "recall_memory", "recall_journal"} <= visible
+    assert {"recall_memory", "recall_journal"} <= visible
+    assert "update_state" not in visible
+    assert "`update_state`" in gate.catalog()
     assert "read_file" not in visible
     assert "`read_file`" in gate.catalog()
 

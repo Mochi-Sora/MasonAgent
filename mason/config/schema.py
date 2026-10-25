@@ -92,7 +92,7 @@ class MemoryConfig(Base):
     """Single-tier memory (SQLite) configuration."""
 
     enabled: bool = True  # Capture turns and expose the memory tools
-    state_max_chars: int = Field(default=2048, ge=256, le=16384)
+    state_max_chars: int = Field(default=4096, ge=256, le=16384)
     snapshot_enabled: bool = True  # Daily compressed full backup
     snapshot_keep: int = Field(default=7, ge=1, le=365)  # Daily backups retained
     backup_dir: str | None = None  # Defaults to <workspace>/backups/memory

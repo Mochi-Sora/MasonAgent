@@ -15,23 +15,27 @@ mason agent -m "hello"    # the wizard sets up the provider and model first
 
 ---
 
-## ⭐ Flagship: state-first context
+## ⭐ Flagship: session-first context
 
 Most agents grow their prompt as the conversation grows. Mason does the opposite.
 
-After every turn, the model is asked to decide what matters *right now* and write it into a
-small working state — `memory/state.md`, about 2 KB. That state is injected into the system
-prompt on every turn; the full conversation is **not**. When the state changes, the model
-rewrites it in place, in-turn, with the `update_state` tool.
+After every turn, the framework asks the model to summarize four things into the session
+state: the current goal, what has been done, what is next, and what the session is
+about. The result lives in `memory/state/<session>.md` (4 KB default) and is injected into
+the system prompt on every turn; the full conversation is **not**. The model no longer has
+to decide whether to update the state — the framework does that — but it can still correct
+the state through the capability-gated `update_state` tool.
 
 The result:
 
 - **The prompt stays small** no matter how long the relationship gets. Only the state block
-  rides along every turn (~50 tokens typical, ≤2 KB by contract).
-- **The agent stays oriented.** Goals, decisions, preferences and open questions are always
-  in front of it, instead of buried 200 messages back.
-- **Nothing is lost when it is not in the state.** Every turn is captured verbatim in a
-  permanent journal, and a consolidation pass promotes what deserves to live longer.
+  rides along every turn (≤4 KB by contract).
+- **The agent stays oriented.** Goals, completed work, next steps, and the current thread
+  are always in front of it instead of buried 200 messages back.
+- **Nothing is lost when it is not in the state.** Every turn is captured in a permanent
+  journal, and a consolidation pass promotes what deserves to live longer.
+- **Nothing is cleared silently.** The state survives the daily rollover; only an explicit
+  `/state clear` removes it.
 
 The state is a cache of what matters now — not the memory of record. That distinction is
 what makes the rest of the architecture coherent: memory is looked up on demand, and the
@@ -67,7 +71,7 @@ flowchart TD
    that arrive mid-turn are folded into the running turn.
 3. **Context** — the system prompt is assembled from identity and platform policy, the
    workspace profile (`AGENTS.md`, `SOUL.md`, `USER.md`), the tool contract, the memory
-   contract, and the working state. Prompt prefixes are kept stable on purpose, so provider
+   contract, and the session state. Prompt prefixes are kept stable on purpose, so provider
    prompt caching keeps working.
 4. **Execution** — `AgentRunner` runs the model/tool loop: request, act, observe, repeat,
    with compaction, retries, checkpoints, and mid-turn message injection.
@@ -78,7 +82,7 @@ flowchart TD
 
 | Surface | Where | Lifetime | Written by | Read with |
 |---|---|---|---|---|
-| Working state | `memory/state.md` | Cleared at the daily rollover | The model | Injected into the prompt |
+| Session state | `memory/state/<session>.md` | Persists until explicitly cleared | The framework (model-correctable) | Injected into the prompt |
 | Structured knowledge | `memory/memory.db` | Durable | Consolidation | `recall_memory` |
 | Verbatim journal | `memory/memory.db` | Durable, unbounded | Every turn, verbatim | `recall_journal` |
 
@@ -92,8 +96,8 @@ flowchart TD
   tiny reusable skills into `skills/`. It is cursor-gated, so an idle agent costs nothing.
 - **The rollover** first runs a narrow nightly pass — deduplicate structured memories and flag
   contradictions, nothing else — then writes a compressed, lossless full copy of the database to
-  `<workspace>/backups/memory/`, empties `state.md` in place, and runs SQLite optimisation. The
-  journal and structured memory are untouched.
+  `<workspace>/backups/memory/`, and runs SQLite optimisation. The journal, structured memory,
+  and every session state are untouched.
 - **Recall is on demand.** The model is told, in its prompt, that it must search before
   claiming it does not remember something.
 - Retrieval is SQLite FTS5 — millisecond lookups, not file scans. The memory subsystem is
@@ -101,9 +105,9 @@ flowchart TD
 
 ### Capabilities on demand
 
-Only a handful of tools are always in the prompt (`find_capabilities`, `update_state`,
-`recall_memory`, `recall_journal`). Everything else — files, shell, web, schedules, sessions,
-image generation, MCP tools — is registered but hidden until the model asks for it:
+Only a handful of tools are always in the prompt (`find_capabilities`, `recall_memory`,
+`recall_journal`). Everything else — files, shell, web, schedules, sessions, image generation,
+state editing, MCP tools — is registered but hidden until the model asks for it:
 
 ```text
 find_capabilities(need="schedule a daily reminder")  ->  cron (+ the cron skill)

@@ -5,12 +5,12 @@
 {% if agent_workspace_path != workspace_path %}
 Mason's agent workspace is at: {{ agent_workspace_path }}
 - Agent profile: {{ agent_workspace_path }}/SOUL.md and {{ agent_workspace_path }}/USER.md
-- Working state: {{ agent_workspace_path }}/memory/state.md (keep it current with `update_state`)
+- Session state: {{ agent_workspace_path }}/memory/state/<session>.md (framework-maintained; edit with `update_state` after capability discovery)
 - Memory: {{ agent_workspace_path }}/memory/memory.db (structured knowledge with `recall_memory`; full verbatim journal with `recall_journal`)
 - Custom skills: {{ agent_workspace_path }}/skills/{% raw %}{skill-name}{% endraw %}/SKILL.md
 {% else %}
 - Agent profile: SOUL.md and USER.md
-- Working state: memory/state.md (keep it current with `update_state`)
+- Session state: memory/state/<session>.md (framework-maintained; edit with `update_state` after capability discovery)
 - Memory: memory/memory.db (structured knowledge with `recall_memory`; full verbatim journal with `recall_journal`)
 - Custom skills: skills/{% raw %}{skill-name}{% endraw %}/SKILL.md
 {% endif %}

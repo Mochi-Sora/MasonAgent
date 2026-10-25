@@ -132,6 +132,14 @@ BUILTIN_COMMAND_SPECS: tuple[BuiltinCommandSpec, ...] = (
         accepts_args=True,
     ),
     BuiltinCommandSpec(
+        "/state",
+        "Session state",
+        "Show, list, or clear framework-maintained session state.",
+        "activity",
+        "[list|clear] [session]",
+        accepts_args=True,
+    ),
+    BuiltinCommandSpec(
         "/trigger",
         "Create named local trigger",
         "Create a named CLI trigger bound to this chat session.",
@@ -346,6 +354,53 @@ async def cmd_compact(ctx: CommandContext) -> None:
         refreshed = loop.sessions.get_or_create(ctx.key)
         refreshed.provider_state = None
         loop.sessions.save(refreshed)
+
+
+async def cmd_state(ctx: CommandContext) -> OutboundMessage:
+    """Show, list, or clear framework-maintained session state."""
+    store = ctx.loop.context.memory_state_store
+    args = ctx.args.strip()
+    parts = args.split(maxsplit=1)
+    verb = parts[0].lower() if parts else ""
+
+    if verb == "list":
+        keys = store.list_session_keys()
+        current = ctx.key
+        lines = ["Session states:"]
+        for key in keys:
+            marker = " (current)" if key == current else ""
+            lines.append(f"- {key}{marker}")
+        if not keys:
+            lines.append("(none)")
+        return OutboundMessage(
+            channel=ctx.msg.channel,
+            chat_id=ctx.msg.chat_id,
+            content="\n".join(lines),
+            metadata={**dict(ctx.msg.metadata or {}), "render_as": "text"},
+        )
+
+    if verb == "clear":
+        target = parts[1].strip() if len(parts) > 1 else ctx.key
+        if not target:
+            target = ctx.key
+        await ctx.loop.join_state_update(target)
+        store.for_session(target).clear()
+        return OutboundMessage(
+            channel=ctx.msg.channel,
+            chat_id=ctx.msg.chat_id,
+            content=f"Session state cleared for {target}.",
+            metadata={**dict(ctx.msg.metadata or {}), "render_as": "text"},
+        )
+
+    target = args or ctx.key
+    await ctx.loop.join_state_update(target)
+    content = store.for_session(target).read()
+    return OutboundMessage(
+        channel=ctx.msg.channel,
+        chat_id=ctx.msg.chat_id,
+        content=content or f"No state is stored for {target}.",
+        metadata={**dict(ctx.msg.metadata or {}), "render_as": "text"},
+    )
 
 
 def _format_preset_names(names: list[str]) -> str:
@@ -890,6 +945,8 @@ def register_builtin_commands(router: CommandRouter) -> None:
     router.prefix("/history ", cmd_history)
     router.exact("/goal", cmd_goal)
     router.prefix("/goal ", cmd_goal)
+    router.exact("/state", cmd_state)
+    router.prefix("/state ", cmd_state)
     router.exact("/trigger", cmd_trigger)
     router.prefix("/trigger ", cmd_trigger)
     router.exact("/evaluator-prompt", cmd_evaluator_prompt)

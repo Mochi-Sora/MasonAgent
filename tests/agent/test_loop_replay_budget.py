@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from mason.agent.loop import AgentLoop
 from mason.bus.queue import MessageBus
-from mason.providers.base import LLMResponse, ProviderConversationState, ToolCallRequest
+from mason.providers.base import LLMResponse, ProviderConversationState
 
 
 def _make_loop(
@@ -171,50 +171,6 @@ async def test_full_mode_replays_everything(tmp_path: Path) -> None:
     sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
     contents = [message.get("content") for message in sent]
     assert "question 0" in contents
-
-
-async def test_state_check_note_follows_a_turn_without_update_state(tmp_path: Path) -> None:
-    loop = _make_loop(tmp_path, replay_mode="none")
-
-    await loop.process_direct("hello", session_key="cli:test")
-
-    session = loop.sessions.get_or_create("cli:test")
-    assert session.metadata["_state_stale_turns"] == 1
-
-    await loop.process_direct("second message", session_key="cli:test")
-
-    sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
-    assert "State check" in str(sent[-1]["content"])
-    assert sent[-1]["content"].startswith("second message")
-
-
-async def test_state_check_note_is_absent_after_update_state(tmp_path: Path) -> None:
-    loop = _make_loop(tmp_path, replay_mode="none")
-    loop.provider.chat_stream_with_retry = AsyncMock(side_effect=[
-        LLMResponse(
-            content="",
-            tool_calls=[
-                ToolCallRequest(
-                    id="call-1",
-                    name="update_state",
-                    arguments={"content": "goal: ship the memory rework"},
-                )
-            ],
-        ),
-        LLMResponse(content="Noted."),
-    ])
-
-    await loop.process_direct("remember the goal", session_key="cli:test")
-
-    session = loop.sessions.get_or_create("cli:test")
-    assert session.metadata["_state_stale_turns"] == 0
-    assert loop.context.memory_state.read() == "goal: ship the memory rework"
-
-    loop.provider.chat_stream_with_retry = AsyncMock(return_value=LLMResponse(content="Sure."))
-    await loop.process_direct("next", session_key="cli:test")
-
-    sent = loop.provider.chat_stream_with_retry.call_args.kwargs["messages"]
-    assert "State check" not in str(sent[-1]["content"])
 
 
 class TestReplayModeConfig:

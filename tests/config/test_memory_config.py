@@ -38,5 +38,5 @@ def test_memory_defaults() -> None:
     cfg = MemoryConfig()
 
     assert cfg.enabled is True
-    assert cfg.state_max_chars == 2048
+    assert cfg.state_max_chars == 4096
     assert cfg.consolidation.enabled is True

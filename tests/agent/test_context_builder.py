@@ -337,7 +337,7 @@ class TestBuildSystemPrompt:
 
         assert str(tmp_path.resolve()) not in result
         assert "Agent profile: SOUL.md and USER.md" in result
-        assert "Working state: memory/state.md" in result
+        assert "Session state: memory/state/<session>.md" in result
         assert "Memory: memory/memory.db" in result
         assert "Custom skills: skills/{skill-name}/SKILL.md" in result
 
