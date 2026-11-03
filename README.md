@@ -1,5 +1,13 @@
 # Mason
 
+> ## ⚠️ This repository is archived
+>
+> **Mason is no longer actively maintained here.** Development has moved to a new project:
+> **[SoraAgent](https://github.com/Mochi-Sora/SoraAgent)**.
+>
+> SoraAgent is the ongoing project that will receive all future fixes, features, and support.
+> This repository is kept as-is for historical reference; no further updates will be made.
+
 **A lightweight, self-hosted personal AI agent framework** — built by Mochi-Sora.
 
 Mason lives in your terminal and in your chat apps. It keeps its prompt small, remembers
